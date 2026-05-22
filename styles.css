@@ -1,0 +1,430 @@
+/* ============================================================
+   바이브코딩 다이어리 — 파스텔 카와이 테마
+   thin lines / soft pastels / brown-grey strokes / clean solids
+   ============================================================ */
+
+:root {
+  /* 라인 — 따뜻한 브라운/그레이 */
+  --ink:   #8a6a5e;          /* 메인 라인 (soft brown) */
+  --ink-2: #a08577;          /* 보조 텍스트 */
+  --ink-3: #c4ada0;          /* 흐린 텍스트 */
+  --ink-soft: #d9c4b7;       /* 매우 흐린 라인 (구분선 등) */
+
+  /* 페이퍼 — 크림/베이비 핑크 */
+  --paper:   #fffaf6;        /* 메인 배경 */
+  --paper-2: #fff1ec;        /* 살짝 핑크 */
+  --paper-3: #ffe6e0;        /* 더 핑크 */
+
+  /* 파스텔 액센트 */
+  --pink:        #ffc7d4;
+  --pink-soft:   #ffe4ec;
+  --mint:        #c5e8d4;
+  --mint-soft:   #e0f2e7;
+  --blue:        #c8dffb;
+  --blue-soft:   #e5f0fc;
+  --lavender:    #d8cdf5;
+  --lavender-soft:#ece4fa;
+  --cream:       #fff4c0;
+  --cream-soft:  #fffae0;
+  --peach:       #ffd3b6;
+
+  /* 메인 액센트 */
+  --hi:      var(--pink);
+  --hi-soft: var(--pink-soft);
+  --hi-2:    var(--peach);
+
+  /* 상태색 */
+  --ok:  #9bcfa3;
+  --bad: #e8a8a8;
+
+  /* 폰트 */
+  --hand:   "Gaegu", "Patrick Hand", system-ui;
+  --hand-2: "Caveat", "Gaegu", cursive;
+  --mono:   "Space Mono", "JetBrains Mono", monospace;
+  --label:  "Gaegu", system-ui;
+
+  /* 폰트 weight & 보더 */
+  --bw: 1.1px;               /* 보더 굵기 — 매우 얇게 */
+  --bw-strong: 1.4px;
+  --radius: 10px;
+  --radius-lg: 14px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper-2);
+  font-family: var(--hand);
+  color: var(--ink);
+}
+
+/* ---- 박스 (깔끔, 둥근, 얇은 선) ---- */
+.sk-box {
+  position: relative;
+  border: var(--bw) solid var(--ink);
+  background: var(--paper);
+  border-radius: var(--radius);
+}
+/* wobble은 이제 안 흔들림 — 그냥 라운드 */
+.sk-box.wobble-1,
+.sk-box.wobble-2,
+.sk-box.wobble-3 { border-radius: var(--radius); }
+
+.sk-dashed { border-style: dashed; border-color: var(--ink-2); }
+.sk-double { box-shadow: 0 2px 0 var(--paper-3), 0 3px 0 var(--ink-soft); }
+.sk-fill   { background: var(--paper-2); }
+.sk-fill-2 { background: var(--paper-3); }
+.sk-hi     { background: var(--hi); }
+.sk-hi-soft{ background: var(--hi-soft); }
+
+/* 해치 제거 (너무 sketchy) */
+.sk-hatch { background-image: none; background: var(--paper-2); }
+
+/* ---- 라벨 / 텍스트 ---- */
+.sk-label {
+  font-family: var(--label);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.sk-cap {
+  font-family: var(--hand-2);
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.1;
+}
+.sk-mono {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.sk-note {
+  font-family: var(--hand-2);
+  font-size: 17px;
+  color: var(--ink-2);
+}
+
+/* ---- 더미 텍스트 라인 ---- */
+.sk-line {
+  height: 7px;
+  background: var(--ink-soft);
+  border-radius: 99px;
+}
+.sk-line.thin { height: 4px; opacity: 0.7; }
+.sk-line.dark { background: var(--ink-3); }
+
+/* ---- 체크박스 ---- */
+.sk-check {
+  width: 14px; height: 14px;
+  border: var(--bw-strong) solid var(--ink);
+  display: inline-block;
+  flex-shrink: 0;
+  border-radius: 4px;
+  position: relative;
+  background: var(--paper);
+}
+.sk-check.done {
+  background: var(--mint);
+  border-color: var(--ink);
+}
+.sk-check.done::after {
+  content: "✓";
+  position: absolute;
+  inset: -4px 0 0 1px;
+  font-family: var(--hand);
+  font-size: 15px;
+  color: var(--ink);
+  font-weight: bold;
+}
+
+/* ---- 동그라미 / 점 ---- */
+.sk-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ink);
+  display: inline-block;
+}
+.sk-dot.hi  { background: var(--hi); }
+.sk-dot.ok  { background: var(--ok); }
+.sk-dot.bad { background: var(--bad); }
+.sk-dot.ring {
+  background: transparent;
+  border: var(--bw-strong) solid var(--ink-2);
+}
+
+/* ---- 화살표 / 콜아웃 ---- */
+.sk-callout {
+  position: absolute;
+  font-family: var(--hand-2);
+  font-size: 16px;
+  color: var(--ink-2);
+  line-height: 1.1;
+  pointer-events: none;
+}
+.sk-callout .arrow {
+  display: block;
+  font-size: 20px;
+  color: var(--ink-3);
+  line-height: 1;
+}
+
+/* ============================================================
+   카와이 창 chrome (XP 대체 — 파스텔 핑크/민트 솔리드)
+   ============================================================ */
+.xp-window {
+  background: var(--paper);
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 0 var(--paper-3);
+  overflow: hidden;
+}
+.xp-titlebar {
+  background: var(--pink-soft);
+  color: var(--ink);
+  font-family: var(--hand);
+  font-size: 13px;
+  padding: 5px 8px 5px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: var(--bw) solid var(--ink);
+  letter-spacing: 0.02em;
+}
+.xp-titlebar::before {
+  /* 작은 하트 인디케이터 */
+  content: "♡  ♡  ♡";
+  font-size: 8px;
+  color: var(--pink);
+  letter-spacing: 1px;
+  margin-right: 4px;
+}
+.xp-titlebar .ttl {
+  flex: 1;
+  text-shadow: none;
+  font-family: var(--hand);
+  font-size: 14px;
+}
+.xp-btn {
+  width: 16px; height: 14px;
+  background: var(--paper);
+  border: var(--bw) solid var(--ink);
+  box-shadow: none;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--ink);
+  display: grid; place-items: center;
+  border-radius: 4px;
+}
+.xp-btn.close {
+  background: var(--pink);
+  color: var(--ink);
+}
+.xp-body { padding: 12px 14px; background: var(--paper); }
+
+/* mini chrome — 민트 타이틀 */
+.xp-mini { border-color: var(--ink); }
+.xp-mini .xp-titlebar {
+  background: var(--mint-soft);
+  font-size: 12px;
+  padding: 4px 8px 4px 10px;
+}
+
+/* 변형: 블루 / 라벤더 / 크림 (선택적 클래스) */
+.xp-titlebar.tb-mint    { background: var(--mint-soft); }
+.xp-titlebar.tb-mint::before    { color: var(--mint); }
+.xp-titlebar.tb-blue    { background: var(--blue-soft); }
+.xp-titlebar.tb-blue::before    { color: var(--blue); }
+.xp-titlebar.tb-lavender{ background: var(--lavender-soft); }
+.xp-titlebar.tb-lavender::before{ color: var(--lavender); }
+.xp-titlebar.tb-cream   { background: var(--cream-soft); }
+.xp-titlebar.tb-cream::before   { color: var(--cream); }
+
+/* ---- 픽토그램 (작은 아이콘 자리) ---- */
+.sk-pic {
+  width: 28px; height: 28px;
+  border: var(--bw-strong) solid var(--ink);
+  border-radius: 8px;
+  background: var(--paper-2);
+  display: grid; place-items: center;
+  font-family: var(--hand-2);
+  font-size: 18px;
+  color: var(--ink-2);
+}
+
+/* ---- 메모지 ---- */
+.sk-sticky {
+  background: var(--cream-soft);
+  border: var(--bw-strong) solid var(--ink);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-family: var(--hand-2);
+  font-size: 16px;
+  line-height: 1.2;
+  box-shadow: 0 2px 0 var(--paper-3);
+  transform: none;
+}
+.sk-sticky.tilt-r { transform: none; }
+
+/* ---- 분할선 ---- */
+.sk-hr {
+  height: 0;
+  border: 0;
+  border-top: var(--bw) dashed var(--ink-soft);
+  margin: 10px 0;
+}
+.sk-hr.solid { border-top-style: solid; opacity: 1; }
+
+/* ---- 작은 헤더 한 줄 ---- */
+.sec-head {
+  display: flex; align-items: baseline; gap: 6px;
+  margin-bottom: 8px;
+}
+.sec-head .num {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.sec-head .ttl {
+  font-family: var(--hand);
+  font-size: 16px;
+  color: var(--ink);
+}
+.sec-head .more {
+  margin-left: auto;
+  font-family: var(--hand-2);
+  font-size: 15px;
+  color: var(--ink-3);
+}
+
+/* ---- 타이머 도넛 ---- */
+.timer-donut {
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  border: 4px solid var(--paper-3);
+  border-right-color: var(--pink);
+  border-bottom-color: var(--pink);
+  display: grid; place-items: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+/* ---- 작은 배지 ---- */
+.sk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--hand);
+  font-size: 12px;
+  padding: 2px 8px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 99px;
+  color: var(--ink);
+  background: var(--paper);
+}
+.sk-badge.hi {
+  background: var(--pink);
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+/* ---- 배경 변형 ---- */
+.bg-paper   { background: var(--paper); }
+.bg-paper-2 { background: var(--paper-2); }
+
+/* 데스크탑은 폴카닷 파스텔 — kawaii reference */
+.bg-desktop {
+  background:
+    radial-gradient(rgba(255,255,255,0.7) 1.5px, transparent 1.6px) 0 0 / 18px 18px,
+    var(--pink-soft);
+}
+
+.bg-grid {
+  background:
+    linear-gradient(var(--paper), var(--paper)),
+    repeating-linear-gradient(0deg, rgba(138,106,94,0.05) 0 1px, transparent 1px 24px),
+    repeating-linear-gradient(90deg, rgba(138,106,94,0.05) 0 1px, transparent 1px 24px);
+  background-blend-mode: normal, normal, normal;
+}
+
+/* ---- + 버튼 ---- */
+.sk-plus {
+  width: 22px; height: 22px;
+  border: var(--bw) dashed var(--ink-2);
+  border-radius: 50%;
+  display: grid; place-items: center;
+  font-family: var(--hand);
+  font-size: 16px;
+  color: var(--ink-2);
+  background: var(--paper);
+}
+
+/* ---- 탭 ---- */
+.sk-tab {
+  font-family: var(--hand);
+  font-size: 13px;
+  padding: 4px 12px 6px;
+  border: var(--bw) solid var(--ink);
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  background: var(--paper-2);
+  color: var(--ink-2);
+}
+.sk-tab.active {
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* ============================================================
+   데스크탑 모드 (Tauri 투명 사이드바)
+   ============================================================ */
+html[data-desktop-mode="true"],
+html[data-desktop-mode="true"] body {
+  background: transparent !important;
+}
+html[data-desktop-mode="true"] .fake-ide,
+html[data-desktop-mode="true"] .fake-taskbar {
+  display: none !important;
+}
+/* 데스크탑 모드에서 도크에 살짝 그림자 추가 (떠있는 느낌) */
+html[data-desktop-mode="true"] .dock-body {
+  box-shadow: 0 8px 28px rgba(138, 106, 94, 0.18),
+              0 2px 0 var(--paper-3) !important;
+  border-radius: 14px !important;
+  border: 1.1px solid var(--ink) !important;
+  margin: 8px;
+  overflow: hidden;
+}
+/* 드래그 가능 영역 표시 */
+[data-tauri-drag-region] {
+  cursor: grab;
+}
+[data-tauri-drag-region]:active {
+  cursor: grabbing;
+}
+.xp-taskbar {
+  background: var(--pink-soft);
+  color: var(--ink);
+  font-family: var(--hand);
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  border-top: var(--bw) solid var(--ink);
+}
+.xp-start {
+  background: var(--mint);
+  color: var(--ink);
+  padding: 2px 12px 3px 10px;
+  border-radius: 99px;
+  font-family: var(--hand);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  border: var(--bw) solid var(--ink);
+}

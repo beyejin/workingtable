@@ -1,0 +1,17 @@
+# 의존성
+node_modules/
+
+# 빌드 산출물
+dist/
+src-tauri/target/
+
+# 업데이트 서명 개인키 — 절대 커밋 금지!
+src-tauri/*.key
+src-tauri/*.key.pub
+
+# 로컬에서 생성되는 릴리스 산출물 (CI가 자동 생성하므로 커밋 불필요)
+latest.json
+release-v*/
+
+# Claude Code 로컬 설정
+.claude/

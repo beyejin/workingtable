@@ -1,0 +1,452 @@
+/* global React */
+// ===========================================================
+// 바이브 다이어리 — 데이터 레이어
+// localStorage 한 키에 전체 상태를 JSON으로 저장.
+// useDiary() 훅 하나로 모든 컴포넌트가 동일한 상태를 공유.
+// Electron/Tauri로 래핑해도 그대로 동작 (저장 경로만 바꾸면 됨).
+// ===========================================================
+
+const STORAGE_KEY = "vibe-diary.v1";
+
+// ---- 유틸 ----
+const uid = () => Math.random().toString(36).slice(2, 10);
+const today = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+};
+const fmtKDate = (iso) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dow = ["일","월","화","수","목","금","토"][new Date(y, m - 1, d).getDay()];
+  return `${m}월 ${d}일 (${dow})`;
+};
+const fmtKDateShort = (iso) => {
+  const [, m, d] = iso.split("-").map(Number);
+  return `${m}/${d}`;
+};
+
+// ---- 초기 시드 ----
+function seed() {
+  const pid1 = uid();
+  const pid2 = uid();
+  const t = today();
+  return {
+    schemaVersion: 1,
+    currentProjectId: pid1,
+    projects: [
+      {
+        id: pid1,
+        name: "vibe-diary.app",
+        path: "~/work/vibe-diary",
+        stack: ["Next.js", "Supabase", "Tailwind"],
+        links: [
+          { label: "github", url: "https://github.com/me/vibe-diary" },
+          { label: "figma", url: "https://figma.com/file/xK29" },
+          { label: "spec", url: "https://notion.so/spec-v2" },
+        ],
+        gitBranch: "main",
+        cheatsheet: "$ pnpm dev\n$ pnpm db:reset\n$ pnpm test --filter ui\nENV → .env.local",
+        status: "active",
+        createdAt: t,
+      },
+      {
+        id: pid2,
+        name: "studio-site v2",
+        path: "~/work/studio",
+        stack: ["Astro", "Tailwind"],
+        links: [],
+        gitBranch: "redesign",
+        cheatsheet: "$ pnpm dev",
+        status: "paused",
+        createdAt: t,
+      },
+    ],
+    todos: [
+      { id: uid(), projectId: pid1, text: "타이머 권한 alert 다듬기", done: true,  hot: false, createdAt: t, doneAt: t },
+      { id: uid(), projectId: pid1, text: "이메일 답장 토글 UI",    done: false, hot: true,  createdAt: t },
+      { id: uid(), projectId: pid1, text: "회고 모달 카피 다듬기",  done: false, hot: false, createdAt: t },
+      { id: uid(), projectId: pid1, text: "푸시 사운드 옵션",       done: false, hot: false, createdAt: t },
+      { id: uid(), projectId: pid1, text: "MDI 드래그 RAF 묶기",   done: false, hot: true,  createdAt: t },
+    ],
+    prompts: [
+      { id: uid(), text: "이 함수 리팩토링하면서 테스트 같이 작성해줘", uses: 23, createdAt: t },
+      { id: uid(), text: "이 에러 메시지 사용자 친화적으로 다시 써줘", uses: 14, createdAt: t },
+      { id: uid(), text: "이 컴포넌트 접근성 검토 (대비/포커스/aria)", uses: 11, createdAt: t },
+      { id: uid(), text: "커밋 메시지 한 줄 초안 (conventional commits)", uses: 31, createdAt: t },
+    ],
+    emails: [
+      { id: uid(), who: "지수 @studio", subject: "결제가 안 돼요",          preview: "안녕하세요, 카드 등록 후에도 결제 단계에서…", time: "2h", replied: false, hot: true,  createdAt: t },
+      { id: uid(), who: "강아무개",      subject: "환불 문의",               preview: "어제 결제한 건 환불 가능할까요…",            time: "4h", replied: false, hot: true,  createdAt: t },
+      { id: uid(), who: "박PM",          subject: "회의자료 잘 받았습니다",  preview: "감사합니다. 다음주에 다시 뵙겠습니다.",        time: "1d", replied: true,  hot: false, createdAt: t },
+    ],
+    aiBookmarks: [
+      { id: uid(), projectId: pid1, date: t, title: "타이머 권한 alert 카피", ok: true,  note: "", createdAt: t },
+      { id: uid(), projectId: pid1, date: t, title: "MDI 자식창 드래그 디버깅", ok: false, note: "RAF 묶는 방향으로 다시", createdAt: t },
+    ],
+    commands: [
+      { id: uid(), projectId: pid1, label: "로컬 서버",   code: "pnpm dev",            uses: 47, createdAt: t },
+      { id: uid(), projectId: pid1, label: "DB 리셋",    code: "pnpm db:reset",       uses: 12, createdAt: t },
+      { id: uid(), projectId: pid1, label: "UI 테스트",    code: "pnpm test --filter ui", uses: 8,  createdAt: t },
+      { id: uid(), projectId: pid1, label: "Supabase URL", code: "SUPABASE_URL=https://xxx.supabase.co", uses: 3, createdAt: t },
+      { id: uid(), projectId: pid1, label: "타입체크",   code: "pnpm typecheck",      uses: 5,  createdAt: t },
+      { id: uid(), projectId: pid2, label: "로컬 서버",   code: "pnpm dev",            uses: 22, createdAt: t },
+      { id: uid(), projectId: pid2, label: "빌드",        code: "pnpm build",          uses: 3,  createdAt: t },
+    ],
+    retros: [
+      // 날짜별 1개. (날짜, 프로젝트) 페어가 unique는 아니고, 날짜로만 1개.
+      // { id, date, text, good, bad }
+    ],
+    stuck: {
+      // 현재 막힌 것 — 프로젝트별 한 줄
+      [pid1]: "MDI 자식창 드래그가 끊겨서, 좌표 계산을 RAF로 묶어야 할 듯",
+    },
+    timer: {
+      lengthMin: 30,   // 한 사이클 분
+      enabled: true,
+      cycleStartedAt: null,        // Date.now() — null이면 아직 안 시작
+      paused: false,
+      pausedRemainingMs: null,     // 일시정지 시 남은 시간 보존
+      notificationsGranted: false,
+      lastNotifiedAt: null,        // 알림 중복 발송 방지
+    },
+    workSessions: [
+      // { date, minutes } — 추후 자동 적립
+      { date: t, minutes: 107 },
+    ],
+  };
+}
+
+// ---- 저장 / 불러오기 ----
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return seed();
+    const data = JSON.parse(raw);
+    if (!data || data.schemaVersion !== 1) return seed();
+    // ---- 마이그레이션 (필드 추가에 안전) ----
+    data.commands    ??= [];
+    data.todos       ??= [];
+    data.prompts     ??= [];
+    data.emails      ??= [];
+    data.aiBookmarks ??= [];
+    data.retros      ??= [];
+    data.stuck       ??= {};
+    data.timer       ??= { lengthMin: 30, enabled: true, cycleStartedAt: null, paused: false, pausedRemainingMs: null, notificationsGranted: false, lastNotifiedAt: null };
+    data.workSessions ??= [];
+    return data;
+  } catch (e) {
+    console.warn("diary: load failed, reseeding", e);
+    return seed();
+  }
+}
+function save(state) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.warn("diary: save failed", e);
+  }
+}
+
+// ---- 글로벌 상태 (간단한 pub/sub) ----
+let _state = load();
+const _subs = new Set();
+function setState(updater) {
+  const next = typeof updater === "function" ? updater(_state) : updater;
+  _state = next;
+  save(_state);
+  _subs.forEach(fn => fn(_state));
+}
+function getState() { return _state; }
+function subscribe(fn) { _subs.add(fn); return () => _subs.delete(fn); }
+
+// ---- 액션들 ----
+const actions = {
+  // ----- 프로젝트 -----
+  switchProject(id) {
+    setState(s => ({ ...s, currentProjectId: id }));
+  },
+  addProject({ name, path = "", stack = [], gitBranch = "main", cheatsheet = "" }) {
+    const id = uid();
+    setState(s => ({
+      ...s,
+      projects: [...s.projects, {
+        id, name, path, stack, links: [],
+        gitBranch, cheatsheet, status: "active", createdAt: today(),
+      }],
+      currentProjectId: id,
+    }));
+  },
+  updateProject(id, patch) {
+    setState(s => ({
+      ...s,
+      projects: s.projects.map(p => p.id === id ? { ...p, ...patch } : p),
+    }));
+  },
+  removeProject(id) {
+    setState(s => {
+      const remaining = s.projects.filter(p => p.id !== id);
+      return {
+        ...s,
+        projects: remaining,
+        currentProjectId: s.currentProjectId === id
+          ? (remaining[0]?.id ?? null)
+          : s.currentProjectId,
+      };
+    });
+  },
+
+  // ----- 할 일 -----
+  addTodo(text, opts = {}) {
+    if (!text?.trim()) return;
+    setState(s => ({
+      ...s,
+      todos: [...s.todos, {
+        id: uid(), projectId: s.currentProjectId,
+        text: text.trim(), done: false, hot: !!opts.hot,
+        createdAt: today(),
+      }],
+    }));
+  },
+  toggleTodo(id) {
+    setState(s => ({
+      ...s,
+      todos: s.todos.map(t => t.id === id
+        ? { ...t, done: !t.done, doneAt: !t.done ? today() : undefined }
+        : t),
+    }));
+  },
+  toggleHot(id) {
+    setState(s => ({
+      ...s,
+      todos: s.todos.map(t => t.id === id ? { ...t, hot: !t.hot } : t),
+    }));
+  },
+  removeTodo(id) {
+    setState(s => ({ ...s, todos: s.todos.filter(t => t.id !== id) }));
+  },
+
+  // ----- 프롬프트 -----
+  addPrompt(text) {
+    if (!text?.trim()) return;
+    setState(s => ({
+      ...s,
+      prompts: [{ id: uid(), text: text.trim(), uses: 0, createdAt: today() }, ...s.prompts],
+    }));
+  },
+  updatePrompt(id, text) {
+    setState(s => ({
+      ...s,
+      prompts: s.prompts.map(p => p.id === id ? { ...p, text } : p),
+    }));
+  },
+  removePrompt(id) {
+    setState(s => ({ ...s, prompts: s.prompts.filter(p => p.id !== id) }));
+  },
+  copyPrompt(id) {
+    setState(s => ({
+      ...s,
+      prompts: s.prompts.map(p => p.id === id ? { ...p, uses: (p.uses ?? 0) + 1 } : p),
+    }));
+    const p = getState().prompts.find(x => x.id === id);
+    if (p && navigator.clipboard) navigator.clipboard.writeText(p.text).catch(() => {});
+  },
+
+  // ----- 이메일 -----
+  addEmail({ who, subject, preview = "", hot = false }) {
+    if (!who?.trim() || !subject?.trim()) return;
+    setState(s => ({
+      ...s,
+      emails: [
+        { id: uid(), who: who.trim(), subject: subject.trim(), preview: preview.trim(),
+          time: "방금", replied: false, hot, createdAt: today() },
+        ...s.emails,
+      ],
+    }));
+  },
+  toggleReplied(id) {
+    setState(s => ({
+      ...s,
+      emails: s.emails.map(e => e.id === id ? { ...e, replied: !e.replied } : e),
+    }));
+  },
+  removeEmail(id) {
+    setState(s => ({ ...s, emails: s.emails.filter(e => e.id !== id) }));
+  },
+
+  // ----- AI 북마크 -----
+  addBookmark({ title, ok = true, note = "" }) {
+    if (!title?.trim()) return;
+    setState(s => ({
+      ...s,
+      aiBookmarks: [
+        { id: uid(), projectId: s.currentProjectId, date: today(),
+          title: title.trim(), ok, note: note.trim() },
+        ...s.aiBookmarks,
+      ],
+    }));
+  },
+  updateBookmark(id, patch) {
+    setState(s => ({
+      ...s,
+      aiBookmarks: s.aiBookmarks.map(b => b.id === id ? { ...b, ...patch } : b),
+    }));
+  },
+  removeBookmark(id) {
+    setState(s => ({ ...s, aiBookmarks: s.aiBookmarks.filter(b => b.id !== id) }));
+  },
+
+  // ----- 명령어 치트 -----
+  addCommand({ label = "", code = "" }) {
+    if (!code?.trim()) return;
+    setState(s => ({
+      ...s,
+      commands: [
+        { id: uid(), projectId: s.currentProjectId,
+          label: label.trim(), code: code.trim(),
+          uses: 0, createdAt: today() },
+        ...s.commands,
+      ],
+    }));
+  },
+  updateCommand(id, patch) {
+    setState(s => ({
+      ...s,
+      commands: s.commands.map(c => c.id === id ? { ...c, ...patch } : c),
+    }));
+  },
+  removeCommand(id) {
+    setState(s => ({ ...s, commands: s.commands.filter(c => c.id !== id) }));
+  },
+  copyCommand(id) {
+    setState(s => ({
+      ...s,
+      commands: s.commands.map(c => c.id === id ? { ...c, uses: (c.uses ?? 0) + 1 } : c),
+    }));
+    const c = getState().commands.find(x => x.id === id);
+    if (c && navigator.clipboard) navigator.clipboard.writeText(c.code).catch(() => {});
+  },
+
+  // ----- 회고 (날짜별 1개) -----
+  saveRetro({ date = today(), text = "", good = "", bad = "" }) {
+    setState(s => {
+      const others = s.retros.filter(r => r.date !== date);
+      // 모두 비었으면 삭제
+      if (!text.trim() && !good.trim() && !bad.trim()) {
+        return { ...s, retros: others };
+      }
+      return {
+        ...s,
+        retros: [...others, { id: uid(), date, text, good, bad }]
+                 .sort((a, b) => b.date.localeCompare(a.date)),
+      };
+    });
+  },
+
+  // ----- Stuck note -----
+  setStuck(text) {
+    setState(s => ({
+      ...s,
+      stuck: { ...s.stuck, [s.currentProjectId]: text },
+    }));
+  },
+
+  // ----- 타이머 / 알림 -----
+  setTimerLength(min) {
+    setState(s => ({ ...s, timer: { ...s.timer, lengthMin: min } }));
+  },
+  setTimerEnabled(enabled) {
+    setState(s => ({ ...s, timer: { ...s.timer, enabled } }));
+  },
+  startCycle() {
+    setState(s => ({ ...s, timer: {
+      ...s.timer,
+      cycleStartedAt: Date.now(),
+      paused: false,
+      pausedRemainingMs: null,
+    }}));
+  },
+  pauseCycle() {
+    setState(s => {
+      if (!s.timer.cycleStartedAt || s.timer.paused) return s;
+      const lenMs = s.timer.lengthMin * 60 * 1000;
+      const elapsed = Date.now() - s.timer.cycleStartedAt;
+      const remaining = Math.max(0, lenMs - elapsed);
+      return { ...s, timer: { ...s.timer, paused: true, pausedRemainingMs: remaining } };
+    });
+  },
+  resumeCycle() {
+    setState(s => {
+      if (!s.timer.paused) return s;
+      const lenMs = s.timer.lengthMin * 60 * 1000;
+      const remaining = s.timer.pausedRemainingMs ?? lenMs;
+      // 남은 시간이 이제부터 흐르도록 시작 시각을 보정
+      const cycleStartedAt = Date.now() - (lenMs - remaining);
+      return { ...s, timer: { ...s.timer, paused: false, cycleStartedAt, pausedRemainingMs: null } };
+    });
+  },
+  markStretched() {
+    // 이번 사이클 끊고 새 사이클 시작
+    setState(s => ({ ...s, timer: {
+      ...s.timer,
+      cycleStartedAt: Date.now(),
+      paused: false,
+      pausedRemainingMs: null,
+      lastNotifiedAt: null,
+    }}));
+  },
+  markNotified() {
+    setState(s => ({ ...s, timer: { ...s.timer, lastNotifiedAt: Date.now() } }));
+  },
+  setNotificationsGranted(g) {
+    setState(s => ({ ...s, timer: { ...s.timer, notificationsGranted: g } }));
+  },
+
+  // ----- 작업 시간 트래킹 -----
+  addWorkMinutes(min) {
+    if (min <= 0) return;
+    const t = today();
+    setState(s => {
+      const sessions = s.workSessions.slice();
+      const idx = sessions.findIndex(w => w.date === t);
+      if (idx >= 0) {
+        sessions[idx] = { ...sessions[idx], minutes: sessions[idx].minutes + min };
+      } else {
+        sessions.push({ date: t, minutes: min });
+      }
+      return { ...s, workSessions: sessions };
+    });
+  },
+
+  // ----- 위험: 리셋 -----
+  hardReset() {
+    if (!confirm("정말 모든 데이터를 지우고 초기 시드로 되돌릴까요?")) return;
+    setState(seed());
+  },
+};
+
+// ---- React 훅 ----
+function useDiary() {
+  const [, setTick] = React.useState(0);
+  React.useEffect(() => subscribe(() => setTick(x => x + 1)), []);
+  return { state: _state, actions };
+}
+
+// ---- 파생 셀렉터 ----
+const select = {
+  currentProject: (s) => s.projects.find(p => p.id === s.currentProjectId) ?? null,
+  todosForCurrent: (s) => s.todos.filter(t => t.projectId === s.currentProjectId),
+  bookmarksForCurrent: (s) => s.aiBookmarks.filter(b => b.projectId === s.currentProjectId),
+  commandsForCurrent: (s) => (s.commands ?? []).filter(c => c.projectId === s.currentProjectId),
+  retroForDate: (s, date = today()) => s.retros.find(r => r.date === date) ?? null,
+  stuckForCurrent: (s) => s.stuck[s.currentProjectId] ?? "",
+  workMinutesToday: (s) => {
+    const t = today();
+    const sess = s.workSessions.find(w => w.date === t);
+    return sess?.minutes ?? 0;
+  },
+};
+
+// 글로벌 노출
+window.diary = { useDiary, actions, select, today, fmtKDate, fmtKDateShort, getState };

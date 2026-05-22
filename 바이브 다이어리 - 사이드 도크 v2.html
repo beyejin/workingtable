@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>바이브 다이어리 — 사이드 도크 v2</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- 진단용: 로드/실행 에러를 화면에 직접 표시 (에러가 없으면 아무것도 안 보임) -->
+  <script>
+    (function () {
+      function box() {
+        var d = document.getElementById("__errbox");
+        if (!d) {
+          d = document.createElement("pre");
+          d.id = "__errbox";
+          d.style.cssText =
+            "position:fixed;inset:0;z-index:99999;margin:0;padding:16px;background:#fff;color:#c00;font:12px/1.5 monospace;white-space:pre-wrap;overflow:auto";
+          (document.body || document.documentElement).appendChild(d);
+        }
+        return d;
+      }
+      window.addEventListener(
+        "error",
+        function (e) {
+          var t = e.target;
+          if (t && (t.src || t.href)) {
+            box().textContent += "[리소스 로드 실패] " + (t.src || t.href) + "\n";
+          } else {
+            box().textContent +=
+              "[error] " + (e.message || "") +
+              (e.filename ? " @ " + e.filename + ":" + e.lineno : "") + "\n";
+          }
+        },
+        true
+      );
+      window.addEventListener("unhandledrejection", function (e) {
+        var r = e.reason;
+        box().textContent +=
+          "[promise] " + (r && (r.stack || r.message) ? r.stack || r.message : r) + "\n";
+      });
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600&family=Gaegu:wght@300;400;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles.css" />
+
+  <style>
+    html, body { height: 100%; margin: 0; background: #f5e9e2; }
+    #root { width: 100vw; height: 100vh; }
+  </style>
+
+  <!-- CDN 대신 로컬 번들 (오프라인/패키징 환경에서도 동작) -->
+  <script src="vendor/react.production.min.js"></script>
+  <script src="vendor/react-dom.production.min.js"></script>
+  <script src="vendor/babel.min.js"></script>
+
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="v2/store.jsx"></script>
+  <script type="text/babel" src="v2/ai.jsx"></script>
+  <script type="text/babel" src="v2/views-shared.jsx"></script>
+  <script type="text/babel" src="v2/view-today.jsx"></script>
+  <script type="text/babel" src="v2/view-todo.jsx"></script>
+  <script type="text/babel" src="v2/view-cheat.jsx"></script>
+  <script type="text/babel" src="v2/view-mail.jsx"></script>
+  <script type="text/babel" src="v2/view-prompt.jsx"></script>
+  <script type="text/babel" src="v2/view-ai.jsx"></script>
+  <script type="text/babel" src="v2/view-retro.jsx"></script>
+  <script type="text/babel" src="v2/timer.jsx"></script>
+  <script type="text/babel" src="v2/tracker.jsx"></script>
+  <script type="text/babel" src="v2/side-dock-v2.jsx"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+      "dockSide": "right",
+      "tabSide": "right",
+      "tabAccent": "#ffc7d4",
+      "showFakeIde": true,
+      "desktopMode": false
+    }/*EDITMODE-END*/;
+
+    // Tauri 속에서 실행중이면 자동으로 데스크탑 모드 점이고 transparent body
+    // 주의: window.isTauri 는 Tauri 가 읽기전용으로 주입하므로 변수명을 겹치지 않게 둔다
+    const runningInTauri = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    if (runningInTauri) TWEAK_DEFAULTS.desktopMode = true;
+    document.documentElement.setAttribute("data-desktop-mode", String(TWEAK_DEFAULTS.desktopMode));
+
+    function App() {
+      const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+      React.useEffect(() => {
+        document.documentElement.setAttribute("data-desktop-mode", String(t.desktopMode));
+      }, [t.desktopMode]);
+      return (
+        <>
+          <SideDockV2 tweaks={t} />
+          <ActivityTracker />
+          <RetroModal />
+          <TweaksPanel title="Tweaks">
+            <TweakSection label="레이아웃">
+              <TweakToggle
+                label="데스크탑 모드 (투명)"
+                value={t.desktopMode}
+                onChange={(v) => setTweak("desktopMode", v)}
+              />
+              <TweakRadio
+                label="도크 위치"
+                value={t.dockSide}
+                onChange={(v) => setTweak("dockSide", v)}
+                options={[
+                  { value: "left",  label: "왼쪽" },
+                  { value: "right", label: "오른쪽" },
+                ]}
+              />
+              <TweakRadio
+                label="인덱스 탭 방향"
+                value={t.tabSide}
+                onChange={(v) => setTweak("tabSide", v)}
+                options={[
+                  { value: "right", label: "바깥" },
+                  { value: "left",  label: "안쪽" },
+                ]}
+              />
+            </TweakSection>
+            <TweakSection label="액센트">
+              <TweakColor
+                label="포인트 컬러"
+                value={t.tabAccent}
+                onChange={(v) => {
+                  setTweak("tabAccent", v);
+                  document.documentElement.style.setProperty("--hi", v);
+                }}
+                options={["#ffc7d4", "#c5e8d4", "#c8dffb", "#d8cdf5", "#fff4c0", "#ffd3b6"]}
+              />
+            </TweakSection>
+          </TweaksPanel>
+        </>
+      );
+    }
+
+    // 초기 포인트 컬러 적용
+    document.documentElement.style.setProperty("--hi", TWEAK_DEFAULTS.tabAccent);
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

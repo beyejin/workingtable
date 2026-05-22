@@ -1,0 +1,46 @@
+name: release
+
+# v0.0.0 형식의 태그를 push 하면 자동으로 빌드·서명·릴리스·latest.json 업로드.
+# (실패한 실행은 Actions 탭에서 'Re-run jobs'로 다시 돌릴 수 있음)
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # 릴리스 생성/자산 업로드에 필요
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install npm deps
+        run: npm install
+
+      - name: Build and release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          # 태그가 이미 push 된 상태면 그 태그로 릴리스 생성
+          tagName: ${{ github.ref_name }}
+          releaseName: "vibe diary ${{ github.ref_name }}"
+          releaseDraft: false
+          prerelease: false

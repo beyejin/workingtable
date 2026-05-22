@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>바이브코딩 다이어리 — 와이어프레임</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- 폰트 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600&family=Patrick+Hand&family=Patrick+Hand+SC&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- React + Babel -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="design-canvas.jsx"></script>
+  <script type="text/babel" src="wireframes/desktop-classic.jsx"></script>
+  <script type="text/babel" src="wireframes/side-dock-left.jsx"></script>
+  <script type="text/babel" src="wireframes/bottom-dock.jsx"></script>
+  <script type="text/babel" src="wireframes/mdi-window.jsx"></script>
+  <script type="text/babel" src="wireframes/vertical-split.jsx"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    function App() {
+      return (
+        <DesignCanvas
+          title="바이브코딩 다이어리"
+          subtitle="와이어프레임 5종 — 윈도우XP 메모창 + 사이드/하단 도크 방향성 비교"
+        >
+          <DCSection
+            id="dock-positions"
+            title="도킹 위치 · 형태"
+            subtitle="화면 어디에, 어떤 모양으로 띄울지 — 5가지 방향성"
+          >
+            <DCArtboard id="wf-1" label="1 · 클래식 XP 데스크탑 (떠다니는 메모창들)" width={1280} height={800}>
+              <WireDesktopClassic />
+            </DCArtboard>
+
+            <DCArtboard id="wf-2" label="2 · 왼쪽 사이드 도크 (세로 길게)" width={360} height={920}>
+              <WireSideDockLeft />
+            </DCArtboard>
+
+            <DCArtboard id="wf-3" label="3 · 하단 도크 트레이 (가로 펼침)" width={1280} height={520}>
+              <WireBottomDock />
+            </DCArtboard>
+
+            <DCArtboard id="wf-4" label="4 · MDI 윈도우 (한 창 안에 자식창들)" width={1100} height={740}>
+              <WireMdiWindow />
+            </DCArtboard>
+
+            <DCArtboard id="wf-5" label="5 · 수직 분할 (사이드바형 · 아코디언)" width={380} height={1000}>
+              <WireVerticalSplit />
+            </DCArtboard>
+
+            <DCPostIt id="pit-1" x={20} y={-130} width={260}>
+              <strong>방향성</strong> — XP 진하게 vs 흔적만, 떠다님 vs 도킹, 다 보임 vs 접힘.
+              하나 골라도 좋고, 1+5 처럼 조합도 가능해요.
+            </DCPostIt>
+
+            <DCPostIt id="pit-2" x={1500} y={120} width={240}>
+              <strong>공통 가정</strong><br/>
+              · 태그 없음 (요청대로)<br/>
+              · 스트레칭 = 푸시 알림만<br/>
+              · 이메일 = 답장/미답장 체크<br/>
+              · 회고 = 작업 종료 시 모달
+            </DCPostIt>
+
+            <DCPostIt id="pit-3" x={1500} y={420} width={240}>
+              <strong>다음 단계 (와이어 → 시안)</strong><br/>
+              1. 방향 1~2개 선정<br/>
+              2. 컬러/타입 시스템 정하기<br/>
+              3. 핵심 화면 hi-fi로 발전
+            </DCPostIt>
+          </DCSection>
+        </DesignCanvas>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

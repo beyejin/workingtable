@@ -1,0 +1,15 @@
+{
+  "name": "vibe-diary",
+  "version": "0.2.0",
+  "private": true,
+  "description": "바이브코딩 다이어리 — 데스크탑 투명 사이드바",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "dist": "node scripts/build-dist.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}
