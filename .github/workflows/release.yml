@@ -1,6 +1,7 @@
 name: release
 
 # v0.0.0 형식의 태그를 push 하면 자동으로 빌드·서명·릴리스·latest.json 업로드.
+# Windows + macOS(Universal) 둘 다 빌드해서 같은 릴리스에 자산을 올린다.
 # (실패한 실행은 Actions 탭에서 'Re-run jobs'로 다시 돌릴 수 있음)
 on:
   push:
@@ -12,7 +13,17 @@ permissions:
 
 jobs:
   release:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: ""
+            rust-targets: ""
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+            rust-targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
@@ -23,6 +34,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
 
       - name: Cache cargo
         uses: swatinem/rust-cache@v2
@@ -39,8 +52,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          # 태그가 이미 push 된 상태면 그 태그로 릴리스 생성
+          # 태그가 이미 push 된 상태면 그 태그로 릴리스 생성/갱신
           tagName: ${{ github.ref_name }}
           releaseName: "vibe diary ${{ github.ref_name }}"
           releaseDraft: false
           prerelease: false
+          args: ${{ matrix.args }}
