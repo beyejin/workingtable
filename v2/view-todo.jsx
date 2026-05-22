@@ -13,22 +13,22 @@ function TodoView() {
   const todoCount = hot.length + rest.length;
   return (
     <SplitPane
-      topLabel={`해야 할 일 · ${todoCount}`}
+      topLabel={`${L("todo.need")} · ${todoCount}`}
       top={
         <>
           <div style={{ marginBottom: 8 }}>
-            <InlineAdd placeholder="할 일 추가…" onAdd={(v) => actions.addTodo(v)} />
+            <InlineAdd placeholder={L("todo.add")} onAdd={(v) => actions.addTodo(v)} />
           </div>
           {hot.map((t, i) => <TodoRow key={t.id} t={t} actions={actions} i={i} hot />)}
           {rest.map((t, i) => <TodoRow key={t.id} t={t} actions={actions} i={hot.length + i} />)}
-          {todoCount === 0 && <div className="sk-cap">아래 입력창에 할 일을 적어주세요</div>}
+          {todoCount === 0 && <div className="sk-cap">{L("todo.emptyNeed")}</div>}
         </>
       }
-      bottomLabel={`한 일 · ${done.length}`}
+      bottomLabel={`${L("todo.done")} · ${done.length}`}
       bottom={
         <>
           {done.map((t, i) => <TodoRow key={t.id} t={t} actions={actions} i={i} />)}
-          {done.length === 0 && <div className="sk-cap">끝낸 일이 여기에 쌓여요</div>}
+          {done.length === 0 && <div className="sk-cap">{L("todo.emptyDone")}</div>}
         </>
       }
     />

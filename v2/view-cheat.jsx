@@ -28,22 +28,22 @@ function CheatView() {
 
   return (
     <SplitPane
-      topLabel={`주로 쓰는 명령어 · ${frequent.length}`}
+      topLabel={`${L("cheat.registered")} · ${all.length}`}
       top={
-        frequent.length
-          ? frequent.map((c, i) => <CmdCard key={c.id} c={c} actions={actions} copiedId={copiedId} onCopy={onCopy} i={i} compact />)
-          : <div className="sk-cap">자주 쓰면 여기에 올라와요 (복사 시 카운트)</div>
-      }
-      bottomLabel={`등록한 명령어 · ${all.length}`}
-      bottom={
         <>
           <div style={{ marginBottom: 8 }}>
-            <InlineAdd placeholder="명령어 추가…" onAdd={(v) => actions.addCommand({ code: v })} />
+            <InlineAdd placeholder={L("cheat.add")} onAdd={(v) => actions.addCommand({ code: v })} />
           </div>
           {all.length
             ? all.map((c, i) => <CmdCard key={c.id} c={c} actions={actions} copiedId={copiedId} onCopy={onCopy} i={i} />)
-            : <div className="sk-cap">위 입력칸에 명령어를 적어 저장하세요</div>}
+            : <div className="sk-cap">{L("cheat.emptyReg")}</div>}
         </>
+      }
+      bottomLabel={`${L("cheat.frequent")} · ${frequent.length}`}
+      bottom={
+        frequent.length
+          ? frequent.map((c, i) => <CmdCard key={c.id} c={c} actions={actions} copiedId={copiedId} onCopy={onCopy} i={i} compact />)
+          : <div className="sk-cap">{L("cheat.emptyFreq")}</div>
       }
     />
   );
@@ -72,19 +72,19 @@ function CmdCard({ c, actions, copiedId, onCopy, compact, i = 0 }) {
             : <Editable
                 value={c.label}
                 onChange={(v) => actions.updateCommand(c.id, { label: v })}
-                placeholder="(라벨)"
+                placeholder={L("cheat.label")}
                 style={{ fontFamily: "var(--hand)", fontSize: 11, color: "var(--ink-2)" }}
               />
         )}
       </span>
-      <span className="sk-cap" style={{ fontSize: 11, flexShrink: 0 }}>{c.uses ?? 0}회</span>
+      <span className="sk-cap" style={{ fontSize: 11, flexShrink: 0 }}>{L("cheat.uses", { n: c.uses ?? 0 })}</span>
       <button onClick={() => onCopy(c.id)} title="복사" style={{
         all: "unset", cursor: "pointer", fontSize: 13, flexShrink: 0,
         color: copiedId === c.id ? "var(--ink)" : "var(--ink-2)",
       }}>{copiedId === c.id ? "✓" : "📋"}</button>
       {!compact && (
         <DelBtn onClick={() => {
-          if (confirm(`"${c.label || c.code}" 을(를) 삭제할까요?`)) actions.removeCommand(c.id);
+          if (confirm(L("cheat.delConfirm", { x: c.label || c.code }))) actions.removeCommand(c.id);
         }} />
       )}
     </div>

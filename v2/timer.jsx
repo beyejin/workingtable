@@ -68,21 +68,21 @@ function ddayDiff(dateStr) {
   return Math.round((target - now) / 86400000);
 }
 function ddayText(diff) {
-  if (diff == null) return "설정";
-  if (diff === 0) return "D-DAY";
+  if (diff == null) return L("dday.set");
+  if (diff === 0) return L("dday.dday");
   return diff > 0 ? `D-${diff}` : `D+${-diff}`;
 }
 
 function DDay() {
   const { state, actions } = diary.useDiary();
-  const dday = state.dday ?? { date: "", label: "디데이" };
+  const dday = state.dday ?? { date: "", label: "" };
   const [open, setOpen] = useState(false);
   const diff = ddayDiff(dday.date);
   const dayNum = dday.date ? new Date(dday.date + "T00:00:00").getDate() : null;
 
   return (
     <div style={{ position: "relative" }}>
-      <button onClick={() => setOpen(o => !o)} title={dday.label || "디데이 설정"} style={{
+      <button onClick={() => setOpen(o => !o)} title={dday.label || L("dday.title")} style={{
         all: "unset", cursor: "pointer",
         display: "inline-flex", alignItems: "center", gap: 6,
       }}>
@@ -110,12 +110,12 @@ function DDay() {
           marginTop: 6, padding: 10, width: 180,
           background: "var(--paper)", boxShadow: "0 4px 0 var(--paper-3)", zIndex: 28,
         }}>
-          <div className="sk-label" style={{ marginBottom: 6 }}>디데이 설정</div>
+          <div className="sk-label" style={{ marginBottom: 6 }}>{L("dday.title")}</div>
           <input
             type="text"
             value={dday.label}
             onChange={(e) => actions.setDday({ label: e.target.value })}
-            placeholder="이름 (예: 출시)"
+            placeholder={L("dday.namePlaceholder")}
             style={{
               width: "100%", boxSizing: "border-box", marginBottom: 6,
               border: "1.1px solid var(--ink)", borderRadius: 6, padding: "4px 6px",
@@ -136,7 +136,7 @@ function DDay() {
             <button onClick={() => actions.setDday({ date: "" })} style={{
               all: "unset", cursor: "pointer", marginTop: 6,
               fontFamily: "var(--hand)", fontSize: 12, color: "var(--bad)",
-            }}>날짜 지우기</button>
+            }}>{L("dday.clear")}</button>
           )}
         </div>
       )}
@@ -182,7 +182,7 @@ function PlaylistBar() {
 
   const add = async (raw) => {
     const videoId = extractYouTubeId(raw);
-    if (!videoId) { setErr("유튜브 링크를 인식하지 못했어요"); return; }
+    if (!videoId) { setErr(L("music.err")); return; }
     setErr("");
     let title = "";
     try {
@@ -193,7 +193,7 @@ function PlaylistBar() {
   };
 
   const ms = music.getState();
-  const label = ms.hasQueue ? (ms.title || "재생 준비 중…") : "유튜브 링크를 추가하세요 ♫";
+  const label = ms.hasQueue ? (ms.title || L("music.loading")) : L("music.add");
 
   return (
     <div style={{ position: "relative" }}>
@@ -221,8 +221,8 @@ function PlaylistBar() {
           marginTop: 6, padding: 10, background: "var(--paper)",
           boxShadow: "0 4px 0 var(--paper-3)", zIndex: 28,
         }}>
-          <div className="sk-label" style={{ marginBottom: 6 }}>플레이리스트 ♫</div>
-          <InlineAdd placeholder="유튜브 링크 붙여넣기" onAdd={add} />
+          <div className="sk-label" style={{ marginBottom: 6 }}>{L("music.playlist")}</div>
+          <InlineAdd placeholder={L("music.paste")} onAdd={add} />
           {err && <div className="sk-cap" style={{ color: "var(--bad)", marginTop: 4 }}>{err}</div>}
           {tracks.length > 0 ? (
             <div style={{ marginTop: 6, maxHeight: 160, overflowY: "auto", overflowX: "hidden" }}>
@@ -249,7 +249,7 @@ function PlaylistBar() {
               })}
             </div>
           ) : (
-            <div className="sk-cap" style={{ marginTop: 4 }}>유튜브 링크를 붙여넣어 곡을 추가하세요</div>
+            <div className="sk-cap" style={{ marginTop: 4 }}>{L("music.empty")}</div>
           )}
         </div>
       )}

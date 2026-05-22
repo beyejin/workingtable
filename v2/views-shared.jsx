@@ -21,13 +21,13 @@ function Divider() {
 }
 
 // 본문을 가운데 선으로 위/아래 반반 나누는 레이아웃
-function SplitPane({ topLabel, topRight, top, bottomLabel, bottomRight, bottom }) {
-  const sec = { minHeight: 0, overflowY: "auto", overflowX: "hidden" };
+function SplitPane({ topLabel, topRight, top, bottomLabel, bottomRight, bottom, bottomScroll = true }) {
+  const sec = { minHeight: 0, overflowX: "hidden" };
   const head = { display: "flex", alignItems: "center", gap: 6, marginBottom: 8 };
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       {/* 위 2/3 */}
-      <div style={{ ...sec, flex: 2, padding: "12px 14px 10px" }}>
+      <div style={{ ...sec, overflowY: "auto", flex: 2, padding: "12px 14px 10px" }}>
         {(topLabel || topRight) && (
           <div style={head}>
             <div className="sk-label" style={{ flex: 1 }}>{topLabel}</div>
@@ -36,9 +36,10 @@ function SplitPane({ topLabel, topRight, top, bottomLabel, bottomRight, bottom }
         )}
         {top}
       </div>
+      {/* 가운데 선 (장식) — 배경 그라데이션은 위/아래 연속 */}
       <div style={{ borderTop: "1.6px solid var(--ink)", flexShrink: 0 }} />
       {/* 아래 1/3 */}
-      <div style={{ ...sec, flex: 1, padding: "10px 14px 12px", background: "var(--paper-2)" }}>
+      <div style={{ ...sec, overflowY: bottomScroll ? "auto" : "hidden", flex: 1, padding: "10px 14px 12px" }}>
         {(bottomLabel || bottomRight) && (
           <div style={head}>
             <div className="sk-label" style={{ flex: 1 }}>{bottomLabel}</div>
@@ -248,19 +249,19 @@ function ProjectSwitcher() {
   const [open, setOpen] = useState(false);
 
   function addNew() {
-    const name = prompt("새 프로젝트 이름");
+    const name = prompt(L("proj.newPrompt"));
     if (name?.trim()) actions.addProject({ name: name.trim() });
     setOpen(false);
   }
   function rename() {
     if (!project) return;
-    const name = prompt("프로젝트 이름 변경", project.name);
+    const name = prompt(L("proj.renamePrompt"), project.name);
     if (name?.trim()) actions.updateProject(project.id, { name: name.trim() });
     setOpen(false);
   }
   function removeCurrent() {
     if (!project) return;
-    if (confirm(`"${project.name}" 프로젝트를 삭제할까요? (할 일 등 데이터는 그대로 남음)`)) {
+    if (confirm(L("proj.deleteConfirm", { name: project.name }))) {
       actions.removeProject(project.id);
     }
     setOpen(false);
@@ -268,14 +269,14 @@ function ProjectSwitcher() {
 
   return (
     <div style={{ position: "relative", flexShrink: 0, maxWidth: 220 }}>
-      <button onClick={() => setOpen(o => !o)} title="프로젝트 메뉴" style={{
+      <button onClick={() => setOpen(o => !o)} title={L("proj.menu")} style={{
         all: "unset", cursor: "pointer",
         display: "inline-flex", alignItems: "center", gap: 5, maxWidth: 220,
         fontFamily: "var(--hand)", fontSize: 13, fontWeight: 700, color: "var(--ink)",
       }}>
         <span style={{ flexShrink: 0 }}>💾</span>
         <span style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {project?.name || "프로젝트"}
+          {project?.name || L("proj.fallback")}
         </span>
         <span style={{ fontSize: 9, opacity: .7, flexShrink: 0 }}>{open ? "▲" : "▼"}</span>
       </button>
@@ -287,7 +288,7 @@ function ProjectSwitcher() {
           borderRadius: 10, padding: 8, zIndex: 60,
           boxShadow: "0 4px 0 var(--paper-3)",
         }}>
-          <div className="sk-label" style={{ marginBottom: 6 }}>프로젝트</div>
+          <div className="sk-label" style={{ marginBottom: 6 }}>{L("proj.menu")}</div>
           {state.projects.map(p => (
             <button key={p.id} onClick={() => { actions.switchProject(p.id); setOpen(false); }}
               style={{
@@ -304,11 +305,11 @@ function ProjectSwitcher() {
             </button>
           ))}
           <hr className="sk-hr" />
-          <button onClick={addNew} style={menuItem}>＋ 새 프로젝트 추가</button>
-          {project && <button onClick={rename} style={menuItem}>✎ 이름 변경</button>}
+          <button onClick={addNew} style={menuItem}>{L("proj.new")}</button>
+          {project && <button onClick={rename} style={menuItem}>{L("proj.rename")}</button>}
           {project && (
             <button onClick={removeCurrent} style={{ ...menuItem, color: "var(--bad)" }}>
-              ✕ "{project.name}" 삭제
+              {L("proj.delete", { name: project.name })}
             </button>
           )}
         </div>
@@ -381,6 +382,15 @@ const btnLink = {
   textDecoration: "underline",
 };
 
+// ---- 그라데이션 빌더 (다중 색 스탑 / 선형·원형) ----
+function buildGradient(type, angle, stops) {
+  const arr = (stops && stops.length >= 2) ? stops : [{ c: "#a9cdf5", p: 0 }, { c: "#ffffff", p: 100 }];
+  const sorted = [...arr].sort((a, b) => (a.p ?? 0) - (b.p ?? 0));
+  const list = sorted.map(s => `${s.c} ${s.p ?? 0}%`).join(", ");
+  if (type === "radial") return `radial-gradient(circle at 50% 42%, ${list})`;
+  return `linear-gradient(${angle ?? 180}deg, ${list})`;
+}
+
 // ---- 마스킹테이프 스타일 ----
 const TAPE_COLORS = [
   ["#ffd9e6", "dots"], ["#fdffc0", "diag"], ["#d9f0c0", "dots"], ["#ffd0d8", "diag"],
@@ -429,6 +439,7 @@ if (!document.getElementById("editable-placeholder-css")) {
 window.ViewHeader = ViewHeader;
 window.SplitPane = SplitPane;
 window.tapeStyle = tapeStyle;
+window.buildGradient = buildGradient;
 window.TodaySummary = TodaySummary;
 window.Divider = Divider;
 window.InlineAdd = InlineAdd;

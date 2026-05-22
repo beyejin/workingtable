@@ -25,7 +25,7 @@ function MailView() {
 
   return (
     <SplitPane
-      topLabel={`받은 문의 · ${unreplied.length}`}
+      topLabel={`${L("mail.received")} · ${unreplied.length}`}
       top={
         <>
           {/* 붙여넣기 */}
@@ -33,7 +33,7 @@ function MailView() {
             <textarea
               value={paste}
               onChange={e => setPaste(e.target.value)}
-              placeholder="받은 메일 붙여넣기…"
+              placeholder={L("mail.paste")}
               rows={1}
               style={{
                 flex: 1, boxSizing: "border-box", resize: "vertical", minHeight: 30,
@@ -42,24 +42,24 @@ function MailView() {
                 fontFamily: "var(--hand)", fontSize: 14, color: "var(--ink)",
               }}
             />
-            <button onClick={addPasted} style={{ ...mailBtn, background: "var(--pink)", flexShrink: 0 }}>담기</button>
+            <button onClick={addPasted} style={{ ...mailBtn, background: "var(--pink)", flexShrink: 0 }}>{L("mail.add")}</button>
           </div>
 
           {unreplied.map(m => <InquiryRow key={m.id} m={m} selected={m.id === selId} onPick={() => setSelId(m.id)} actions={actions} />)}
           {replied.length > 0 && (
             <>
-              <div className="sk-cap" style={{ margin: "8px 0 4px" }}>답장함 · {replied.length}</div>
+              <div className="sk-cap" style={{ margin: "8px 0 4px" }}>{L("mail.replied")} · {replied.length}</div>
               {replied.map(m => <InquiryRow key={m.id} m={m} selected={m.id === selId} onPick={() => setSelId(m.id)} actions={actions} />)}
             </>
           )}
-          {mails.length === 0 && <div className="sk-cap">받은 메일을 붙여넣어 담아보세요</div>}
+          {mails.length === 0 && <div className="sk-cap">{L("mail.emptyTop")}</div>}
         </>
       }
-      bottomLabel="메일 초안"
+      bottomLabel={L("mail.draft")}
       bottom={
         selected
           ? <DraftEditor m={selected} actions={actions} />
-          : <div className="sk-cap">위에서 받은 문의를 선택하면 여기서 초안을 적을 수 있어요</div>
+          : <div className="sk-cap">{L("mail.emptyBottom")}</div>
       }
     />
   );
@@ -80,7 +80,7 @@ function InquiryRow({ m, selected, onPick, actions }) {
         fontFamily: "var(--hand)", fontSize: 14, fontWeight: m.replied ? 400 : 700,
         color: m.replied ? "var(--ink-2)" : "var(--ink)",
         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-      }}>{m.subject || m.body?.slice(0, 40) || "(제목 없음)"}</button>
+      }}>{m.subject || m.body?.slice(0, 40) || L("mail.noTitle")}</button>
       <button onClick={() => actions.toggleReplied(m.id)}
         className={"sk-check" + (m.replied ? " done" : "")}
         style={{ cursor: "pointer", flexShrink: 0 }}
@@ -94,7 +94,7 @@ function DraftEditor({ m, actions }) {
   function openPlatform() {
     let url = m.platformUrl;
     if (!url) {
-      url = prompt("이 메일의 답장/플랫폼 주소 (예: https://mail.google.com/...)") || "";
+      url = prompt(L("mail.sitePrompt")) || "";
       if (!url.trim()) return;
       actions.updateEmail(m.id, { platformUrl: url.trim() });
       url = url.trim();
@@ -103,11 +103,11 @@ function DraftEditor({ m, actions }) {
   }
   return (
     <div>
-      <div className="sk-label" style={{ marginBottom: 4 }}>✍️ {m.subject || "받은 문의"} — 답장 초안</div>
+      <div className="sk-label" style={{ marginBottom: 4 }}>✍️ {m.subject || L("mail.inquiry")} — {L("mail.draftLabel")}</div>
       <textarea
         value={m.draft ?? ""}
         onChange={e => actions.updateEmail(m.id, { draft: e.target.value })}
-        placeholder="답장 초안을 적어두세요…"
+        placeholder={L("mail.draftPlaceholder")}
         rows={4}
         style={{
           width: "100%", boxSizing: "border-box", resize: "vertical", minHeight: 70,
@@ -119,11 +119,11 @@ function DraftEditor({ m, actions }) {
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
         <button onClick={() => actions.toggleReplied(m.id)} style={{
           ...mailBtn, background: m.replied ? "var(--mint)" : "var(--paper)",
-        }}>{m.replied ? "✓ 답장함" : "답장함으로 표시"}</button>
+        }}>{m.replied ? L("mail.replied") : L("mail.markReplied")}</button>
         <span style={{ flex: 1 }} />
-        <button onClick={openPlatform} title={m.platformUrl || "사이트 주소 연결"} style={{
+        <button onClick={openPlatform} title={m.platformUrl || L("mail.siteConnect")} style={{
           ...mailBtn, background: m.platformUrl ? "var(--point)" : "var(--paper)",
-        }}>📧 {m.platformUrl ? "사이트 열기" : "사이트 연결"}</button>
+        }}>📧 {m.platformUrl ? L("mail.site") : L("mail.siteConnect")}</button>
       </div>
     </div>
   );

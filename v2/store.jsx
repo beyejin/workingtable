@@ -450,7 +450,8 @@ const actions = {
 
   // ----- 위험: 리셋 -----
   hardReset() {
-    if (!confirm("정말 모든 데이터를 지우고 초기 시드로 되돌릴까요?")) return;
+    const msg = (window.i18n && window.i18n.t) ? window.i18n.t("set.resetConfirm") : "정말 모든 데이터를 지우고 초기 시드로 되돌릴까요?";
+    if (!confirm(msg)) return;
     setState(seed());
   },
 };

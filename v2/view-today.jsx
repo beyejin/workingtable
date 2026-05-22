@@ -26,10 +26,10 @@ function CalendarView() {
 
   return (
     <SplitPane
-      topLabel={`📖 ${diary.fmtKDate(sel)}`}
+      topLabel={`📖 ${window.i18n.fmtDate(sel)}`}
       topRight={
         sel !== diary.today() && (
-          <button onClick={() => actions.setSelectedDate(diary.today())} style={miniBtn}>오늘로</button>
+          <button onClick={() => actions.setSelectedDate(diary.today())} style={miniBtn}>{L("cal.todayBtn")}</button>
         )
       }
       top={
@@ -37,8 +37,8 @@ function CalendarView() {
           {/* 자동 기록 */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
             <LogChip icon="🕒">{pad2(h)} H {pad2(m)} M</LogChip>
-            <LogChip icon="✓">{doneTodos.length}개 완료</LogChip>
-            <LogChip icon="✉️">{mails.length}개 메일</LogChip>
+            <LogChip icon="✓">{L("cal.done", { n: doneTodos.length })}</LogChip>
+            <LogChip icon="✉️">{L("cal.mails", { n: mails.length })}</LogChip>
           </div>
 
           {(doneTodos.length > 0 || mails.length > 0) && (
@@ -65,7 +65,7 @@ function CalendarView() {
           <textarea
             value={note}
             onChange={e => actions.setNote(sel, e.target.value)}
-            placeholder="오늘의 메모 · 일기를 적어보세요…"
+            placeholder={L("cal.note")}
             rows={4}
             style={{
               width: "100%", boxSizing: "border-box", resize: "vertical", minHeight: 70,
@@ -76,7 +76,7 @@ function CalendarView() {
           />
         </div>
       }
-      bottomLabel="월간 달력"
+      bottomScroll={false}
       bottom={<MonthCalendar state={state} selected={sel} onPick={d => actions.setSelectedDate(d)} />}
     />
   );
@@ -127,7 +127,7 @@ function MonthCalendar({ state, selected, onPick }) {
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
   while (cells.length % 7 !== 0) cells.push(null);
   const rows = cells.length / 7;
-  const dows = ["일", "월", "화", "수", "목", "금", "토"];
+  const dows = window.i18n.weekdays();
 
   return (
     <div style={{
