@@ -27,11 +27,35 @@ Windows · macOS 지원, 자동 업데이트.
 
 최신 버전: **[Releases](https://github.com/binglehaepi/workingtable/releases/latest)**
 
-- **Windows**: `vibe-diary_x.y.z_x64-setup.exe` (또는 `.msi`)
-- **macOS (Apple Silicon + Intel)**: `vibe-diary_x.y.z_universal.dmg`
+| OS | 파일 |
+|----|------|
+| **Windows** | `vibe-diary_x.y.z_x64-setup.exe` (또는 `_x64_en-US.msi`) |
+| **macOS** (Apple Silicon + Intel) | `vibe-diary_x.y.z_universal.dmg` |
 
-> ⚠️ 개발자 인증서가 없어 첫 실행 시 보안 경고가 나올 수 있습니다(악성 아님).
-> 우회 방법은 **[INSTALL.md](INSTALL.md)** 참고.
+설치 후 새 버전이 나오면 **자동 업데이트**로 받아집니다.
+
+### ⚠️ 보안 경고에 대해 (개발자 인증 없음)
+
+이 앱은 상용 코드 서명 인증서(Windows) / Apple 공증(macOS)이 **없습니다**.
+그래서 첫 실행 시 OS가 "알 수 없는 개발자" 경고를 띄울 수 있어요. **악성 프로그램이 아니며**, 아래처럼 한 번만 허용하면 됩니다.
+
+**Windows**
+1. 설치 시 **"Windows의 PC 보호 (SmartScreen)"** 파란 창이 뜨면
+2. **"추가 정보"** → **"실행"** 클릭. 이후엔 경고 없이 실행됩니다.
+
+**macOS**
+1. `.dmg`를 열어 앱을 **응용 프로그램** 폴더로 드래그.
+2. 첫 실행 시 *"개발자를 확인할 수 없습니다"* 가 뜨면
+   **앱 우클릭(Control+클릭) → 열기 → 열기**, 또는 **시스템 설정 → 개인정보 보호 및 보안**에서 **"확인 없이 열기"**.
+3. `"손상되어 열 수 없습니다"`(격리 속성) 가 뜨면 터미널에서:
+   ```bash
+   xattr -dr com.apple.quarantine "/Applications/vibe-diary.app"
+   ```
+
+> English: the app isn't code-signed/notarized, so allow it once —
+> Windows: **More info → Run anyway**; macOS: right-click → **Open → Open**
+> (or `xattr -dr com.apple.quarantine "/Applications/vibe-diary.app"` if it says "damaged").
+> 자세한 내용은 **[INSTALL.md](INSTALL.md)** 참고.
 
 ---
 
