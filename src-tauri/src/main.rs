@@ -7,6 +7,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // 시작 시 백그라운드로 업데이트 확인 (네트워크 없으면 조용히 무시)
             let handle = app.handle().clone();

@@ -23,11 +23,6 @@ function RetroView() {
 
   return (
     <div>
-      <ViewHeader
-        ttl="회고"
-        sub="날짜별 한 개 · 자동 저장"
-      />
-
       {/* 오늘 회고 */}
       <div className="sk-box" style={{ padding: 12, background: "var(--hi-soft)", marginBottom: 16 }}>
         <div className="sk-label">오늘 · {diary.fmtKDate(today)}</div>

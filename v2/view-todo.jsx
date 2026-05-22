@@ -10,48 +10,37 @@ function TodoView() {
   const rest  = items.filter(x => !x.done && !x.hot);
   const done  = items.filter(x => x.done);
 
+  const todoCount = hot.length + rest.length;
   return (
-    <div>
-      <ViewHeader
-        ttl="할 일"
-        sub={`${items.filter(x => !x.done).length}개 남음 · ${hot.length}개 급함`}
-      />
-
-      <InlineAdd
-        placeholder="새 할 일 한 줄로 적기…"
-        onAdd={(v) => actions.addTodo(v)}
-      />
-      <div style={{ height: 12 }} />
-
-      {hot.length > 0 && (
+    <SplitPane
+      topLabel={`해야 할 일 · ${todoCount}`}
+      top={
         <>
-          <div className="sk-label" style={{ marginBottom: 6 }}>지금 · 급함</div>
-          {hot.map(t => <TodoRow key={t.id} t={t} actions={actions} hot />)}
-          <div style={{ height: 12 }} />
+          <div style={{ marginBottom: 8 }}>
+            <InlineAdd placeholder="할 일 추가…" onAdd={(v) => actions.addTodo(v)} />
+          </div>
+          {hot.map((t, i) => <TodoRow key={t.id} t={t} actions={actions} i={i} hot />)}
+          {rest.map((t, i) => <TodoRow key={t.id} t={t} actions={actions} i={hot.length + i} />)}
+          {todoCount === 0 && <div className="sk-cap">아래 입력창에 할 일을 적어주세요</div>}
         </>
-      )}
-
-      <div className="sk-label" style={{ marginBottom: 6 }}>나머지 · {rest.length}</div>
-      {rest.length === 0 && <div className="sk-cap" style={{ marginBottom: 8 }}>다 정리됐어요!</div>}
-      {rest.map(t => <TodoRow key={t.id} t={t} actions={actions} />)}
-
-      {done.length > 0 && (
+      }
+      bottomLabel={`한 일 · ${done.length}`}
+      bottom={
         <>
-          <Divider />
-          <div className="sk-label" style={{ marginBottom: 6 }}>끝낸 것 · {done.length}</div>
-          {done.map(t => <TodoRow key={t.id} t={t} actions={actions} />)}
+          {done.map((t, i) => <TodoRow key={t.id} t={t} actions={actions} i={i} />)}
+          {done.length === 0 && <div className="sk-cap">끝낸 일이 여기에 쌓여요</div>}
         </>
-      )}
-    </div>
+      }
+    />
   );
 }
 
-function TodoRow({ t, actions, hot }) {
+function TodoRow({ t, actions, hot, i = 0 }) {
   return (
-    <div className="todo-row" style={{
-      display: "flex", alignItems: "center", gap: 8, padding: "5px 6px",
-      background: hot ? "#fff4b0" : "transparent",
-      borderRadius: 6, marginBottom: 2,
+    <div className="tape" style={{
+      ...tapeStyle(i),
+      display: "flex", alignItems: "center", gap: 8, padding: "8px 16px",
+      marginBottom: 7,
     }}>
       <button
         onClick={() => actions.toggleTodo(t.id)}

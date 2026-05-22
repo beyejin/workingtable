@@ -1,133 +1,138 @@
-/* global React, diary, ViewHeader, DelBtn */
+/* global React, diary, SplitPane, DelBtn, openExternalUrl */
 // ===========================================================
-// 메일 — 추가 / 답장 체크 / 삭제
+// 문의 — 위: 받은 문의(붙여넣기 + 목록) / 아래: 선택한 문의의 답장 초안
+// 받은 문의를 클릭하면 아래에 그 메일의 초안 편집기가 나타난다.
+// 사이트(플랫폼) 연결 버튼은 하단(초안)에만.
 // ===========================================================
 const { useState } = React;
 
 function MailView() {
   const { state, actions } = diary.useDiary();
-  const mails = state.emails;
+  const mails = state.emails ?? [];
   const unreplied = mails.filter(m => !m.replied);
   const replied = mails.filter(m => m.replied);
+  const [selId, setSelId] = useState(null);
+  const [paste, setPaste] = useState("");
 
+  const selected = mails.find(m => m.id === selId) || null;
+
+  function addPasted() {
+    const body = paste.trim();
+    if (!body) return;
+    actions.addInquiry({ subject: body.split("\n")[0].slice(0, 60), body });
+    setPaste("");
+  }
+
+  return (
+    <SplitPane
+      topLabel={`받은 문의 · ${unreplied.length}`}
+      top={
+        <>
+          {/* 붙여넣기 */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+            <textarea
+              value={paste}
+              onChange={e => setPaste(e.target.value)}
+              placeholder="받은 메일 붙여넣기…"
+              rows={1}
+              style={{
+                flex: 1, boxSizing: "border-box", resize: "vertical", minHeight: 30,
+                border: "1.1px solid var(--ink-soft)", borderRadius: 8, outline: "none",
+                background: "var(--paper)", padding: "5px 8px",
+                fontFamily: "var(--hand)", fontSize: 14, color: "var(--ink)",
+              }}
+            />
+            <button onClick={addPasted} style={{ ...mailBtn, background: "var(--pink)", flexShrink: 0 }}>담기</button>
+          </div>
+
+          {unreplied.map(m => <InquiryRow key={m.id} m={m} selected={m.id === selId} onPick={() => setSelId(m.id)} actions={actions} />)}
+          {replied.length > 0 && (
+            <>
+              <div className="sk-cap" style={{ margin: "8px 0 4px" }}>답장함 · {replied.length}</div>
+              {replied.map(m => <InquiryRow key={m.id} m={m} selected={m.id === selId} onPick={() => setSelId(m.id)} actions={actions} />)}
+            </>
+          )}
+          {mails.length === 0 && <div className="sk-cap">받은 메일을 붙여넣어 담아보세요</div>}
+        </>
+      }
+      bottomLabel="메일 초안"
+      bottom={
+        selected
+          ? <DraftEditor m={selected} actions={actions} />
+          : <div className="sk-cap">위에서 받은 문의를 선택하면 여기서 초안을 적을 수 있어요</div>
+      }
+    />
+  );
+}
+
+function InquiryRow({ m, selected, onPick, actions }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 7, padding: "6px 9px", marginBottom: 6,
+      borderRadius: 8, border: "1.1px solid var(--ink)",
+      background: selected ? "var(--hi-soft)" : (m.replied ? "var(--paper-2)" : "white"),
+      boxShadow: selected ? "inset 0 0 0 1.5px var(--ink)" : "none",
+      opacity: m.replied && !selected ? 0.85 : 1,
+    }}>
+      <span style={{ fontSize: 14, flexShrink: 0 }}>{m.replied ? "📭" : "✉️"}</span>
+      <button onClick={onPick} style={{
+        all: "unset", cursor: "pointer", flex: 1, minWidth: 0,
+        fontFamily: "var(--hand)", fontSize: 14, fontWeight: m.replied ? 400 : 700,
+        color: m.replied ? "var(--ink-2)" : "var(--ink)",
+        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+      }}>{m.subject || m.body?.slice(0, 40) || "(제목 없음)"}</button>
+      <button onClick={() => actions.toggleReplied(m.id)}
+        className={"sk-check" + (m.replied ? " done" : "")}
+        style={{ cursor: "pointer", flexShrink: 0 }}
+        title={m.replied ? "미답으로" : "답장함으로"} />
+      <DelBtn onClick={() => actions.removeEmail(m.id)} />
+    </div>
+  );
+}
+
+function DraftEditor({ m, actions }) {
+  function openPlatform() {
+    let url = m.platformUrl;
+    if (!url) {
+      url = prompt("이 메일의 답장/플랫폼 주소 (예: https://mail.google.com/...)") || "";
+      if (!url.trim()) return;
+      actions.updateEmail(m.id, { platformUrl: url.trim() });
+      url = url.trim();
+    }
+    openExternalUrl(url);
+  }
   return (
     <div>
-      <ViewHeader
-        ttl="고객 문의"
-        sub={`${unreplied.length}개 미답 · 답장 체크하면 자동 정리`}
+      <div className="sk-label" style={{ marginBottom: 4 }}>✍️ {m.subject || "받은 문의"} — 답장 초안</div>
+      <textarea
+        value={m.draft ?? ""}
+        onChange={e => actions.updateEmail(m.id, { draft: e.target.value })}
+        placeholder="답장 초안을 적어두세요…"
+        rows={4}
+        style={{
+          width: "100%", boxSizing: "border-box", resize: "vertical", minHeight: 70,
+          border: "1.1px solid var(--ink-soft)", borderRadius: 8, outline: "none",
+          background: "var(--paper)", padding: "8px 10px",
+          fontFamily: "var(--hand)", fontSize: 15, color: "var(--ink)", lineHeight: 1.5,
+        }}
       />
-
-      <AddMailForm onAdd={(d) => actions.addEmail(d)} />
-
-      <div className="sk-label" style={{ marginTop: 12, marginBottom: 6 }}>미답 · {unreplied.length}</div>
-      {unreplied.length === 0 && <div className="sk-cap" style={{ marginBottom: 8 }}>전부 답장했어요 🌟</div>}
-      {unreplied.map(m => <MailCard key={m.id} m={m} actions={actions} />)}
-
-      {replied.length > 0 && (
-        <>
-          <div className="sk-label" style={{ marginTop: 16, marginBottom: 6 }}>답장함 · {replied.length}</div>
-          {replied.map(m => <MailCard key={m.id} m={m} actions={actions} />)}
-        </>
-      )}
-    </div>
-  );
-}
-
-function MailCard({ m, actions }) {
-  return (
-    <div className="sk-box" style={{
-      padding: 10, marginBottom: 8,
-      background: m.hot && !m.replied ? "#fff4b0" : "white",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <button
-          onClick={() => actions.toggleReplied(m.id)}
-          className={"sk-check" + (m.replied ? " done" : "")}
-          style={{ cursor: "pointer" }}
-          title={m.replied ? "미답으로 되돌리기" : "답장함으로 표시"}
-        />
-        <span style={{ fontFamily: "var(--hand)", fontSize: 15, flex: 1, fontWeight: m.replied ? 400 : 700 }}>{m.who}</span>
-        <span className="sk-mono">{m.time}</span>
-        <DelBtn onClick={() => actions.removeEmail(m.id)} />
-      </div>
-      <div style={{
-        fontFamily: "var(--hand)", fontSize: 15, marginTop: 3,
-        color: m.replied ? "var(--ink-2)" : "var(--ink)",
-      }}>
-        {m.subject}
-      </div>
-      {m.preview && (
-        <div style={{
-          fontFamily: "var(--hand-2)", fontSize: 14, marginTop: 2,
-          color: "var(--ink-3)", lineHeight: 1.25,
-        }}>
-          {m.preview}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AddMailForm({ onAdd }) {
-  const [open, setOpen] = useState(false);
-  const [who, setWho] = useState("");
-  const [subject, setSubject] = useState("");
-  const [preview, setPreview] = useState("");
-  const [hot, setHot] = useState(false);
-
-  if (!open) {
-    return (
-      <button onClick={() => setOpen(true)} className="sk-box sk-dashed" style={{
-        all: "unset", cursor: "pointer", display: "block", width: "100%",
-        padding: "8px 10px", textAlign: "left",
-        background: "var(--paper)", borderRadius: 10,
-        border: "1.1px dashed var(--ink-2)",
-        fontFamily: "var(--hand)", fontSize: 14, color: "var(--ink-2)",
-      }}>
-        + 새 문의 추가
-      </button>
-    );
-  }
-  const reset = () => { setWho(""); setSubject(""); setPreview(""); setHot(false); };
-  const cancel = () => { reset(); setOpen(false); };
-  const submit = () => {
-    if (!who.trim() || !subject.trim()) return;
-    onAdd({ who, subject, preview, hot });
-    reset();
-    setOpen(false);
-  };
-  const inputStyle = {
-    width: "100%", border: 0, outline: "none", background: "transparent",
-    fontFamily: "var(--hand)", fontSize: 14, color: "var(--ink)",
-    padding: "4px 0",
-  };
-  return (
-    <div className="sk-box" style={{ padding: 10, background: "var(--paper-2)" }}>
-      <input value={who} onChange={e => setWho(e.target.value)}
-        placeholder="누가 보냈나요? (이름 / 이메일)" style={inputStyle} />
-      <hr className="sk-hr" />
-      <input value={subject} onChange={e => setSubject(e.target.value)}
-        placeholder="제목" style={inputStyle} />
-      <hr className="sk-hr" />
-      <textarea value={preview} onChange={e => setPreview(e.target.value)}
-        placeholder="내용 한 줄 요약 (선택)" rows={2}
-        style={{ ...inputStyle, resize: "vertical", minHeight: 30 }} />
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 4, fontFamily: "var(--hand)", fontSize: 13, color: "var(--ink-2)", cursor: "pointer" }}>
-          <input type="checkbox" checked={hot} onChange={(e) => setHot(e.target.checked)} /> 급함
-        </label>
+        <button onClick={() => actions.toggleReplied(m.id)} style={{
+          ...mailBtn, background: m.replied ? "var(--mint)" : "var(--paper)",
+        }}>{m.replied ? "✓ 답장함" : "답장함으로 표시"}</button>
         <span style={{ flex: 1 }} />
-        <button onClick={cancel} style={btn}>취소</button>
-        <button onClick={submit} style={{...btn, background: "var(--pink)"}}>추가</button>
+        <button onClick={openPlatform} title={m.platformUrl || "사이트 주소 연결"} style={{
+          ...mailBtn, background: m.platformUrl ? "var(--point)" : "var(--paper)",
+        }}>📧 {m.platformUrl ? "사이트 열기" : "사이트 연결"}</button>
       </div>
     </div>
   );
 }
 
-const btn = {
+const mailBtn = {
   all: "unset", cursor: "pointer",
-  background: "var(--paper)", border: "1.1px solid var(--ink)",
-  padding: "2px 10px", borderRadius: 99,
+  padding: "4px 12px", borderRadius: 99,
+  border: "1.1px solid var(--ink)", background: "var(--paper)",
   fontFamily: "var(--hand)", fontSize: 13, color: "var(--ink)",
 };
 

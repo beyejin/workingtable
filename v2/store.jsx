@@ -28,9 +28,10 @@ const fmtKDateShort = (iso) => {
 };
 
 // ---- 초기 시드 ----
+// 첫 실행 시엔 예시 데이터 없이 빈 상태로 시작한다.
+// (사용 가능하도록 빈 시작 프로젝트 하나만 둠)
 function seed() {
   const pid1 = uid();
-  const pid2 = uid();
   const t = today();
   return {
     schemaVersion: 1,
@@ -38,70 +39,31 @@ function seed() {
     projects: [
       {
         id: pid1,
-        name: "vibe-diary.app",
-        path: "~/work/vibe-diary",
-        stack: ["Next.js", "Supabase", "Tailwind"],
-        links: [
-          { label: "github", url: "https://github.com/me/vibe-diary" },
-          { label: "figma", url: "https://figma.com/file/xK29" },
-          { label: "spec", url: "https://notion.so/spec-v2" },
-        ],
+        name: "내 프로젝트",
+        path: "",
+        stack: [],
+        links: [],
         gitBranch: "main",
-        cheatsheet: "$ pnpm dev\n$ pnpm db:reset\n$ pnpm test --filter ui\nENV → .env.local",
+        repoUrl: "",
+        version: "0.1.0",
+        nextVersion: "",
+        cheatsheet: "",
         status: "active",
         createdAt: t,
       },
-      {
-        id: pid2,
-        name: "studio-site v2",
-        path: "~/work/studio",
-        stack: ["Astro", "Tailwind"],
-        links: [],
-        gitBranch: "redesign",
-        cheatsheet: "$ pnpm dev",
-        status: "paused",
-        createdAt: t,
-      },
     ],
-    todos: [
-      { id: uid(), projectId: pid1, text: "타이머 권한 alert 다듬기", done: true,  hot: false, createdAt: t, doneAt: t },
-      { id: uid(), projectId: pid1, text: "이메일 답장 토글 UI",    done: false, hot: true,  createdAt: t },
-      { id: uid(), projectId: pid1, text: "회고 모달 카피 다듬기",  done: false, hot: false, createdAt: t },
-      { id: uid(), projectId: pid1, text: "푸시 사운드 옵션",       done: false, hot: false, createdAt: t },
-      { id: uid(), projectId: pid1, text: "MDI 드래그 RAF 묶기",   done: false, hot: true,  createdAt: t },
-    ],
-    prompts: [
-      { id: uid(), text: "이 함수 리팩토링하면서 테스트 같이 작성해줘", uses: 23, createdAt: t },
-      { id: uid(), text: "이 에러 메시지 사용자 친화적으로 다시 써줘", uses: 14, createdAt: t },
-      { id: uid(), text: "이 컴포넌트 접근성 검토 (대비/포커스/aria)", uses: 11, createdAt: t },
-      { id: uid(), text: "커밋 메시지 한 줄 초안 (conventional commits)", uses: 31, createdAt: t },
-    ],
-    emails: [
-      { id: uid(), who: "지수 @studio", subject: "결제가 안 돼요",          preview: "안녕하세요, 카드 등록 후에도 결제 단계에서…", time: "2h", replied: false, hot: true,  createdAt: t },
-      { id: uid(), who: "강아무개",      subject: "환불 문의",               preview: "어제 결제한 건 환불 가능할까요…",            time: "4h", replied: false, hot: true,  createdAt: t },
-      { id: uid(), who: "박PM",          subject: "회의자료 잘 받았습니다",  preview: "감사합니다. 다음주에 다시 뵙겠습니다.",        time: "1d", replied: true,  hot: false, createdAt: t },
-    ],
-    aiBookmarks: [
-      { id: uid(), projectId: pid1, date: t, title: "타이머 권한 alert 카피", ok: true,  note: "", createdAt: t },
-      { id: uid(), projectId: pid1, date: t, title: "MDI 자식창 드래그 디버깅", ok: false, note: "RAF 묶는 방향으로 다시", createdAt: t },
-    ],
-    commands: [
-      { id: uid(), projectId: pid1, label: "로컬 서버",   code: "pnpm dev",            uses: 47, createdAt: t },
-      { id: uid(), projectId: pid1, label: "DB 리셋",    code: "pnpm db:reset",       uses: 12, createdAt: t },
-      { id: uid(), projectId: pid1, label: "UI 테스트",    code: "pnpm test --filter ui", uses: 8,  createdAt: t },
-      { id: uid(), projectId: pid1, label: "Supabase URL", code: "SUPABASE_URL=https://xxx.supabase.co", uses: 3, createdAt: t },
-      { id: uid(), projectId: pid1, label: "타입체크",   code: "pnpm typecheck",      uses: 5,  createdAt: t },
-      { id: uid(), projectId: pid2, label: "로컬 서버",   code: "pnpm dev",            uses: 22, createdAt: t },
-      { id: uid(), projectId: pid2, label: "빌드",        code: "pnpm build",          uses: 3,  createdAt: t },
-    ],
-    retros: [
-      // 날짜별 1개. (날짜, 프로젝트) 페어가 unique는 아니고, 날짜로만 1개.
-      // { id, date, text, good, bad }
-    ],
-    stuck: {
-      // 현재 막힌 것 — 프로젝트별 한 줄
-      [pid1]: "MDI 자식창 드래그가 끊겨서, 좌표 계산을 RAF로 묶어야 할 듯",
-    },
+    todos: [],
+    prompts: [],
+    emails: [],
+    aiBookmarks: [],
+    commands: [],
+    retros: [],
+    playlist: [],
+    dday: { date: "", label: "디데이" },
+    mailUrl: "",
+    notes: {},
+    selectedDate: t,
+    stuck: {},
     timer: {
       lengthMin: 30,   // 한 사이클 분
       enabled: true,
@@ -111,10 +73,7 @@ function seed() {
       notificationsGranted: false,
       lastNotifiedAt: null,        // 알림 중복 발송 방지
     },
-    workSessions: [
-      // { date, minutes } — 추후 자동 적립
-      { date: t, minutes: 107 },
-    ],
+    workSessions: [],
   };
 }
 
@@ -132,9 +91,20 @@ function load() {
     data.emails      ??= [];
     data.aiBookmarks ??= [];
     data.retros      ??= [];
+    data.playlist    ??= [];
+    data.dday        ??= { date: "", label: "디데이" };
+    data.mailUrl     ??= "";
+    data.notes       ??= {};
+    data.selectedDate = today();   // 시작 시 항상 오늘
     data.stuck       ??= {};
+    // 메일에 body/draft/platformUrl 보강
+    data.emails = (data.emails ?? []).map(e => ({ body: "", draft: "", platformUrl: "", ...e }));
     data.timer       ??= { lengthMin: 30, enabled: true, cycleStartedAt: null, paused: false, pausedRemainingMs: null, notificationsGranted: false, lastNotifiedAt: null };
     data.workSessions ??= [];
+    // 프로젝트에 버전/저장소 필드 보강 (기존 값 우선)
+    data.projects = (data.projects ?? []).map(p => ({
+      repoUrl: "", version: "0.1.0", nextVersion: "", ...p,
+    }));
     return data;
   } catch (e) {
     console.warn("diary: load failed, reseeding", e);
@@ -173,7 +143,8 @@ const actions = {
       ...s,
       projects: [...s.projects, {
         id, name, path, stack, links: [],
-        gitBranch, cheatsheet, status: "active", createdAt: today(),
+        gitBranch, repoUrl: "", version: "0.1.0", nextVersion: "",
+        cheatsheet, status: "active", createdAt: today(),
       }],
       currentProjectId: id,
     }));
@@ -213,7 +184,7 @@ const actions = {
     setState(s => ({
       ...s,
       todos: s.todos.map(t => t.id === id
-        ? { ...t, done: !t.done, doneAt: !t.done ? today() : undefined }
+        ? { ...t, done: !t.done, doneAt: !t.done ? today() : undefined, doneTs: !t.done ? Date.now() : undefined }
         : t),
     }));
   },
@@ -264,6 +235,28 @@ const actions = {
         ...s.emails,
       ],
     }));
+  },
+  // 받은 메일 붙여넣기 (문의함)
+  addInquiry({ from = "", subject = "", body = "" }) {
+    if (!body.trim() && !subject.trim()) return;
+    setState(s => ({
+      ...s,
+      emails: [
+        { id: uid(), who: from.trim() || "문의", subject: subject.trim(),
+          preview: "", body: body.trim(), draft: "", platformUrl: "",
+          time: "방금", replied: false, hot: false, createdAt: today(), ts: Date.now() },
+        ...s.emails,
+      ],
+    }));
+  },
+  updateEmail(id, patch) {
+    setState(s => ({
+      ...s,
+      emails: s.emails.map(e => e.id === id ? { ...e, ...patch } : e),
+    }));
+  },
+  setMailUrl(url) {
+    setState(s => ({ ...s, mailUrl: url }));
   },
   toggleReplied(id) {
     setState(s => ({
@@ -341,6 +334,42 @@ const actions = {
         retros: [...others, { id: uid(), date, text, good, bad }]
                  .sort((a, b) => b.date.localeCompare(a.date)),
       };
+    });
+  },
+
+  // ----- 플레이리스트 (유튜브) -----
+  addTrack({ url, videoId, title = "" }) {
+    if (!videoId) return;
+    setState(s => ({
+      ...s,
+      playlist: [...(s.playlist ?? []), {
+        id: uid(), url, videoId,
+        title: title.trim() || "YouTube 트랙",
+        createdAt: today(),
+      }],
+    }));
+  },
+  removeTrack(id) {
+    setState(s => ({ ...s, playlist: (s.playlist ?? []).filter(t => t.id !== id) }));
+  },
+
+  // ----- 디데이 -----
+  setDday(patch) {
+    setState(s => ({ ...s, dday: { ...(s.dday ?? {}), ...patch } }));
+  },
+
+  // ----- 달력 메모/일기 (날짜별) -----
+  setSelectedDate(date) {
+    setState(s => ({ ...s, selectedDate: date }));
+  },
+  setNote(date, text) {
+    setState(s => ({ ...s, notes: { ...s.notes, [date]: text } }));
+  },
+  appendNote(date, line) {
+    if (!line?.trim()) return;
+    setState(s => {
+      const prev = s.notes[date] ?? "";
+      return { ...s, notes: { ...s.notes, [date]: prev ? prev + "\n" + line.trim() : line.trim() } };
     });
   },
 

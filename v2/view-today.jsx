@@ -1,226 +1,187 @@
-/* global React, diary, ViewHeader, Divider, InlineAdd, Editable, DelBtn */
+/* global React, diary, SplitPane */
 // ===========================================================
-// 오늘 (Today / Dashboard) — 모든 데이터에서 파생
+// 달력 — 위: 선택한 날의 자동 기록 + 일기 메모 / 아래: 월간 달력(전체)
+// 마친 일/작업시간/받은 메일이 날짜별로 자동 기록됨. 다른 날짜도 편집 가능.
 // ===========================================================
 
-function TodayView() {
+function pad2(n) { return String(n).padStart(2, "0"); }
+function dateStr(y, m, d) { return `${y}-${pad2(m + 1)}-${pad2(d)}`; }
+function tsTime(ts) { return ts ? new Date(ts).toTimeString().slice(0, 5) : ""; }
+
+function CalendarView() {
   const { state, actions } = diary.useDiary();
-  const project = diary.select.currentProject(state);
-  const todos = diary.select.todosForCurrent(state).filter(t => !t.done);
-  const doneToday = state.todos.filter(t => t.done && t.doneAt === diary.today() && t.projectId === state.currentProjectId);
-  const stuck = diary.select.stuckForCurrent(state);
-  const minutes = diary.select.workMinutesToday(state);
-  const today = diary.today();
-  const todayRetro = diary.select.retroForDate(state, today);
-  const hotCount = todos.filter(t => t.hot).length;
-  const unreplied = state.emails.filter(e => !e.replied).length;
+  const sel = state.selectedDate || diary.today();
 
-  // AI 쓴이기 상태
-  const [breakdown, setBreakdown] = React.useState(null);
-  const runBreakdown = async () => {
-    if (!stuck?.trim()) {
-      alert("막힌 것을 먼저 적어주세요");
-      return;
-    }
-    setBreakdown({ loading: true });
-    try {
-      const items = await window.diaryAI.breakdownStuck({ stuck, project });
-      setBreakdown({
-        loading: false,
-        items,
-        selected: items.reduce((acc, _, i) => (acc[i] = true, acc), {}),
-      });
-    } catch (e) {
-      setBreakdown({ loading: false, error: e.message || "실패" });
-    }
-  };
-  const addSelected = () => {
-    breakdown.items.forEach((item, i) => {
-      if (breakdown.selected[i]) actions.addTodo(item);
-    });
-    setBreakdown(null);
-  };
+  // 선택한 날의 자동 기록
+  const mins = (state.workSessions ?? []).find(w => w.date === sel)?.minutes ?? 0;
+  const doneTodos = (state.todos ?? [])
+    .filter(t => t.done && t.doneAt === sel)
+    .sort((a, b) => (a.doneTs ?? 0) - (b.doneTs ?? 0));
+  const mails = (state.emails ?? [])
+    .filter(e => e.createdAt === sel)
+    .sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+  const note = state.notes?.[sel] ?? "";
+
+  const h = Math.floor(mins / 60), m = mins % 60;
 
   return (
-    <div>
-      <ViewHeader
-        ttl={`오늘 — ${diary.fmtKDate(today)}`}
-        sub={`작업 ${minutes}m · ${todos.length}개 할 일 · ${unreplied}개 미답 메일`}
-      />
+    <SplitPane
+      topLabel={`📖 ${diary.fmtKDate(sel)}`}
+      topRight={
+        sel !== diary.today() && (
+          <button onClick={() => actions.setSelectedDate(diary.today())} style={miniBtn}>오늘로</button>
+        )
+      }
+      top={
+        <div>
+          {/* 자동 기록 */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+            <LogChip icon="🕒">{pad2(h)} H {pad2(m)} M</LogChip>
+            <LogChip icon="✓">{doneTodos.length}개 완료</LogChip>
+            <LogChip icon="✉️">{mails.length}개 메일</LogChip>
+          </div>
 
-      {/* 오늘의 한 줄 — 회고 텍스트로 연결 */}
-      <div className="sk-box" style={{ padding: 12, background: "var(--hi-soft)", marginBottom: 14 }}>
-        <div className="sk-label">오늘의 한 줄</div>
-        <div style={{ marginTop: 4 }}>
-          <Editable
-            value={todayRetro?.text ?? ""}
-            onChange={(v) => actions.saveRetro({
-              date: today,
-              text: v,
-              good: todayRetro?.good ?? "",
-              bad: todayRetro?.bad ?? "",
-            })}
-            placeholder="오늘 어떤가요? (회고 탭에서도 편집됨)"
-            multiline
+          {(doneTodos.length > 0 || mails.length > 0) && (
+            <div style={{
+              background: "var(--paper-2)", border: "1px dashed var(--ink-soft)", borderRadius: 8,
+              padding: "6px 9px", marginBottom: 8,
+            }}>
+              {doneTodos.map(t => (
+                <div key={t.id} style={logLine}>
+                  <span style={{ color: "var(--ink-3)", fontFamily: "var(--mono)", fontSize: 11, width: 38, flexShrink: 0 }}>{tsTime(t.doneTs) || "—"}</span>
+                  <span>✓ {t.text}</span>
+                </div>
+              ))}
+              {mails.map(e => (
+                <div key={e.id} style={logLine}>
+                  <span style={{ color: "var(--ink-3)", fontFamily: "var(--mono)", fontSize: 11, width: 38, flexShrink: 0 }}>{tsTime(e.ts) || "—"}</span>
+                  <span>✉️ {e.subject || e.body?.slice(0, 24) || "문의"}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 일기 메모 */}
+          <textarea
+            value={note}
+            onChange={e => actions.setNote(sel, e.target.value)}
+            placeholder="오늘의 메모 · 일기를 적어보세요…"
+            rows={4}
             style={{
-              fontFamily: "var(--hand-2)", fontSize: 17,
-              color: "var(--ink)", lineHeight: 1.3,
-              minHeight: 24,
+              width: "100%", boxSizing: "border-box", resize: "vertical", minHeight: 70,
+              border: "1.1px solid var(--ink-soft)", borderRadius: 8, outline: "none",
+              background: "var(--paper)", padding: "8px 10px",
+              fontFamily: "var(--hand)", fontSize: 15, color: "var(--ink)", lineHeight: 1.5,
             }}
           />
         </div>
+      }
+      bottomLabel="월간 달력"
+      bottom={<MonthCalendar state={state} selected={sel} onPick={d => actions.setSelectedDate(d)} />}
+    />
+  );
+}
+
+function LogChip({ icon, children }) {
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      padding: "2px 9px", borderRadius: 99, border: "1.1px solid var(--ink)",
+      background: "white", fontFamily: "var(--mono)", fontSize: 11, fontWeight: 700, color: "var(--ink)",
+    }}>{icon} {children}</span>
+  );
+}
+
+const logLine = {
+  display: "flex", gap: 6, alignItems: "baseline",
+  fontFamily: "var(--hand)", fontSize: 13, color: "var(--ink-2)", lineHeight: 1.5,
+};
+const miniBtn = {
+  all: "unset", cursor: "pointer", padding: "1px 9px", borderRadius: 99,
+  border: "1.1px solid var(--ink)", background: "var(--paper)",
+  fontFamily: "var(--hand)", fontSize: 12, color: "var(--ink)",
+};
+
+// ---- 월간 달력 (아래칸 전체 사용) ----
+function MonthCalendar({ state, selected, onPick }) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const todayStr = diary.today();
+
+  const startDow = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const dday = state.dday ?? { date: "" };
+  const ddayStr = dday.date;
+
+  // 활동 있는 날 집합
+  const activity = new Set();
+  (state.workSessions ?? []).forEach(w => { if (w.minutes > 0) activity.add(w.date); });
+  (state.todos ?? []).forEach(t => { if (t.done && t.doneAt) activity.add(t.doneAt); });
+  (state.emails ?? []).forEach(e => { if (e.createdAt) activity.add(e.createdAt); });
+  Object.keys(state.notes ?? {}).forEach(d => { if ((state.notes[d] ?? "").trim()) activity.add(d); });
+
+  const cells = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+  const rows = cells.length / 7;
+  const dows = ["일", "월", "화", "수", "목", "금", "토"];
+
+  return (
+    <div style={{
+      height: "100%", minHeight: 0, display: "flex", flexDirection: "column",
+      border: "1.1px solid var(--ink)", borderRadius: 10, overflow: "hidden", background: "white",
+    }}>
+      <div style={{
+        padding: "5px 10px", background: "linear-gradient(180deg, #cfe2fa, #a9cdf5)",
+        borderBottom: "1.1px solid var(--ink)", textAlign: "center",
+        fontFamily: "var(--hand)", fontSize: 14, fontWeight: 700, color: "var(--ink)", flexShrink: 0,
+      }}>{year}년 {month + 1}월</div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", flexShrink: 0 }}>
+        {dows.map((w, i) => (
+          <div key={w} style={{
+            textAlign: "center", padding: "3px 0", fontFamily: "var(--mono)", fontSize: 10,
+            color: i === 0 ? "#e06a7a" : (i === 6 ? "#5b8fd6" : "var(--ink-3)"),
+          }}>{w}</div>
+        ))}
       </div>
 
-      {/* 급한 할 일 (있을 때만) */}
-      {hotCount > 0 && (
-        <>
-          <div className="sk-label" style={{ marginBottom: 6 }}>지금 급한 것 · {hotCount}</div>
-          <div style={{ marginBottom: 14 }}>
-            {todos.filter(t => t.hot).slice(0, 3).map(t => (
-              <div key={t.id} style={{
-                display: "flex", alignItems: "center", gap: 7,
-                padding: "5px 8px", marginBottom: 4,
-                background: "#fff4b0", borderRadius: 6,
-              }}>
-                <button onClick={() => actions.toggleTodo(t.id)}
-                  className="sk-check" style={{ cursor: "pointer" }} />
-                <span style={{ fontFamily: "var(--hand)", fontSize: 15, flex: 1 }}>{t.text}</span>
-                <span className="sk-badge hi">!</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* 빠른 기록 */}
-      <div className="sk-label" style={{ marginBottom: 6 }}>빠른 기록</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
-        <QuickBtn icon="+" label="할 일" onClick={() => {
-          const v = prompt("할 일 한 줄");
-          if (v?.trim()) actions.addTodo(v.trim());
-        }} />
-        <QuickBtn icon="💬" label="프롬프트" onClick={() => {
-          const v = prompt("프롬프트 본문");
-          if (v?.trim()) actions.addPrompt(v.trim());
-        }} />
-        <QuickBtn icon="🔖" label="AI 북마크" onClick={() => {
-          const v = prompt("AI 세션 제목");
-          if (v?.trim()) actions.addBookmark({ title: v.trim(), ok: true });
-        }} />
-        <QuickBtn icon="✎" label="회고 한 줄" onClick={() => {
-          const v = prompt("오늘 한 줄", todayRetro?.text ?? "");
-          if (v != null) actions.saveRetro({
-            date: today, text: v,
-            good: todayRetro?.good ?? "", bad: todayRetro?.bad ?? "",
-          });
-        }} />
-      </div>
-
-      <Divider />
-
-      {/* 오늘 한 일 */}
-      <div className="sec-head"><span className="num">·</span><span className="ttl">오늘 한 일 · {doneToday.length}</span></div>
-      {doneToday.length === 0 && <div className="sk-cap">아직 끝낸 게 없어요 — 곧 첫 ✓!</div>}
-      {doneToday.map(t => (
-        <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 7, padding: "3px 0" }}>
-          <span className="sk-check done" />
-          <span style={{ fontFamily: "var(--hand)", fontSize: 15, color: "var(--ink-2)", textDecoration: "line-through" }}>{t.text}</span>
-        </div>
-      ))}
-
-      <Divider />
-
-      {/* 막힌 것 */}
-      <div className="sec-head"><span className="num">·</span><span className="ttl">막혀있는 것</span></div>
-      <div className="sk-box sk-dashed" style={{ padding: 10, background: "var(--paper-2)" }}>
-        <Editable
-          value={stuck}
-          onChange={(v) => actions.setStuck(v)}
-          placeholder="지금 어디서 멈춰있나요? (한 줄 메모)"
-          multiline
-          style={{ fontFamily: "var(--hand-2)", fontSize: 16, color: "var(--ink-2)", lineHeight: 1.3, minHeight: 24 }}
-        />
-      </div>
-
-      {/* AI 쪼개기 */}
-      {!breakdown && stuck?.trim() && (
-        <button onClick={runBreakdown} style={{
-          all: "unset", cursor: "pointer", display: "inline-block",
-          marginTop: 8,
-          padding: "4px 12px", borderRadius: 99,
-          border: "1.1px solid var(--ink)",
-          background: "var(--lavender-soft)",
-          fontFamily: "var(--hand)", fontSize: 13, color: "var(--ink)",
-        }}>✨ AI에게 할 일로 쪼개달라고 하기</button>
-      )}
-      {breakdown?.loading && (
-        <div className="sk-cap" style={{ marginTop: 8 }}>✨ 생각 중…</div>
-      )}
-      {breakdown?.error && (
-        <div className="sk-box" style={{ marginTop: 8, padding: 8, background: "#ffe0e0" }}>
-          <div className="sk-cap" style={{ color: "var(--bad)" }}>{breakdown.error}</div>
-          <button onClick={() => setBreakdown(null)} style={miniBtn}>닫기</button>
-        </div>
-      )}
-      {breakdown?.items && (
-        <div className="sk-box" style={{ marginTop: 8, padding: 10, background: "var(--lavender-soft)" }}>
-          <div className="sk-label" style={{ marginBottom: 6 }}>✨ AI 제안 · 추가할 것만 체크</div>
-          {breakdown.items.map((it, i) => (
-            <label key={i} style={{
-              display: "flex", alignItems: "center", gap: 7, padding: "3px 0",
-              cursor: "pointer",
-            }}>
-              <input type="checkbox" checked={!!breakdown.selected[i]}
-                onChange={(e) => setBreakdown(b => ({
-                  ...b, selected: { ...b.selected, [i]: e.target.checked },
-                }))}
-                style={{ accentColor: "var(--ink)" }} />
-              <span style={{ fontFamily: "var(--hand)", fontSize: 14, flex: 1 }}>{it}</span>
-            </label>
-          ))}
-          <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
-            <button onClick={() => setBreakdown(null)} style={miniBtn}>취소</button>
-            <button onClick={runBreakdown} style={miniBtn}>↻ 다시</button>
-            <button onClick={addSelected} style={{...miniBtn, background: "var(--mint)"}}>
-              선택한 {Object.values(breakdown.selected).filter(Boolean).length}개 할 일로 추가
-            </button>
-          </div>
-        </div>
-      )}
-
-      <Divider />
-
-      {/* 오늘 마치기 */}
-      <button onClick={() => window.openRetroModal()} className="sk-box" style={{
-        all: "unset", cursor: "pointer", display: "block", width: "100%",
-        padding: "12px 14px", textAlign: "center",
-        background: "var(--mint-soft)", border: "1.1px solid var(--ink)", borderRadius: 12,
-        fontFamily: "var(--hand)", fontSize: 16, fontWeight: 700, color: "var(--ink)",
+      <div style={{
+        flex: 1, minHeight: 0, display: "grid",
+        gridTemplateColumns: "repeat(7,1fr)", gridTemplateRows: `repeat(${rows},1fr)`,
       }}>
-        ✎ 오늘 작업 마치기 (회고 쓰고 타이머 정지)
-      </button>
+        {cells.map((d, i) => {
+          if (d == null) return <div key={i} style={{ borderTop: "1px solid var(--paper-3)", borderLeft: i % 7 === 0 ? "none" : "1px solid var(--paper-3)" }} />;
+          const ds = dateStr(year, month, d);
+          const isToday = ds === todayStr;
+          const isSel = ds === selected;
+          const isDday = ds === ddayStr;
+          const hasAct = activity.has(ds);
+          return (
+            <button key={i} onClick={() => onPick(ds)} style={{
+              all: "unset", cursor: "pointer", position: "relative",
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2,
+              borderTop: "1px solid var(--paper-3)",
+              borderLeft: i % 7 === 0 ? "none" : "1px solid var(--paper-3)",
+              background: isSel ? "var(--hi-soft)" : "transparent",
+              boxShadow: isSel ? "inset 0 0 0 1.6px var(--ink)" : "none",
+            }}>
+              <span style={{
+                width: 22, height: 22, display: "grid", placeItems: "center", borderRadius: "50%",
+                fontFamily: "var(--mono)", fontSize: 11, fontWeight: isToday || isDday ? 700 : 400,
+                background: isToday ? "var(--point)" : "transparent",
+                border: isDday ? "1.6px solid #ff8da1" : "none", color: "var(--ink)",
+              }}>{d}</span>
+              {hasAct && <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#5b8fd6" }} />}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function QuickBtn({ icon, label, onClick }) {
-  return (
-    <button onClick={onClick} className="sk-box" style={{
-      all: "unset", cursor: "pointer",
-      padding: "8px 10px", display: "flex", alignItems: "center", gap: 6,
-      background: "white", border: "1.1px solid var(--ink)", borderRadius: 10,
-    }}>
-      <span className="sk-cap" style={{ fontSize: 17, color: "var(--ink)" }}>{icon}</span>
-      <span style={{ fontFamily: "var(--hand)", fontSize: 14, color: "var(--ink)" }}>{label}</span>
-    </button>
-  );
-}
-
-window.TodayView = TodayView;
-
-const miniBtn = {
-  all: "unset", cursor: "pointer",
-  background: "var(--paper)", border: "1.1px solid var(--ink)",
-  padding: "2px 10px", borderRadius: 99,
-  fontFamily: "var(--hand)", fontSize: 12, color: "var(--ink)",
-};
+window.CalendarView = CalendarView;

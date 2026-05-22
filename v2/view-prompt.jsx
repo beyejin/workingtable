@@ -23,11 +23,6 @@ function PromptView() {
 
   return (
     <div>
-      <ViewHeader
-        ttl="프롬프트 함"
-        sub={`${state.prompts.length}개 보관됨 · 자주 쓰는 순`}
-      />
-
       {/* 검색 */}
       <div className="sk-box sk-dashed" style={{
         padding: "6px 10px", marginBottom: 10,

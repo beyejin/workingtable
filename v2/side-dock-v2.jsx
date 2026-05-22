@@ -9,18 +9,17 @@
 const { useState } = React;
 
 const TABS = [
-  { id: "today",   label: "오늘",      glyph: "♡", color: "#ffd6e0", view: () => <TodayView /> },
-  { id: "todo",    label: "할 일",     glyph: "✓", color: "#d4ecdb", view: () => <TodoView /> },
-  { id: "cheat",   label: "치트",      glyph: "❯", color: "#ffe8c8", view: () => <CheatView /> },
-  { id: "prompt",  label: "프롬프트",  glyph: "★", color: "#e0d6f5", view: () => <PromptView /> },
-  { id: "mail",    label: "메일",      glyph: "✉", color: "#ffe0d2", view: () => <MailView /> },
-  { id: "ai",      label: "AI",        glyph: "◈", color: "#fff0c0", view: () => <AIView /> },
-  { id: "retro",   label: "회고",      glyph: "✎", color: "#d4e6fa", view: () => <RetroView /> },
+  { id: "todo",  label: "할 일",   glyph: "✓", color: "#d4ecdb", view: () => <TodoView /> },
+  { id: "cheat", label: "명령어",  glyph: "❯", color: "#ffe8c8", view: () => <CheatView /> },
+  { id: "mail",  label: "문의",    glyph: "✉", color: "#ffe0d2", view: () => <MailView /> },
+  { id: "cal",   label: "달력",    glyph: "📅", color: "#d4e6fa", view: () => <CalendarView /> },
 ];
 
 function SideDockV2({ tweaks }) {
-  const [active, setActive] = useState("today");
+  const [active, setActive] = useState("todo");
   const current = TABS.find(t => t.id === active);
+  const isPhoto = active === "photo";
+
   const tabSide  = tweaks?.tabSide  ?? "right";
   const dockSide = tweaks?.dockSide ?? "left";
   const tabStyle = tweaks?.tabStyle ?? "paper";
@@ -45,7 +44,9 @@ function SideDockV2({ tweaks }) {
         position: "absolute", top: 0, bottom: 0,
         [dockSide]: 0,
         width: DOCK_W,
-        background: "var(--paper)",
+        background: (isPhoto && desktopMode)
+          ? "transparent"
+          : "linear-gradient(180deg, #a9cdf5 0%, #cfe2fa 35%, #eaf3fe 70%, #ffffff 100%)",
         borderRight:  dockSide === "left"  ? "1.1px solid var(--ink)" : "none",
         borderLeft:   dockSide === "right" ? "1.1px solid var(--ink)" : "none",
         boxShadow: dockSide === "left"
@@ -54,10 +55,10 @@ function SideDockV2({ tweaks }) {
         display: "flex", flexDirection: "column",
         zIndex: 2,
       }}>
-        {/* 파스텔 핑크 헤더 (XP 블루 대체) — 드래그 영역 */}
+        {/* 글로시 스카이블루 헤더 — 드래그 영역 */}
         <div data-tauri-drag-region style={{
           height: 28,
-          background: "var(--pink-soft)",
+          background: "linear-gradient(180deg, #cfe2fa 0%, #a9cdf5 100%)",
           color: "var(--ink)",
           fontFamily: "var(--hand)", fontSize: 13,
           padding: "5px 10px",
@@ -65,40 +66,25 @@ function SideDockV2({ tweaks }) {
           borderBottom: "1.1px solid var(--ink)",
           userSelect: "none",
         }}>
-          <span style={{ fontSize: 9, color: "var(--pink)", letterSpacing: 1 }}>♡  ♡  ♡</span>
-          <span style={{ fontFamily: "var(--hand)", fontSize: 13 }}>vibe diary</span>
-          <span className="sk-cap" style={{ marginLeft: "auto", color: "var(--ink-3)", fontSize: 13 }}>v0.2</span>
-          <span className="xp-btn">_</span>
-          <span className="xp-btn close">×</span>
+          <ProjectSwitcher />
+          <div data-tauri-drag-region style={{ flex: 1, alignSelf: "stretch" }} />
         </div>
 
-        {/* sticky 상단 — 현재 프로젝트 (스위쳐 포함) */}
+        {/* sticky — 헤더 (제목/음악/타이머/디데이 각 한 줄) */}
         <div style={{
-          padding: "10px 16px 10px",
-          background: "var(--hi-soft)",
+          padding: "9px 12px 10px",
+          background: (isPhoto && desktopMode) ? "transparent" : "linear-gradient(180deg, #e3eefc 0%, #f4f9ff 100%)",
           borderBottom: "1.1px solid var(--ink)",
           flexShrink: 0,
         }}>
-          <ProjectSwitcher />
+          <HeaderDesktop />
         </div>
 
-        {/* 본문 — 탭에 따라 swap */}
-        <div style={{
-          flex: 1, overflow: "auto",
-          padding: "16px 16px 12px",
-        }}>
+        {/* 본문 — 가운데 분할선 레이아웃 (각 뷰가 SplitPane로 위/아래 채움) */}
+        <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
           {current.view()}
         </div>
 
-        {/* sticky 하단 — 타이머 */}
-        <div style={{
-          borderTop: "1.1px solid var(--ink)",
-          background: "var(--paper-2)",
-          padding: 10,
-          flexShrink: 0,
-        }}>
-          <Timer />
-        </div>
       </div>
 
       {/* 다이어리 인덱스 탭들 — 도크 본체 옆에 삐죽 */}
@@ -111,16 +97,59 @@ function SideDockV2({ tweaks }) {
         dockWidth={DOCK_W}
         tabStyle={tabStyle}
       />
+    </div>
+  );
+}
 
-      {/* 우상단 안내 라벨 */}
-      <div className="sk-callout" style={{
-        top: 14, right: dockSide === "right" ? "auto" : 16,
-        left:  dockSide === "right" ? 16 : "auto",
-        color: "var(--ink-2)", textAlign: dockSide === "right" ? "left" : "right",
-      }}>
-        ← 인덱스 탭으로 전환<br/>
-        <span className="sk-mono" style={{ color: "#7a7568" }}>탭 위치/스타일은 Tweaks에서</span>
-      </div>
+// ---- 활성 탭 헤더 (sticky 글래스 영역) ----
+function tabHeaderInfo(active, state) {
+  const sel = diary.select;
+  const project = sel.currentProject(state);
+  switch (active) {
+    case "today": {
+      const notDone = sel.todosForCurrent(state).filter(t => !t.done).length;
+      const minutes = sel.workMinutesToday(state);
+      const unreplied = (state.emails ?? []).filter(e => !e.replied).length;
+      return { ttl: `오늘 — ${diary.fmtKDate(diary.today())}`, sub: `작업 ${minutes}m · ${notDone}개 할 일 · ${unreplied}개 미답 메일` };
+    }
+    case "todo": {
+      const items = sel.todosForCurrent(state);
+      const notDone = items.filter(t => !t.done).length;
+      const hot = items.filter(t => t.hot && !t.done).length;
+      return { ttl: "할 일", sub: `${notDone}개 남음 · ${hot}개 급함` };
+    }
+    case "cheat": {
+      const cnt = sel.commandsForCurrent(state).length;
+      return { ttl: "치트", sub: `${project?.name ?? "프로젝트"} · ${cnt}개 · 클릭 → 복사` };
+    }
+    case "prompt":
+      return { ttl: "프롬프트 함", sub: `${(state.prompts ?? []).length}개 보관됨 · 자주 쓰는 순` };
+    case "mail": {
+      const unreplied = (state.emails ?? []).filter(e => !e.replied).length;
+      return { ttl: "고객 문의", sub: `${unreplied}개 미답 · 답장 체크하면 자동 정리` };
+    }
+    case "retro":
+      return { ttl: "회고", sub: "날짜별 한 개 · 자동 저장" };
+    default:
+      return { ttl: "", sub: "" };
+  }
+}
+
+function TabHeader({ active }) {
+  const { state } = diary.useDiary();
+  const { ttl, sub } = tabHeaderInfo(active, state);
+  return (
+    <div>
+      <div style={{
+        fontFamily: "var(--hand)", fontSize: 15, fontWeight: 700, color: "var(--ink)",
+        lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+      }}>{ttl}</div>
+      {sub && (
+        <div className="sk-cap" style={{
+          fontSize: 12, lineHeight: 1.15, marginTop: 1,
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        }}>{sub}</div>
+      )}
     </div>
   );
 }
@@ -166,7 +195,9 @@ function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSt
               height: TAB_H,
               marginLeft: stickRight ? (isActive ? -4 : 0) : 0,
               marginRight: !stickRight ? (isActive ? -4 : 0) : 0,
-              background: t.color,
+              background: isActive ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.5)",
+              backdropFilter: "blur(6px)",
+              WebkitBackdropFilter: "blur(6px)",
               border: "1.1px solid var(--ink)",
               borderLeft:  stickRight ? "none" : `1.1px solid var(--ink)`,
               borderRight: stickRight ? `1.1px solid var(--ink)` : "none",
@@ -253,4 +284,95 @@ function FakeIde({ dockSide, dockWidth }) {
   );
 }
 
+// ===========================================================
+// 헤더 — 제목/음악/타이머/디데이 각 한 줄 (별도 창 크롬 없음)
+// ===========================================================
+function HeaderDesktop() {
+  return <Timer />;
+}
+
+// ===========================================================
+// 키보드형 입력창 — 탭 맥락에 맞춰 빠르게 추가
+// ===========================================================
+function KeyboardInput({ active }) {
+  const { state, actions } = diary.useDiary();
+  const [v, setV] = useState("");
+
+  const CFG = {
+    todo:  { ph: "할 일 추가…  (Enter 저장 · Shift+Enter 줄바꿈)",      add: (t) => actions.addTodo(t) },
+    cheat: { ph: "명령어 저장…  (Enter 저장 · Shift+Enter 줄바꿈)",    add: (t) => actions.addCommand({ code: t }) },
+    mail:  { ph: "받은 메일 붙여넣고 Enter…  (Shift+Enter 줄바꿈)",     add: (t) => actions.addInquiry({ subject: t.split("\n")[0].slice(0, 60), body: t }) },
+    cal:   { ph: "이 날짜에 메모 추가…  (Enter 저장)",                  add: (t) => actions.appendNote(state.selectedDate || diary.today(), t) },
+  };
+  const cfg = CFG[active] || CFG.todo;
+
+  const submit = () => {
+    const t = v.trim();
+    if (!t) return;
+    cfg.add(t);
+    setV("");
+  };
+  const onKey = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+  };
+
+  return (
+    <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
+      <div className="kbd-cap" style={{ flex: 1, display: "flex", alignItems: "flex-start", gap: 7, padding: "8px 12px" }}>
+        <span style={{ fontSize: 15, color: "var(--ink-2)", flexShrink: 0, marginTop: 2 }}>⌨</span>
+        <textarea
+          value={v}
+          onChange={(e) => setV(e.target.value)}
+          onKeyDown={onKey}
+          placeholder={cfg.ph}
+          rows={3}
+          style={{
+            flex: 1, border: 0, outline: "none", background: "transparent", resize: "none",
+            fontFamily: "var(--hand)", fontSize: 15, color: "var(--ink)", lineHeight: 1.35,
+          }}
+        />
+      </div>
+      <button onClick={submit} className="kbd-cap kbd-enter" title="추가 (Enter)" style={{
+        width: 58, display: "grid", placeItems: "center",
+        fontFamily: "var(--mono)", fontSize: 15, fontWeight: 700, color: "var(--ink)",
+        cursor: "pointer",
+      }}>⏎</button>
+    </div>
+  );
+}
+
+// 모니터/키보드 전용 CSS (한 번만 주입)
+if (!document.getElementById("monitor-kbd-css")) {
+  const s = document.createElement("style");
+  s.id = "monitor-kbd-css";
+  s.textContent = `
+    .kbd-cap {
+      background: linear-gradient(180deg, #ffffff 0%, #e7edf4 100%);
+      border: 1.1px solid var(--ink);
+      border-radius: 9px;
+      box-shadow: 0 2px 0 #97a6b8, inset 0 1px 0 rgba(255,255,255,0.9);
+      min-height: 34px;
+      transition: transform .04s, box-shadow .04s;
+    }
+    .kbd-cap:active {
+      transform: translateY(2px);
+      box-shadow: 0 0 0 #97a6b8, inset 0 1px 0 rgba(255,255,255,0.9);
+    }
+    .kbd-enter {
+      background: linear-gradient(180deg, var(--point-soft) 0%, var(--point) 100%);
+    }
+    .kbd-cap-mini {
+      display: inline-grid; place-items: center;
+      min-width: 26px; height: 17px; padding: 0 5px;
+      background: linear-gradient(180deg, #eef2f7, #d4dce6);
+      border: 1px solid #6c7a8c; border-radius: 5px;
+      box-shadow: 0 1.5px 0 #97a6b8;
+      font-family: var(--mono); font-size: 9px; color: #46566b;
+    }
+  `;
+  document.head.appendChild(s);
+}
+
+window.HeaderDesktop = HeaderDesktop;
+window.KeyboardInput = KeyboardInput;
 window.SideDockV2 = SideDockV2;

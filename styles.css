@@ -4,44 +4,50 @@
    ============================================================ */
 
 :root {
-  /* 라인 — 따뜻한 브라운/그레이 */
-  --ink:   #8a6a5e;          /* 메인 라인 (soft brown) */
-  --ink-2: #a08577;          /* 보조 텍스트 */
-  --ink-3: #c4ada0;          /* 흐린 텍스트 */
-  --ink-soft: #d9c4b7;       /* 매우 흐린 라인 (구분선 등) */
+  /* 라인 — 다크 슬레이트(거의 블랙, Y2K 클린) */
+  --ink:   #28333f;          /* 메인 라인/텍스트 */
+  --ink-2: #5a6a7c;          /* 보조 텍스트 */
+  --ink-3: #93a3b5;          /* 흐린 텍스트 */
+  --ink-soft: #d3e0ee;       /* 매우 흐린 라인 (구분선 등) */
 
-  /* 페이퍼 — 크림/베이비 핑크 */
-  --paper:   #fffaf6;        /* 메인 배경 */
-  --paper-2: #fff1ec;        /* 살짝 핑크 */
-  --paper-3: #ffe6e0;        /* 더 핑크 */
+  /* 페이퍼 — 화이트 / 라이트 블루 */
+  --paper:   #ffffff;        /* 메인 카드 배경 */
+  --paper-2: #f1f7ff;        /* 살짝 블루 */
+  --paper-3: #dcebfc;        /* 더 블루 */
 
-  /* 파스텔 액센트 */
-  --pink:        #ffc7d4;
-  --pink-soft:   #ffe4ec;
-  --mint:        #c5e8d4;
-  --mint-soft:   #e0f2e7;
-  --blue:        #c8dffb;
-  --blue-soft:   #e5f0fc;
+  /* Y2K 파스텔 액센트 */
+  --pink:        #ffc1d6;
+  --pink-soft:   #ffe1ec;
+  --mint:        #c6ecd7;
+  --mint-soft:   #e3f6ec;
+  --blue:        #a9cdf5;
+  --blue-soft:   #e3eefc;
   --lavender:    #d8cdf5;
   --lavender-soft:#ece4fa;
   --cream:       #fff4c0;
   --cream-soft:  #fffae0;
   --peach:       #ffd3b6;
+  --green:       #bce98f;    /* 라임 그린 (그린 알약 버튼) */
+  --green-soft:  #e2f6cf;
+  --yellow:      #ffe14d;    /* 쨍한 옐로우 (원형 버튼) */
+  --yellow-soft: #fff6c2;
 
-  /* 메인 액센트 */
-  --hi:      var(--pink);
-  --hi-soft: var(--pink-soft);
-  --hi-2:    var(--peach);
+  /* 포인트 색 — 형광 옐로우 (일괄 액센트) */
+  --point:      #fdff85;
+  --point-soft: #fbffc9;
+  --hi:      var(--point);
+  --hi-soft: var(--point-soft);
+  --hi-2:    var(--blue);
 
   /* 상태색 */
-  --ok:  #9bcfa3;
-  --bad: #e8a8a8;
+  --ok:  #8fd29a;
+  --bad: #ef9a9a;
 
-  /* 폰트 */
-  --hand:   "Gaegu", "Patrick Hand", system-ui;
-  --hand-2: "Caveat", "Gaegu", cursive;
+  /* 폰트 — 일반 고딕(산세리프) */
+  --hand:   system-ui, "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --hand-2: system-ui, "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
   --mono:   "Space Mono", "JetBrains Mono", monospace;
-  --label:  "Gaegu", system-ui;
+  --label:  system-ui, "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
 
   /* 폰트 weight & 보더 */
   --bw: 1.1px;               /* 보더 굵기 — 매우 얇게 */
@@ -51,6 +57,22 @@
 }
 
 * { box-sizing: border-box; }
+
+/* ---- 전광판(마퀴) — 곡 제목 흐름 ---- */
+.marquee {
+  overflow: hidden;
+  white-space: nowrap;
+  position: relative;
+}
+.marquee-inner {
+  display: inline-block;
+  padding-left: 100%;
+  animation: marquee 14s linear infinite;
+}
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-100%); }
+}
 
 body {
   margin: 0;
@@ -181,7 +203,7 @@ body {
   overflow: hidden;
 }
 .xp-titlebar {
-  background: var(--pink-soft);
+  background: linear-gradient(180deg, #cfe2fa 0%, #a9cdf5 100%);
   color: var(--ink);
   font-family: var(--hand);
   font-size: 13px;
@@ -193,10 +215,11 @@ body {
   letter-spacing: 0.02em;
 }
 .xp-titlebar::before {
-  /* 작은 하트 인디케이터 */
-  content: "♡  ♡  ♡";
-  font-size: 8px;
-  color: var(--pink);
+  /* 작은 스파클 인디케이터 */
+  content: "✦  ✦  ✦";
+  font-size: 9px;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(40,51,63,.25);
   letter-spacing: 1px;
   margin-right: 4px;
 }
@@ -303,8 +326,8 @@ body {
   width: 56px; height: 56px;
   border-radius: 50%;
   border: 4px solid var(--paper-3);
-  border-right-color: var(--pink);
-  border-bottom-color: var(--pink);
+  border-right-color: var(--hi);
+  border-bottom-color: var(--hi);
   display: grid; place-items: center;
   font-family: var(--mono);
   font-size: 12px;
@@ -335,11 +358,11 @@ body {
 .bg-paper   { background: var(--paper); }
 .bg-paper-2 { background: var(--paper-2); }
 
-/* 데스크탑은 폴카닷 파스텔 — kawaii reference */
+/* 데스크탑은 스카이 블루 그라데이션 — Y2K reference */
 .bg-desktop {
   background:
-    radial-gradient(rgba(255,255,255,0.7) 1.5px, transparent 1.6px) 0 0 / 18px 18px,
-    var(--pink-soft);
+    radial-gradient(rgba(255,255,255,0.6) 1.5px, transparent 1.6px) 0 0 / 18px 18px,
+    linear-gradient(180deg, #9cc4f4 0%, #cfe2fa 45%, #f1f7ff 100%);
 }
 
 .bg-grid {

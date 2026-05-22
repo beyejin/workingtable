@@ -1,4 +1,4 @@
-/* global React, diary */
+/* global React, diary, InlineAdd, DelBtn */
 // ===========================================================
 // 타이머 — 카운트다운 + 시스템 알림
 // - lengthMin 단위로 순환 (다 되면 알림 + 자동 새 사이클)
@@ -28,243 +28,252 @@ const STRETCH_TIPS = [
 function randTip() { return STRETCH_TIPS[Math.floor(Math.random() * STRETCH_TIPS.length)]; }
 
 function Timer() {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+      {/* 음악 한 줄 */}
+      <PlaylistBar />
+      {/* 작업 시간 / 디데이 — 한 줄 (외곽 박스 없음) */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
+        <WorkTime />
+        <span style={{ color: "var(--ink-3)", fontSize: 16 }}>/</span>
+        <DDay />
+      </div>
+    </div>
+  );
+}
+
+// ---- 작업 시간 (프로그램 켜둔 활동 시간 누적) — 00 H 00 M ----
+function WorkTime() {
+  const { state } = diary.useDiary();
+  const min = diary.select.workMinutesToday(state);
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontFamily: "var(--mono)", fontWeight: 700, fontSize: 17, color: "var(--ink)" }}>
+      <span>{pad(h)}</span>
+      <span style={{ fontSize: 11, opacity: .55 }}>H</span>
+      <span>{pad(m)}</span>
+      <span style={{ fontSize: 11, opacity: .55 }}>M</span>
+    </span>
+  );
+}
+
+// ---- 디데이 ----
+function ddayDiff(dateStr) {
+  if (!dateStr) return null;
+  const target = new Date(dateStr + "T00:00:00");
+  if (isNaN(target)) return null;
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  return Math.round((target - now) / 86400000);
+}
+function ddayText(diff) {
+  if (diff == null) return "설정";
+  if (diff === 0) return "D-DAY";
+  return diff > 0 ? `D-${diff}` : `D+${-diff}`;
+}
+
+function DDay() {
   const { state, actions } = diary.useDiary();
-  const t = state.timer;
-  const [, setNow] = useState(Date.now());     // 매초 강제 리렌더
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [toast, setToast] = useState(null);    // {tip, at}
-  const lastNotifiedRef = useRef(t.lastNotifiedAt ?? 0);
-
-  // 매초 틱
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  // 사이클 종료 감지 → 알림 + 자동 새 사이클
-  useEffect(() => {
-    if (!t.enabled || t.paused || !t.cycleStartedAt) return;
-    const lenMs = t.lengthMin * 60 * 1000;
-    const elapsed = Date.now() - t.cycleStartedAt;
-    if (elapsed >= lenMs) {
-      // 중복 발송 방지 (한 사이클당 1번)
-      if (lastNotifiedRef.current === t.cycleStartedAt) return;
-      lastNotifiedRef.current = t.cycleStartedAt;
-
-      const tip = randTip();
-      fireNotification("스트레칭 시간이에요 ♡", tip, t.notificationsGranted);
-      setToast({ tip, at: Date.now() });
-      actions.markNotified();
-
-      // 자동으로 다음 사이클 시작
-      actions.startCycle();
-    }
-  });
-
-  // 토스트 자동 닫기
-  useEffect(() => {
-    if (!toast) return;
-    const id = setTimeout(() => setToast(null), 8000);
-    return () => clearTimeout(id);
-  }, [toast]);
-
-  // 남은 시간 계산
-  const lenMs = t.lengthMin * 60 * 1000;
-  let remaining;
-  let progress;
-  if (!t.cycleStartedAt) {
-    remaining = lenMs;
-    progress = 0;
-  } else if (t.paused) {
-    remaining = t.pausedRemainingMs ?? lenMs;
-    progress = 1 - (remaining / lenMs);
-  } else {
-    const elapsed = Date.now() - t.cycleStartedAt;
-    remaining = Math.max(0, lenMs - elapsed);
-    progress = Math.min(1, elapsed / lenMs);
-  }
-  const running = !!t.cycleStartedAt && !t.paused && t.enabled;
-
-  // 권한 요청 핸들러
-  const askPermission = async () => {
-    if (!("Notification" in window)) {
-      alert("이 브라우저는 알림을 지원하지 않아요");
-      return;
-    }
-    let perm = Notification.permission;
-    if (perm === "default") perm = await Notification.requestPermission();
-    actions.setNotificationsGranted(perm === "granted");
-    if (perm === "denied") {
-      alert("알림이 거부되었어요. 브라우저 사이트 설정에서 허용으로 바꿔주세요.");
-    }
-  };
+  const dday = state.dday ?? { date: "", label: "디데이" };
+  const [open, setOpen] = useState(false);
+  const diff = ddayDiff(dday.date);
+  const dayNum = dday.date ? new Date(dday.date + "T00:00:00").getDate() : null;
 
   return (
     <div style={{ position: "relative" }}>
-      {/* 메인 타이머 바 */}
-      <div className="sk-box" style={{
-        background: "white", padding: 8,
-        display: "flex", gap: 10, alignItems: "center",
+      <button onClick={() => setOpen(o => !o)} title={dday.label || "디데이 설정"} style={{
+        all: "unset", cursor: "pointer",
+        display: "inline-flex", alignItems: "center", gap: 6,
       }}>
-        <TimerDonut
-          remaining={remaining}
-          progress={progress}
-          paused={t.paused}
-          enabled={t.enabled}
-          running={running}
-          onClick={() => {
-            // 한 번 클릭: 시작/재개. 두 번 클릭: 설정 토글
-            if (!t.cycleStartedAt || t.paused) {
-              if (!t.cycleStartedAt) actions.startCycle();
-              else actions.resumeCycle();
-            } else {
-              actions.pauseCycle();
-            }
-          }}
-        />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="sk-label">
-            {!t.enabled  ? "타이머 꺼짐" :
-              !t.cycleStartedAt ? "다음 스트레칭" :
-              t.paused          ? "일시정지됨" :
-              "다음 스트레칭"}
-          </div>
-          <div className="sk-note" style={{ fontSize: 13 }}>
-            {!t.enabled ? "설정에서 켜기" :
-              !t.cycleStartedAt ? `${t.lengthMin}분 사이클 · ▶ 눌러 시작` :
-              `${t.lengthMin}분마다 · ${t.notificationsGranted ? "🔔 알림 ON" : "🔕 화면만"}`}
+        {/* 달력 아이콘 */}
+        <div style={{
+          width: 22, height: 24, borderRadius: 4, overflow: "hidden", flexShrink: 0,
+          border: "1.1px solid var(--ink)", background: "#fff", position: "relative",
+        }}>
+          <div style={{ position: "absolute", top: -2, left: 5, width: 2, height: 4, background: "var(--ink)", borderRadius: 1 }} />
+          <div style={{ position: "absolute", top: -2, right: 5, width: 2, height: 4, background: "var(--ink)", borderRadius: 1 }} />
+          <div style={{ height: 6, background: "#ff8da1", borderBottom: "1px solid var(--ink)" }} />
+          <div style={{ display: "grid", placeItems: "center", height: 17, fontFamily: "var(--mono)", fontWeight: 700, fontSize: 11, color: "var(--ink)" }}>
+            {dayNum ?? "·"}
           </div>
         </div>
-        <button onClick={() => setSettingsOpen(o => !o)} title="설정" style={{
-          all: "unset", cursor: "pointer", padding: 4,
-          fontFamily: "var(--hand)", fontSize: 16, color: "var(--ink-2)",
-        }}>⚙</button>
-      </div>
+        <span style={{
+          fontFamily: "var(--mono)", fontWeight: 700,
+          fontSize: diff == null ? 13 : 17, color: "var(--ink)",
+        }}>{ddayText(diff)}</span>
+      </button>
 
-      {/* 설정 팝오버 */}
-      {settingsOpen && (
+      {open && (
         <div className="sk-box" style={{
-          position: "absolute", bottom: "100%", left: 0, right: 0,
-          marginBottom: 6,
-          padding: 12, background: "var(--paper)",
-          boxShadow: "0 -2px 0 var(--paper-3)",
-          zIndex: 30,
+          position: "absolute", top: "100%", right: 0,
+          marginTop: 6, padding: 10, width: 180,
+          background: "var(--paper)", boxShadow: "0 4px 0 var(--paper-3)", zIndex: 28,
         }}>
-          <div className="sk-label" style={{ marginBottom: 8 }}>타이머 설정</div>
-
-          {/* ON/OFF */}
-          <Row label="타이머">
-            <ToggleButton on={t.enabled} onClick={() => actions.setTimerEnabled(!t.enabled)}>
-              {t.enabled ? "켜짐" : "꺼짐"}
-            </ToggleButton>
-          </Row>
-
-          {/* 사이클 길이 */}
-          <Row label="간격">
-            <div style={{ display: "flex", gap: 4 }}>
-              {[15, 25, 30, 45, 60].map(min => (
-                <button key={min} onClick={() => actions.setTimerLength(min)} style={{
-                  all: "unset", cursor: "pointer",
-                  padding: "2px 8px", borderRadius: 99,
-                  border: "1.1px solid var(--ink)",
-                  background: t.lengthMin === min ? "var(--pink)" : "var(--paper)",
-                  fontFamily: "var(--hand)", fontSize: 12, color: "var(--ink)",
-                }}>{min}m</button>
-              ))}
-            </div>
-          </Row>
-
-          {/* 시스템 알림 */}
-          <Row label="시스템 알림">
-            {t.notificationsGranted ? (
-              <span style={{ fontFamily: "var(--hand)", fontSize: 13, color: "var(--ink-2)" }}>
-                🔔 허용됨
-              </span>
-            ) : (
-              <button onClick={askPermission} style={{
-                all: "unset", cursor: "pointer",
-                padding: "2px 10px", borderRadius: 99,
-                border: "1.1px solid var(--ink)",
-                background: "var(--mint)",
-                fontFamily: "var(--hand)", fontSize: 12, color: "var(--ink)",
-              }}>
-                권한 받기
-              </button>
-            )}
-          </Row>
-
-          <hr className="sk-hr" />
-
-          {/* 컨트롤 */}
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {t.cycleStartedAt && !t.paused && (
-              <button onClick={() => actions.pauseCycle()} style={ctrlBtn}>⏸ 일시정지</button>
-            )}
-            {t.cycleStartedAt && t.paused && (
-              <button onClick={() => actions.resumeCycle()} style={{...ctrlBtn, background: "var(--mint)"}}>▶ 재개</button>
-            )}
-            {!t.cycleStartedAt && (
-              <button onClick={() => actions.startCycle()} style={{...ctrlBtn, background: "var(--mint)"}}>▶ 시작</button>
-            )}
-            {t.cycleStartedAt && (
-              <button onClick={() => actions.markStretched()} style={{...ctrlBtn, background: "var(--hi)"}}>
-                ✓ 방금 스트레칭함
-              </button>
-            )}
-          </div>
-
-          <div className="sk-cap" style={{ marginTop: 8, fontSize: 12 }}>
-            팁: 도넛을 클릭해서 빠르게 일시정지/재개 가능해요
-          </div>
-
-          <hr className="sk-hr" />
-
-          <button onClick={() => window.openRetroModal()} style={{
-            ...ctrlBtn, background: "var(--mint-soft)", width: "100%", textAlign: "center",
-          }}>
-            ✎ 오늘 작업 마치기
-          </button>
-        </div>
-      )}
-
-      {/* 토스트 (알림 발송 시) */}
-      {toast && (
-        <div className="sk-box" style={{
-          position: "absolute", bottom: "100%", left: 0, right: 0,
-          marginBottom: 6, padding: 10,
-          background: "var(--pink-soft)",
-          boxShadow: "0 -2px 0 var(--paper-3)",
-          zIndex: 25,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 16 }}>♡</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: "var(--hand)", fontSize: 14, fontWeight: 700 }}>스트레칭 시간이에요!</div>
-              <div className="sk-note" style={{ fontSize: 13 }}>{toast.tip}</div>
-            </div>
-            <button onClick={() => { actions.markStretched(); setToast(null); }} style={{
-              all: "unset", cursor: "pointer",
-              padding: "2px 10px", borderRadius: 99,
-              border: "1.1px solid var(--ink)",
-              background: "var(--mint)",
-              fontFamily: "var(--hand)", fontSize: 12, color: "var(--ink)",
-            }}>✓ 함</button>
-          </div>
+          <div className="sk-label" style={{ marginBottom: 6 }}>디데이 설정</div>
+          <input
+            type="text"
+            value={dday.label}
+            onChange={(e) => actions.setDday({ label: e.target.value })}
+            placeholder="이름 (예: 출시)"
+            style={{
+              width: "100%", boxSizing: "border-box", marginBottom: 6,
+              border: "1.1px solid var(--ink)", borderRadius: 6, padding: "4px 6px",
+              fontFamily: "var(--hand)", fontSize: 13, color: "var(--ink)", outline: "none",
+            }}
+          />
+          <input
+            type="date"
+            value={dday.date}
+            onChange={(e) => actions.setDday({ date: e.target.value })}
+            style={{
+              width: "100%", boxSizing: "border-box",
+              border: "1.1px solid var(--ink)", borderRadius: 6, padding: "4px 6px",
+              fontFamily: "var(--mono)", fontSize: 12, color: "var(--ink)", outline: "none",
+            }}
+          />
+          {dday.date && (
+            <button onClick={() => actions.setDday({ date: "" })} style={{
+              all: "unset", cursor: "pointer", marginTop: 6,
+              fontFamily: "var(--hand)", fontSize: 12, color: "var(--bad)",
+            }}>날짜 지우기</button>
+          )}
         </div>
       )}
     </div>
   );
 }
 
+// ---- 플레이리스트 바 (타이머와 통합) ----
+// 전역 음악 컨트롤러 구독 훅
+function useMusic() {
+  const [, force] = useState(0);
+  useEffect(() => window.musicPlayer.subscribe(() => force(x => x + 1)), []);
+  return window.musicPlayer;
+}
+
+// 유튜브 URL(또는 11자 ID)에서 videoId 추출
+function extractYouTubeId(url) {
+  if (!url) return null;
+  const s = url.trim();
+  const patterns = [
+    /youtube\.com\/watch\?(?:.*&)?v=([\w-]{11})/,
+    /youtu\.be\/([\w-]{11})/,
+    /youtube\.com\/embed\/([\w-]{11})/,
+    /youtube\.com\/shorts\/([\w-]{11})/,
+  ];
+  for (const re of patterns) {
+    const m = s.match(re);
+    if (m) return m[1];
+  }
+  if (/^[\w-]{11}$/.test(s)) return s;
+  return null;
+}
+
+function PlaylistBar() {
+  const { state, actions } = diary.useDiary();
+  const tracks = state.playlist ?? [];
+  const music = useMusic();
+  const [open, setOpen] = useState(false);
+  const [err, setErr] = useState("");
+
+  // 플레이리스트 변경 시 전역 큐 동기화 (저장 곡 자동 재생)
+  useEffect(() => { window.musicPlayer.setQueue(tracks); }, [tracks]);
+
+  const add = async (raw) => {
+    const videoId = extractYouTubeId(raw);
+    if (!videoId) { setErr("유튜브 링크를 인식하지 못했어요"); return; }
+    setErr("");
+    let title = "";
+    try {
+      const r = await fetch(`https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v=${videoId}`);
+      if (r.ok) title = (await r.json()).title || "";
+    } catch (_) { /* 오프라인이면 기본 제목 */ }
+    actions.addTrack({ url: raw.trim(), videoId, title });
+  };
+
+  const ms = music.getState();
+  const label = ms.hasQueue ? (ms.title || "재생 준비 중…") : "유튜브 링크를 추가하세요 ♫";
+
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <button onClick={() => music.prev()} title="이전" style={pbBtn}>⏮</button>
+        <button onClick={() => music.toggle()} title={ms.playing ? "일시정지" : "재생"} style={pbBtn}>
+          {ms.playing ? "⏸" : "▶"}
+        </button>
+        <button onClick={() => music.next()} title="다음" style={pbBtn}>⏭</button>
+        <div className="marquee" style={{
+          flex: 1, height: 20, lineHeight: "20px",
+          borderRadius: 6, padding: "0 4px",
+          background: "rgba(40,51,63,0.92)",
+          color: "#9be15d", fontFamily: "var(--mono)", fontSize: 12,
+        }}>
+          <span className="marquee-inner">{label}　♫　{label}</span>
+        </div>
+        <button onClick={() => setOpen(o => !o)} title="플레이리스트" style={pbBtn}>{open ? "▾" : "+"}</button>
+      </div>
+
+      {/* 펼침: 곡 추가 + 목록 (위로 팝오버) */}
+      {open && (
+        <div className="sk-box" style={{
+          position: "absolute", top: "100%", left: 0, right: 0,
+          marginTop: 6, padding: 10, background: "var(--paper)",
+          boxShadow: "0 4px 0 var(--paper-3)", zIndex: 28,
+        }}>
+          <div className="sk-label" style={{ marginBottom: 6 }}>플레이리스트 ♫</div>
+          <InlineAdd placeholder="유튜브 링크 붙여넣기" onAdd={add} />
+          {err && <div className="sk-cap" style={{ color: "var(--bad)", marginTop: 4 }}>{err}</div>}
+          {tracks.length > 0 ? (
+            <div style={{ marginTop: 6, maxHeight: 160, overflowY: "auto", overflowX: "hidden" }}>
+              {tracks.map(t => {
+                const isCur = t.videoId === ms.videoId;
+                return (
+                  <div key={t.id} style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    padding: "3px 5px", borderRadius: 6,
+                    background: isCur ? "var(--hi-soft)" : "transparent",
+                  }}>
+                    <button onClick={() => music.play(t.videoId)} title="재생" style={{
+                      all: "unset", cursor: "pointer", width: 16, textAlign: "center",
+                      color: "var(--ink)", fontSize: 12,
+                    }}>{isCur && ms.playing ? "♪" : "▶"}</button>
+                    <span style={{
+                      flex: 1, fontFamily: "var(--hand)", fontSize: 13,
+                      color: "var(--ink)", fontWeight: isCur ? 700 : 400,
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    }}>{t.title}</span>
+                    <DelBtn onClick={() => actions.removeTrack(t.id)} />
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="sk-cap" style={{ marginTop: 4 }}>유튜브 링크를 붙여넣어 곡을 추가하세요</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const pbBtn = {
+  all: "unset", cursor: "pointer",
+  width: 22, height: 20, flexShrink: 0,
+  display: "grid", placeItems: "center",
+  borderRadius: 6, border: "1.1px solid var(--ink)",
+  background: "var(--paper)", color: "var(--ink)", fontSize: 11,
+};
+
 // ---- 도넛 ----
 function TimerDonut({ remaining, progress, paused, enabled, running, onClick }) {
-  const size = 42;
+  const size = 34;
   const r = (size - 4) / 2;
   const c = 2 * Math.PI * r;
   const dash = c * progress;
   const color = !enabled ? "var(--ink-soft)"
               : paused   ? "var(--ink-3)"
-              : "var(--pink)";
+              : "var(--hi)";
 
   return (
     <button onClick={onClick} title={running ? "클릭: 일시정지" : "클릭: 시작/재개"} style={{
