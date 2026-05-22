@@ -1,6 +1,6 @@
 [package]
 name = "vibe-diary"
-version = "0.3.1"
+version = "0.3.2"
 description = "바이브코딩 다이어리"
 edition = "2021"
 rust-version = "1.77"
@@ -9,7 +9,7 @@ rust-version = "1.77"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-notification = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-opener = "2"
