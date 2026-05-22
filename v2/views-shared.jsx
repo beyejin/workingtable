@@ -414,18 +414,36 @@ function buildBackground(type, angle, stops, shape) {
 
   const HEART = "M50 84 C 12 56 8 22 34 18 C 46 16 50 30 50 36 C 50 30 54 16 66 18 C 92 22 88 56 50 84 Z";
   const STAR = "M0 -20 L5.9 -8.1 L19 -6.2 L9.5 3 L11.8 16.2 L0 10 L-11.8 16.2 L-9.5 3 L-19 -6.2 L-5.9 -8.1 Z";
-  const filt = "<filter id='b' x='-30%' y='-30%' width='160%' height='160%'><feGaussianBlur stdDeviation='4'/></filter>";
+  const filt = "<filter id='b' x='-30%' y='-30%' width='160%' height='160%'><feGaussianBlur stdDeviation='3.4'/></filter>";
   const hc = (s) => `translate(50 106) scale(${s}) translate(-50 -51)`;
+  // 흩뿌리기 위치 (viewBox 100x200)
+  const PLACES = [
+    { x: 24, y: 42, r: 22 }, { x: 73, y: 60, r: 27 }, { x: 46, y: 110, r: 20 },
+    { x: 85, y: 148, r: 15 }, { x: 16, y: 138, r: 16 }, { x: 60, y: 178, r: 20 },
+  ];
   let inner_svg = "";
-  if (shape === "heart") {
-    inner_svg = `<g filter='url(#b)' transform='${hc(1.5)}'><path fill='${inner}' d='${HEART}'/></g>`;
-  } else if (shape === "hearts") {
+
+  if (shape === "hearts") {
+    // 겹하트 (동심)
     const cols = [inner, outer, inner, outer, inner];
     const scales = [1.55, 1.18, 0.84, 0.52, 0.22];
     inner_svg = scales.map((s, i) => `<g filter='url(#b)' transform='${hc(s)}'><path fill='${cols[i % cols.length]}' d='${HEART}'/></g>`).join("");
-  } else if (shape === "stars") {
-    const st = (x, y, r, c) => `<path filter='url(#b)' fill='${c}' transform='translate(${x} ${y}) scale(${(r / 20).toFixed(2)})' d='${STAR}'/>`;
-    inner_svg = st(26, 46, 24, inner) + st(72, 64, 28, mid) + st(48, 118, 22, inner) + st(84, 150, 15, mid) + st(18, 140, 15, mid) + st(60, 182, 20, inner);
+  } else {
+    // 하트/별/클로버/리본/금붕어 — 여러 개 흩뿌리기
+    const M = {
+      heart:  { m: (c) => `<path fill='${c}' d='${HEART}'/>`, ox: 50, oy: 50, box: 78 },
+      stars:  { m: (c) => `<path fill='${c}' d='${STAR}'/>`,  ox: 0,  oy: 0,  box: 40 },
+      clover: { m: (c) => `<g fill='${c}'><circle cx='38' cy='38' r='15'/><circle cx='62' cy='38' r='15'/><circle cx='38' cy='62' r='15'/><circle cx='62' cy='62' r='15'/><rect x='48' y='52' width='4' height='28'/></g>`, ox: 50, oy: 52, box: 74 },
+      ribbon: { m: (c) => `<g fill='${c}'><path d='M50 50 L24 34 L24 66 Z'/><path d='M50 50 L76 34 L76 66 Z'/><circle cx='50' cy='50' r='8'/><path d='M46 56 L36 80 L44 78 Z'/><path d='M54 56 L64 80 L56 78 Z'/></g>`, ox: 50, oy: 54, box: 64 },
+      fish:   { m: (c) => `<g fill='${c}'><ellipse cx='43' cy='50' rx='22' ry='14'/><path d='M62 50 L82 36 L82 64 Z'/></g>`, ox: 52, oy: 50, box: 70 },
+    }[shape];
+    if (M) {
+      const cols = [inner, mid];
+      inner_svg = PLACES.map((p, i) => {
+        const s = (p.r * 2 / M.box).toFixed(3);
+        return `<g filter='url(#b)' transform='translate(${p.x} ${p.y}) scale(${s}) translate(${-M.ox} ${-M.oy})'>${M.m(cols[i % cols.length])}</g>`;
+      }).join("");
+    }
   }
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 200' preserveAspectRatio='xMidYMid slice'><defs>${filt}</defs><rect width='100' height='200' fill='${outer}'/>${inner_svg}</svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") center/cover no-repeat`;

@@ -22,6 +22,15 @@ function SideDockV2({ tweaks, setTweak }) {
   const current = TABS.find(t => t.id === active);
   const isPhoto = active === "photo";
 
+  // 실제 창 높이 추적 → 짧아지면 탭을 아이콘만(짧게)으로
+  const [winH, setWinH] = React.useState(typeof window !== "undefined" ? window.innerHeight : 900);
+  React.useEffect(() => {
+    const on = () => setWinH(window.innerHeight);
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  const compactTabs = winH < 640;
+
   const tabSide  = tweaks?.tabSide  ?? "right";
   const dockSide = tweaks?.dockSide ?? "left";
   const tabStyle = tweaks?.tabStyle ?? "paper";
@@ -119,6 +128,7 @@ function SideDockV2({ tweaks, setTweak }) {
         dockWidth={DOCK_W}
         tabStyle={tabStyle}
         chrome={chrome}
+        compact={compactTabs}
       />
     </div>
   );
@@ -178,7 +188,7 @@ function TabHeader({ active }) {
 }
 
 // ---- 다이어리 인덱스 탭 ----
-function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabStyle, chrome }) {
+function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabStyle, chrome, compact }) {
   const cm = (pct) => `color-mix(in srgb, ${chrome || "#a9cdf5"} ${pct}%, white)`;
   // 탭이 도크의 어느 쪽 바깥에 붙는지 → 위치 계산
   const onLeft = tabSide === "left";
@@ -195,7 +205,7 @@ function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSt
   const stickRight = dockSide === "left"; // 탭이 오른쪽으로 삐쳐나옴
 
   const TAB_W = 32;     // 삐쳐나온 깊이
-  const TAB_H = 74;     // 탭 높이
+  const TAB_H = compact ? 40 : 74;   // 짧을 땐 아이콘만(낮은 탭)
   const TAB_GAP = 4;
 
   const renderTab = (t) => {
@@ -227,14 +237,16 @@ function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSt
         }}
         title={L(t.labelKey)}
       >
-        <span style={{ fontSize: 15, color: "var(--ink)", flexShrink: 0 }}>{t.glyph}</span>
-        <span style={{
-          writingMode: "vertical-rl", textOrientation: "mixed",
-          fontSize: 11, letterSpacing: "0.01em", color: "var(--ink)",
-          fontWeight: isActive ? 700 : 400,
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-          maxHeight: TAB_H - 24,
-        }}>{L(t.labelKey)}</span>
+        <span style={{ fontSize: compact ? 18 : 15, color: "var(--ink)", flexShrink: 0 }}>{t.glyph}</span>
+        {!compact && (
+          <span style={{
+            writingMode: "vertical-rl", textOrientation: "mixed",
+            fontSize: 11, letterSpacing: "0.01em", color: "var(--ink)",
+            fontWeight: isActive ? 700 : 400,
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            maxHeight: TAB_H - 24,
+          }}>{L(t.labelKey)}</span>
+        )}
       </button>
     );
   };
@@ -335,7 +347,7 @@ function SettingsView({ tweaks, setTweak }) {
 
       <SetSection label={L("set.size")}>
         <SetSeg value={t.appSize ?? "normal"} onChange={v => set("appSize", v)}
-          options={[["normal", L("set.sizeNormal")], ["compact", L("set.sizeCompact")]]} />
+          options={[["normal", L("set.sizeNormal")], ["medium", L("set.sizeMedium")], ["compact", L("set.sizeCompact")]]} />
       </SetSection>
 
       <SetSection label={L("set.dock")}>
@@ -477,8 +489,15 @@ function DecorateView({ tweaks, setTweak }) {
               <SetSeg value={bgType} onChange={v => set("bgType", v)} options={[["linear", L("deco.linear")], ["radial", L("deco.radial")]]} />
             </SetSection>
             <SetSection label={L("deco.shape")}>
-              <SetSeg value={bgShape} onChange={v => set("bgShape", v)}
-                options={[["none", L("deco.shapeNone")], ["heart", L("deco.shapeHeart")], ["hearts", L("deco.shapeHearts")], ["stars", L("deco.shapeStars")]]} />
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {[["none", "deco.shapeNone"], ["heart", "deco.shapeHeart"], ["hearts", "deco.shapeHearts"], ["stars", "deco.shapeStars"], ["clover", "deco.shapeClover"], ["ribbon", "deco.shapeRibbon"], ["fish", "deco.shapeFish"]].map(([v, k]) => (
+                  <button key={v} onClick={() => set("bgShape", v)} style={{
+                    all: "unset", cursor: "pointer", padding: "5px 12px", borderRadius: 99,
+                    border: "1.1px solid var(--ink)", background: bgShape === v ? "var(--hi)" : "var(--paper)",
+                    fontFamily: "var(--hand)", fontSize: 13, color: "var(--ink)",
+                  }}>{L(k)}</button>
+                ))}
+              </div>
             </SetSection>
             {bgShape === "none" && bgType === "linear" && (
               <SetSection label={L("deco.dir")}>

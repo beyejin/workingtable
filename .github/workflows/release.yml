@@ -58,3 +58,34 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+          releaseBody: |
+            ## ⬇️ 다운로드 / Download / ダウンロード
+
+            아래 **Assets**(맨 아래 펼치기)에서 **본인 OS에 맞는 파일 하나만** 받으세요.
+            나머지(`.sig` · `.msi` · `.tar.gz` · `latest.json`)는 받지 않아도 됩니다.
+            *Grab just one file for your OS from **Assets** below — skip the rest.*
+            ***Assets** からお使いのOSのファイルを1つだけどうぞ。*
+
+            | OS | 파일 / File / ファイル |
+            |----|------|
+            | 🪟 **Windows** | `vibe-diary_*_x64-setup.exe` |
+            | 🍎 **macOS** (Apple Silicon + Intel) | `vibe-diary_*_universal.dmg` |
+
+            ### ▶️ 실행 / Run / 起動
+            - **Windows** — 파란 SmartScreen 경고에서 **추가 정보 → 실행**
+              *(blue SmartScreen → **More info → Run anyway** / 詳細情報 → 実行)*
+            - **macOS** — 앱을 **응용 프로그램**으로 드래그 후 **우클릭 → 열기 → 열기**
+              *(drag to Applications, then **right-click → Open → Open** / 右クリック → 開く → 開く)*
+
+            > 💡 **보안 경고가 떠도 괜찮아요.** 개발자 서명이 없어 첫 실행 시 "알 수 없는 개발자" 경고가 나옵니다. **악성 프로그램이 아니며**, 한 번만 허용하면 다음부터는 바로 실행됩니다.
+            > *Not code-signed → you'll see an "unknown developer" warning on first launch. It's not malware — allow it once.*
+            > *開発元署名がないため初回のみ警告が出ます。マルウェアではありません。一度許可すればOKです。*
+
+            한 번 설치하면 새 버전은 **자동 업데이트** 🎉 / Auto-updates after install / 自動アップデート
+
+            <details><summary>macOS에서 "손상되어 열 수 없습니다" 가 뜰 때</summary>
+
+            ```bash
+            xattr -dr com.apple.quarantine "/Applications/vibe-diary.app"
+            ```
+            </details>
