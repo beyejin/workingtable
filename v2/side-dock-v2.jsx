@@ -26,18 +26,24 @@ function SideDockV2({ tweaks, setTweak }) {
   const dockSide = tweaks?.dockSide ?? "left";
   const tabStyle = tweaks?.tabStyle ?? "paper";
   const desktopMode = tweaks?.desktopMode ?? false;
-  // 그라데이션 (다중 색 스탑 / 선형·원형)
-  const dockBg = buildGradient(
+  // 배경 (그라데이션 / 도형)
+  const dockBg = buildBackground(
     tweaks?.bgType ?? "linear",
     tweaks?.bgAngle ?? 180,
-    tweaks?.bgStops ?? [{ c: "#a9cdf5", p: 0 }, { c: "#ffffff", p: 100 }]
+    tweaks?.bgStops ?? [{ c: "#a9cdf5", p: 0 }, { c: "#ffffff", p: 100 }],
+    tweaks?.bgShape ?? "none"
   );
 
   // 헤더·바 색 (타이틀바 / 헤더 / 인덱스 탭) — 흰색과 섞어 톤 조절
   const chrome = tweaks?.chromeColor ?? "#a9cdf5";
+  const chromeGrad = tweaks?.chromeGradient ?? true;
   const chromeMix = (pct) => `color-mix(in srgb, ${chrome} ${pct}%, white)`;
-  const titlebarBg = `linear-gradient(180deg, ${chromeMix(50)} 0%, ${chromeMix(85)} 100%)`;
-  const headerBg = `linear-gradient(180deg, ${chromeMix(28)} 0%, ${chromeMix(8)} 100%)`;
+  const titlebarBg = chromeGrad
+    ? `linear-gradient(180deg, ${chromeMix(50)} 0%, ${chromeMix(85)} 100%)`
+    : chromeMix(72);
+  const headerBg = chromeGrad
+    ? `linear-gradient(180deg, ${chromeMix(28)} 0%, ${chromeMix(8)} 100%)`
+    : chromeMix(18);
 
   // 도크 측의 반대편으로 탭이 나오는 게 자연스러움
   const effectiveTabSide = dockSide === "left" ? tabSide : (tabSide === "right" ? "left" : "right");
@@ -223,8 +229,7 @@ function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSt
       >
         <span style={{ fontSize: 15, color: "var(--ink)", flexShrink: 0 }}>{t.glyph}</span>
         <span style={{
-          writingMode: "vertical-rl",
-          transform: stickRight ? "rotate(180deg)" : "none",
+          writingMode: "vertical-rl", textOrientation: "mixed",
           fontSize: 11, letterSpacing: "0.01em", color: "var(--ink)",
           fontWeight: isActive ? 700 : 400,
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
@@ -389,8 +394,9 @@ function DecorateView({ tweaks, setTweak }) {
   const set = setTweak || (() => {});
   const bgType = t.bgType ?? "linear";
   const bgAngle = t.bgAngle ?? 180;
+  const bgShape = t.bgShape ?? "none";
   const stops = t.bgStops ?? [{ c: "#a9cdf5", p: 0 }, { c: "#ffffff", p: 100 }];
-  const previewBg = buildGradient(bgType, bgAngle, stops);
+  const previewBg = buildBackground(bgType, bgAngle, stops, bgShape);
 
   const setStops = (next) => set("bgStops", next);
   const updColor = (i, c) => setStops(stops.map((s, idx) => idx === i ? { ...s, c } : s));
@@ -470,7 +476,11 @@ function DecorateView({ tweaks, setTweak }) {
             <SetSection label={L("deco.type")}>
               <SetSeg value={bgType} onChange={v => set("bgType", v)} options={[["linear", L("deco.linear")], ["radial", L("deco.radial")]]} />
             </SetSection>
-            {bgType === "linear" && (
+            <SetSection label={L("deco.shape")}>
+              <SetSeg value={bgShape} onChange={v => set("bgShape", v)}
+                options={[["none", L("deco.shapeNone")], ["heart", L("deco.shapeHeart")], ["hearts", L("deco.shapeHearts")], ["stars", L("deco.shapeStars")]]} />
+            </SetSection>
+            {bgShape === "none" && bgType === "linear" && (
               <SetSection label={L("deco.dir")}>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>
                   {DECO_DIRS.map(([a, ang]) => (
@@ -506,13 +516,13 @@ function DecorateView({ tweaks, setTweak }) {
             <SetSection label={L("deco.point")}>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                 {DECO_ACCENTS.map(c => (
-                  <button key={c} onClick={() => { set("tabAccent", c); document.documentElement.style.setProperty("--hi", c); }} style={{
+                  <button key={c} onClick={() => { applyAccent(c); set("tabAccent", c); }} style={{
                     all: "unset", cursor: "pointer", width: 30, height: 30, borderRadius: "50%", background: c,
                     border: t.tabAccent === c ? "2.6px solid var(--ink)" : "1.1px solid var(--ink)",
                     boxShadow: t.tabAccent === c ? "0 0 0 2px var(--paper-3)" : "none",
                   }} />
                 ))}
-                <ColorPick value={t.tabAccent ?? "#fdff85"} onChange={c => { set("tabAccent", c); document.documentElement.style.setProperty("--hi", c); }} round />
+                <ColorPick value={t.tabAccent ?? "#fdff85"} onChange={c => { applyAccent(c); set("tabAccent", c); }} round />
               </div>
             </SetSection>
             <SetSection label={L("deco.chrome")}>
@@ -526,6 +536,10 @@ function DecorateView({ tweaks, setTweak }) {
                 ))}
                 <ColorPick value={t.chromeColor ?? "#a9cdf5"} onChange={c => set("chromeColor", c)} />
               </div>
+            </SetSection>
+            <SetSection label={L("deco.headerGrad")}>
+              <SetSeg value={(t.chromeGradient ?? true) ? "on" : "off"} onChange={v => set("chromeGradient", v === "on")}
+                options={[["on", L("set.on")], ["off", L("set.off")]]} />
             </SetSection>
           </>
         )}

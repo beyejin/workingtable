@@ -38,6 +38,7 @@
   --hi:      var(--point);
   --hi-soft: var(--point-soft);
   --hi-2:    var(--blue);
+  --chrome:  #a9cdf5;   /* 헤더·바 색 (런타임에 설정에서 변경) */
 
   /* 상태색 */
   --ok:  #8fd29a;

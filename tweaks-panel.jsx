@@ -159,15 +159,27 @@ const __TWEAKS_STYLE = `
 // ── useTweaks ───────────────────────────────────────────────────────────────
 // Single source of truth for tweak values. setTweak persists via the host
 // (__edit_mode_set_keys → host rewrites the EDITMODE block on disk).
+const __TWEAKS_LS_KEY = 'vibe-diary.tweaks';
 function useTweaks(defaults) {
-  const [values, setValues] = React.useState(defaults);
+  // 저장된 값을 기본값 위에 병합 (앱 종료 후에도 유지)
+  const [values, setValues] = React.useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(__TWEAKS_LS_KEY) || 'null');
+      if (saved && typeof saved === 'object') return { ...defaults, ...saved };
+    } catch (e) { /* ignore */ }
+    return defaults;
+  });
   // Accepts either setTweak('key', value) or setTweak({ key: value, ... }) so a
   // useState-style call doesn't write a "[object Object]" key into the persisted
   // JSON block.
   const setTweak = React.useCallback((keyOrEdits, val) => {
     const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
       ? keyOrEdits : { [keyOrEdits]: val };
-    setValues((prev) => ({ ...prev, ...edits }));
+    setValues((prev) => {
+      const next = { ...prev, ...edits };
+      try { localStorage.setItem(__TWEAKS_LS_KEY, JSON.stringify(next)); } catch (e) { /* ignore */ }
+      return next;
+    });
     window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
     // Same-window signal so in-page listeners (deck-stage rail thumbnails)
     // can react — the parent message only reaches the host, not peers.

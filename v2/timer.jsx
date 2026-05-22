@@ -49,12 +49,23 @@ function WorkTime() {
   const h = Math.floor(min / 60);
   const m = min % 60;
   const pad = (n) => String(n).padStart(2, "0");
+  const [blink, setBlink] = useState(true);
+  useEffect(() => {
+    const id = setInterval(() => setBlink(b => !b), 1100);
+    return () => clearInterval(id);
+  }, []);
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontFamily: "var(--mono)", fontWeight: 700, fontSize: 17, color: "var(--ink)" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "var(--mono)", fontWeight: 700, fontSize: 15, color: "var(--ink)" }}>
+      <span style={{
+        width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
+        background: "#ff5e5e", opacity: blink ? 0.95 : 0.6,
+        transition: "opacity .5s ease",
+      }} />
+      <span style={{ fontSize: 9.5, letterSpacing: 1, color: "var(--ink-2)" }}>WORKING</span>
       <span>{pad(h)}</span>
-      <span style={{ fontSize: 11, opacity: .55 }}>H</span>
+      <span style={{ fontSize: 10, opacity: .6 }}>H</span>
       <span>{pad(m)}</span>
-      <span style={{ fontSize: 11, opacity: .55 }}>M</span>
+      <span style={{ fontSize: 10, opacity: .6 }}>M</span>
     </span>
   );
 }
@@ -81,7 +92,7 @@ function DDay() {
   const dayNum = dday.date ? new Date(dday.date + "T00:00:00").getDate() : null;
 
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 6 }}>
       <button onClick={() => setOpen(o => !o)} title={dday.label || L("dday.title")} style={{
         all: "unset", cursor: "pointer",
         display: "inline-flex", alignItems: "center", gap: 6,
@@ -103,6 +114,17 @@ function DDay() {
           fontSize: diff == null ? 13 : 17, color: "var(--ink)",
         }}>{ddayText(diff)}</span>
       </button>
+
+      {/* 디데이 이름 — 우측에서 직접 입력 */}
+      <Editable
+        value={dday.label}
+        onChange={(v) => actions.setDday({ label: v })}
+        placeholder={L("dday.label")}
+        style={{
+          fontFamily: "var(--hand)", fontSize: 12, color: "var(--ink-2)",
+          maxWidth: 76, whiteSpace: "nowrap", overflow: "hidden",
+        }}
+      />
 
       {open && (
         <div className="sk-box" style={{

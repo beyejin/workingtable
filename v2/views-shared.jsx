@@ -382,13 +382,53 @@ const btnLink = {
   textDecoration: "underline",
 };
 
+// ---- 포인트(액센트) 색 일괄 적용: 버튼 등 var(--point)/var(--hi) 전부 ----
+function applyAccent(c) {
+  if (!c) return;
+  const r = document.documentElement.style;
+  const soft = `color-mix(in srgb, ${c} 45%, white)`;
+  r.setProperty("--hi", c);
+  r.setProperty("--point", c);
+  r.setProperty("--hi-soft", soft);
+  r.setProperty("--point-soft", soft);
+}
+window.applyAccent = applyAccent;
+
 // ---- 그라데이션 빌더 (다중 색 스탑 / 선형·원형) ----
 function buildGradient(type, angle, stops) {
   const arr = (stops && stops.length >= 2) ? stops : [{ c: "#a9cdf5", p: 0 }, { c: "#ffffff", p: 100 }];
   const sorted = [...arr].sort((a, b) => (a.p ?? 0) - (b.p ?? 0));
   const list = sorted.map(s => `${s.c} ${s.p ?? 0}%`).join(", ");
-  if (type === "radial") return `radial-gradient(circle at 50% 42%, ${list})`;
+  if (type === "radial") return `radial-gradient(circle at 50% 50%, ${list})`;
   return `linear-gradient(${angle ?? 180}deg, ${list})`;
+}
+
+// 도형(하트/별) 배경 — 블러 처리한 SVG를 background 로. shape="none"이면 일반 그라데이션.
+function buildBackground(type, angle, stops, shape) {
+  const arr = (stops && stops.length >= 2) ? stops : [{ c: "#a9cdf5", p: 0 }, { c: "#ffffff", p: 100 }];
+  const sorted = [...arr].sort((a, b) => (a.p ?? 0) - (b.p ?? 0));
+  const inner = sorted[0].c;
+  const outer = sorted[sorted.length - 1].c;
+  const mid = sorted[Math.floor((sorted.length - 1) / 2)].c;
+  if (!shape || shape === "none") return buildGradient(type, angle, stops);
+
+  const HEART = "M50 84 C 12 56 8 22 34 18 C 46 16 50 30 50 36 C 50 30 54 16 66 18 C 92 22 88 56 50 84 Z";
+  const STAR = "M0 -20 L5.9 -8.1 L19 -6.2 L9.5 3 L11.8 16.2 L0 10 L-11.8 16.2 L-9.5 3 L-19 -6.2 L-5.9 -8.1 Z";
+  const filt = "<filter id='b' x='-30%' y='-30%' width='160%' height='160%'><feGaussianBlur stdDeviation='4'/></filter>";
+  const hc = (s) => `translate(50 106) scale(${s}) translate(-50 -51)`;
+  let inner_svg = "";
+  if (shape === "heart") {
+    inner_svg = `<g filter='url(#b)' transform='${hc(1.5)}'><path fill='${inner}' d='${HEART}'/></g>`;
+  } else if (shape === "hearts") {
+    const cols = [inner, outer, inner, outer, inner];
+    const scales = [1.55, 1.18, 0.84, 0.52, 0.22];
+    inner_svg = scales.map((s, i) => `<g filter='url(#b)' transform='${hc(s)}'><path fill='${cols[i % cols.length]}' d='${HEART}'/></g>`).join("");
+  } else if (shape === "stars") {
+    const st = (x, y, r, c) => `<path filter='url(#b)' fill='${c}' transform='translate(${x} ${y}) scale(${(r / 20).toFixed(2)})' d='${STAR}'/>`;
+    inner_svg = st(26, 46, 24, inner) + st(72, 64, 28, mid) + st(48, 118, 22, inner) + st(84, 150, 15, mid) + st(18, 140, 15, mid) + st(60, 182, 20, inner);
+  }
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 200' preserveAspectRatio='xMidYMid slice'><defs>${filt}</defs><rect width='100' height='200' fill='${outer}'/>${inner_svg}</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") center/cover no-repeat`;
 }
 
 // ---- 마스킹테이프 스타일 ----
@@ -440,6 +480,7 @@ window.ViewHeader = ViewHeader;
 window.SplitPane = SplitPane;
 window.tapeStyle = tapeStyle;
 window.buildGradient = buildGradient;
+window.buildBackground = buildBackground;
 window.TodaySummary = TodaySummary;
 window.Divider = Divider;
 window.InlineAdd = InlineAdd;

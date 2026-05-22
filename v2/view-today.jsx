@@ -5,6 +5,12 @@
 // ===========================================================
 
 function pad2(n) { return String(n).padStart(2, "0"); }
+function ymLabel(year, month) {
+  const lng = window.i18n.get();
+  if (lng === "en") return `${["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][month]} ${year}`;
+  if (lng === "ko") return `${year}년 ${month + 1}월`;
+  return `${year}年 ${month + 1}月`; // zh / ja
+}
 function dateStr(y, m, d) { return `${y}-${pad2(m + 1)}-${pad2(d)}`; }
 function tsTime(ts) { return ts ? new Date(ts).toTimeString().slice(0, 5) : ""; }
 
@@ -135,10 +141,11 @@ function MonthCalendar({ state, selected, onPick }) {
       border: "1.1px solid var(--ink)", borderRadius: 10, overflow: "hidden", background: "white",
     }}>
       <div style={{
-        padding: "5px 10px", background: "linear-gradient(180deg, #cfe2fa, #a9cdf5)",
+        padding: "5px 10px",
+        background: "linear-gradient(180deg, color-mix(in srgb, var(--chrome) 45%, white), var(--chrome))",
         borderBottom: "1.1px solid var(--ink)", textAlign: "center",
         fontFamily: "var(--hand)", fontSize: 14, fontWeight: 700, color: "var(--ink)", flexShrink: 0,
-      }}>{year}년 {month + 1}월</div>
+      }}>{ymLabel(year, month)}</div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", flexShrink: 0 }}>
         {dows.map((w, i) => (

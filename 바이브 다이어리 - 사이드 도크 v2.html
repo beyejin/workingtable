@@ -86,7 +86,9 @@
       "bgType": "linear",
       "bgAngle": 180,
       "bgStops": [{ "c": "#a9cdf5", "p": 0 }, { "c": "#ffffff", "p": 100 }],
+      "bgShape": "none",
       "chromeColor": "#a9cdf5",
+      "chromeGradient": true,
       "appSize": "normal",
       "showFakeIde": true,
       "desktopMode": false
@@ -104,6 +106,13 @@
       React.useEffect(() => {
         document.documentElement.setAttribute("data-desktop-mode", String(t.desktopMode));
       }, [t.desktopMode]);
+
+      // 포인트 색 적용 (저장값 복원 포함)
+      React.useEffect(() => { window.applyAccent && window.applyAccent(t.tabAccent); }, [t.tabAccent]);
+      // 헤더·바 색을 CSS 변수로 노출 (달력 헤더 등에서 사용)
+      React.useEffect(() => {
+        document.documentElement.style.setProperty("--chrome", t.chromeColor || "#a9cdf5");
+      }, [t.chromeColor]);
 
       // 해상도에 맞춰 창 크기 자동 조절 (+ 컴팩트 모드는 약 2/3 높이)
       React.useEffect(() => {
@@ -164,8 +173,8 @@
       );
     }
 
-    // 초기 포인트 컬러 적용
-    document.documentElement.style.setProperty("--hi", TWEAK_DEFAULTS.tabAccent);
+    // 초기 포인트 컬러 적용 (버튼 등 일괄)
+    window.applyAccent ? window.applyAccent(TWEAK_DEFAULTS.tabAccent) : document.documentElement.style.setProperty("--hi", TWEAK_DEFAULTS.tabAccent);
 
     ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>

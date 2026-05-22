@@ -40,7 +40,8 @@
       "deco.saveName": "테마 이름", "deco.myThemeName": "내 테마 ",
       "deco.preview": "미리보기", "deco.type": "종류", "deco.linear": "선형", "deco.radial": "원형(오로라)",
       "deco.dir": "방향", "deco.stops": "색 단계", "deco.addColor": "＋ 색 추가",
-      "deco.point": "포인트 컬러", "deco.chrome": "헤더·바 색 (타이틀바 / 탭)",
+      "deco.shape": "도형", "deco.shapeNone": "없음", "deco.shapeHeart": "하트", "deco.shapeHearts": "겹하트", "deco.shapeStars": "별",
+      "deco.point": "포인트 컬러", "deco.chrome": "헤더·바 색 (타이틀바 / 탭)", "deco.headerGrad": "헤더 그라데이션",
       "th.basic": "기본", "th.melon": "메론소다", "th.summer": "여름", "th.green": "초록", "th.milk": "딸기우유", "th.peach": "복숭아", "th.lavender": "라벤더", "th.night": "밤하늘",
     },
     en: {
@@ -77,7 +78,8 @@
       "deco.saveName": "Theme name", "deco.myThemeName": "My theme ",
       "deco.preview": "Preview", "deco.type": "Type", "deco.linear": "Linear", "deco.radial": "Radial (aura)",
       "deco.dir": "Direction", "deco.stops": "Color stops", "deco.addColor": "＋ Add color",
-      "deco.point": "Accent color", "deco.chrome": "Header / bar color",
+      "deco.shape": "Shape", "deco.shapeNone": "None", "deco.shapeHeart": "Heart", "deco.shapeHearts": "Hearts", "deco.shapeStars": "Stars",
+      "deco.point": "Accent color", "deco.chrome": "Header / bar color", "deco.headerGrad": "Header gradient",
       "th.basic": "Basic", "th.melon": "Melon Soda", "th.summer": "Summer", "th.green": "Green", "th.milk": "Strawberry Milk", "th.peach": "Peach", "th.lavender": "Lavender", "th.night": "Night Sky",
     },
     zh: {
@@ -114,7 +116,8 @@
       "deco.saveName": "主题名称", "deco.myThemeName": "我的主题 ",
       "deco.preview": "预览", "deco.type": "类型", "deco.linear": "线性", "deco.radial": "径向(光晕)",
       "deco.dir": "方向", "deco.stops": "颜色节点", "deco.addColor": "＋ 添加颜色",
-      "deco.point": "强调色", "deco.chrome": "标题栏 / 标签色",
+      "deco.shape": "图形", "deco.shapeNone": "无", "deco.shapeHeart": "爱心", "deco.shapeHearts": "多层爱心", "deco.shapeStars": "星星",
+      "deco.point": "强调色", "deco.chrome": "标题栏 / 标签色", "deco.headerGrad": "标题渐变",
       "th.basic": "基础", "th.melon": "蜜瓜苏打", "th.summer": "夏天", "th.green": "绿色", "th.milk": "草莓牛奶", "th.peach": "蜜桃", "th.lavender": "薰衣草", "th.night": "夜空",
     },
     ja: {
@@ -151,7 +154,8 @@
       "deco.saveName": "テーマ名", "deco.myThemeName": "マイテーマ ",
       "deco.preview": "プレビュー", "deco.type": "種類", "deco.linear": "線形", "deco.radial": "放射(オーロラ)",
       "deco.dir": "方向", "deco.stops": "カラーストップ", "deco.addColor": "＋ 色を追加",
-      "deco.point": "アクセント色", "deco.chrome": "ヘッダー / バー色",
+      "deco.shape": "図形", "deco.shapeNone": "なし", "deco.shapeHeart": "ハート", "deco.shapeHearts": "重ねハート", "deco.shapeStars": "星",
+      "deco.point": "アクセント色", "deco.chrome": "ヘッダー / バー色", "deco.headerGrad": "ヘッダーグラデーション",
       "th.basic": "ベーシック", "th.melon": "メロンソーダ", "th.summer": "夏", "th.green": "グリーン", "th.milk": "いちごミルク", "th.peach": "ピーチ", "th.lavender": "ラベンダー", "th.night": "夜空",
     },
   };
