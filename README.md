@@ -1,0 +1,69 @@
+# 🪄 vibe diary
+
+작업할 때 화면 옆에 띄워두는 **투명 사이드 다이어리** 데스크탑 앱.
+할 일·명령어·문의 메일·달력 메모를 한 창에서 관리하고, 배경/테마를 자유롭게 꾸밀 수 있어요.
+Windows · macOS 지원, 자동 업데이트.
+
+> A translucent side-dock diary widget for focused work. Tasks, command snippets,
+> inbox drafts and a calendar/diary in one slim window. Windows · macOS, auto-updating.
+
+---
+
+## ✨ 주요 기능
+
+- **할 일** — 해야 할 일 / 한 일 (마스킹테이프 스타일 카드)
+- **명령어** — 자주 쓰는 코드·명령 스니펫 저장, 클릭 한 번에 복사 (사용 횟수 자동 집계)
+- **문의** — 받은 메일 붙여넣기 → 답장 초안 작성, 답장 여부 기록, 메일별 사이트 링크
+- **달력** — 작업 시간·완료한 일·받은 메일이 날짜별로 자동 기록되는 일기형 월간 달력
+- **상단 헤더** — YouTube 배경 음악 플레이어 + 오늘 작업 시간(`00 H 00 M`) + 디데이
+- **꾸미기** — 테마 프리셋(메론소다·여름·딸기우유 등) / 다중 색 그라데이션 편집기(선형·원형, 방향, 색 스탑) / 헤더·바·포인트 색 / **내 테마 저장**
+- **설정** — 언어(한국어·English·中文·日本語, OS 언어 자동 감지) / 도크 위치 / 앱 길이(기본·컴팩트, 해상도 자동 맞춤) / 데이터 초기화
+- **데스크탑 모드** — 테두리 없는 투명 창으로 작업 화면 위에 띄우기
+- **자동 업데이트** — 새 버전 출시 시 다음 실행에서 자동 적용
+
+---
+
+## 📥 설치
+
+최신 버전: **[Releases](https://github.com/binglehaepi/workingtable/releases/latest)**
+
+- **Windows**: `vibe-diary_x.y.z_x64-setup.exe` (또는 `.msi`)
+- **macOS (Apple Silicon + Intel)**: `vibe-diary_x.y.z_universal.dmg`
+
+> ⚠️ 개발자 인증서가 없어 첫 실행 시 보안 경고가 나올 수 있습니다(악성 아님).
+> 우회 방법은 **[INSTALL.md](INSTALL.md)** 참고.
+
+---
+
+## 🛠 기술 스택
+
+- **[Tauri 2](https://tauri.app/)** (Rust + 시스템 WebView) — 가벼운 데스크탑 패키징
+- **React 18 (UMD) + Babel standalone** — 번들러 없이 브라우저에서 직접 JSX 실행
+- 상태는 `localStorage` 한 곳에 저장 (`window.diary` 전역 스토어)
+- 플러그인: `updater`(자동 업데이트), `opener`(링크/폴더 열기), `notification`
+
+## 📂 구조
+
+```
+바이브 다이어리 - 사이드 도크 v2.html   # 진입점 (스크립트 로드 + App)
+v2/                                    # 화면 모듈 (스토어/뷰/타이머/꾸미기/i18n …)
+styles.css                             # 디자인 토큰 & 공통 스타일
+src-tauri/                             # Tauri (Rust) — 설정·권한·번들
+scripts/build-dist.mjs                 # 웹 자산을 dist/ 로 복사 (빌드 전처리)
+.github/workflows/release.yml          # 태그 push 시 Win+macOS 자동 빌드/릴리스
+```
+
+## 💻 개발 / 빌드
+
+```bash
+# 개발 실행 (창 띄우기)
+npm install
+npx tauri dev
+
+# 릴리스 빌드 (설치 파일 생성)
+npx tauri build
+
+# 새 버전 배포: 버전 올리고 태그 push → GitHub Actions가 자동 빌드/서명/릴리스
+#  (tauri.conf.json / Cargo.toml 버전 동기화 후)
+git tag v0.3.1 && git push origin v0.3.1
+```
