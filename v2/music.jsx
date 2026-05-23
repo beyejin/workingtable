@@ -19,7 +19,7 @@
   const emit = () => { for (const fn of subs) fn(); };
   // 다른 PC(특히 macOS)에서 안 되는 케이스를 시각적으로 추적하기 위한 임시 표시.
   // 정상 동작 검증되면 다음 패치에서 제거.
-  const setDebug = (msg) => { state.debug = msg ? String(msg).slice(0, 40) : ""; emit(); };
+  const setDebug = (msg) => { state.debug = msg ? String(msg).slice(0, 80) : ""; emit(); };
 
   // 화면 안이지만 거의 보이지 않는 호스트.
   // 일부 WebView(WKWebView 등)는 opacity가 너무 낮거나 z-index가 음수면
@@ -94,7 +94,22 @@
           emit();
         },
         onError: function (e) {
-          setDebug("yt err " + (e && e.data));
+          const code = e && e.data;
+          const curVid = state.videoId || "?";
+          // 2=invalid, 5=html5, 100=not found, 101/150=임베드 차단, 153=비공식 임베드/스트림 실패
+          const meaning = ({
+            2: "잘못된 영상 ID",
+            5: "재생 불가 (HTML5)",
+            100: "영상 없음/삭제됨",
+            101: "임베드 차단됨",
+            150: "임베드 차단됨",
+            153: "임베드/스트림 거부",
+          })[code] || ("코드 " + code);
+          setDebug("yt err " + code + " · " + curVid + " · " + meaning);
+          // 임베드/접근 차단 계열은 다음 곡으로 자동 스킵 (큐가 1곡 초과일 때만)
+          if ([100, 101, 150, 153].indexOf(code) >= 0 && queue.length > 1) {
+            setTimeout(() => play(index + 1, true), 600);
+          }
         },
       },
     });
