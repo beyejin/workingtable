@@ -6,8 +6,19 @@
 // macOS(WKWebView)는 화면 밖(offscreen) iframe 재생을 막으므로
 // "화면 안이지만 보이지 않게" 둔다. 자동재생은 OS 정책상 차단될 수 있어
 // 사용자가 ▶ 를 누르면(제스처) unMute 후 재생한다.
+//
+// v0.4.4: macOS Tauri (tauri://localhost) 에서 YT IFrame API 가 yt err 153 으로
+// 영상 재생을 거부하는 문제 → enablejsapi 없는 raw <iframe> 모드로 자동 폴백.
+// 자동 다음 곡은 YouTube의 ?playlist=v2,v3,... URL 파라미터로 위임.
+// 윈도우(http://tauri.localhost)는 기존 YT.Player 그대로 사용.
 // ===========================================================
 (function () {
+  // === 모드 감지 ===
+  // tauri:// 비표준 스킴(macOS Tauri 기본)에서만 raw 모드 사용.
+  // 윈도우는 http://tauri.localhost 이라 표준 origin → YT.Player 통과.
+  const origin = (typeof window !== "undefined" && window.location && window.location.origin) || "";
+  const useRawMode = /^tauri:\/\//i.test(origin);
+
   let player = null;
   let ready = false;
   let queue = [];       // [{ videoId, title }]
@@ -38,6 +49,45 @@
     return el;
   }
 
+  // =========================================================
+  // === RAW IFRAME MODE (macOS Tauri 우회) ==================
+  // =========================================================
+  function rawRemoveIframe() {
+    const it = document.getElementById("yt-music-iframe");
+    if (it && it.parentNode) it.parentNode.removeChild(it);
+  }
+  function rawCreateIframe(startIdx) {
+    rawRemoveIframe();
+    if (!queue.length) return;
+    const cur = queue[startIdx];
+    // 자동 다음 곡: YouTube 의 playlist URL 파라미터에 나머지 곡 ID 쉼표로.
+    const rest = [];
+    for (let k = 1; k < queue.length; k++) {
+      rest.push(queue[(startIdx + k) % queue.length].videoId);
+    }
+    // enablejsapi 빼면 origin 검증이 느슨해져서 tauri://localhost 에서도 재생됨.
+    // 대신 JS 로 pause/play 같은 정밀 제어는 불가 — toggle/next/prev 는
+    // iframe 재생성으로 처리.
+    const params = new URLSearchParams({
+      autoplay: "1",
+      playsinline: "1",
+      controls: "0",
+      rel: "0",
+      modestbranding: "1",
+    });
+    if (rest.length) params.set("playlist", rest.join(","));
+    const iframe = document.createElement("iframe");
+    iframe.id = "yt-music-iframe";
+    iframe.src = "https://www.youtube.com/embed/" + cur.videoId + "?" + params.toString();
+    iframe.allow = "autoplay; encrypted-media; picture-in-picture";
+    iframe.setAttribute("frameborder", "0");
+    iframe.style.cssText = "width:100%;height:100%;border:0;";
+    host().appendChild(iframe);
+  }
+
+  // =========================================================
+  // === YT.PLAYER MODE (Windows / 표준 origin) ==============
+  // =========================================================
   function ensure() {
     if (player) return;
     if (window.YT && window.YT.Player) { setDebug("creating"); create(); return; }
@@ -61,12 +111,11 @@
     // origin 파라미터: Tauri 의 비표준 스킴(예: macOS의 tauri://localhost)에서는
     // YouTube IFrame API의 postMessage 검증이 깨져 onReady 가 안 불린다.
     // http(s) 일 때만 전달.
-    const o = (typeof window !== "undefined" && window.location && window.location.origin) || "";
     const playerVars = {
       autoplay: 1, mute: 1, controls: 0, disablekb: 1, playsinline: 1,
       enablejsapi: 1,
     };
-    if (/^https?:\/\//i.test(o)) playerVars.origin = o;
+    if (/^https?:\/\//i.test(origin)) playerVars.origin = origin;
     player = new YT.Player(host(), {
       height: "180", width: "320",
       // mute:1 — 자동재생 정책 우회. 사용자가 ▶ 누르면 unMute.
@@ -129,6 +178,15 @@
     state.hasQueue = true;
     started = true;
     wantPlay = true;
+
+    if (useRawMode) {
+      state.playing = true; // raw 모드는 정확한 상태 추적 불가 — 낙관적 표시
+      setDebug("raw iframe · " + (queue.length > 1 ? "자동 다음곡 ✓" : "1곡"));
+      emit();
+      rawCreateIframe(index);
+      return;
+    }
+
     emit();
     ensure();
     if (ready && player) {
@@ -145,16 +203,37 @@
     setQueue(tracks) {
       queue = (tracks || []).map(t => ({ videoId: t.videoId, title: t.title }));
       state.hasQueue = queue.length > 0;
-      if (!queue.length) { state.title = ""; state.videoId = null; state.playing = false; }
+      if (!queue.length) {
+        state.title = ""; state.videoId = null; state.playing = false;
+        if (useRawMode) rawRemoveIframe();
+      }
       if (index >= queue.length) index = 0;
+      // raw 모드에서 재생 중인데 큐가 바뀌면 iframe 재생성 (playlist param 갱신)
+      if (useRawMode && state.playing && queue.length) {
+        rawCreateIframe(index);
+      }
       emit();
-      if (queue.length) ensure();   // 미리 플레이어 준비 (자동재생은 OS 정책에 따름)
+      if (queue.length && !useRawMode) ensure();
     },
     play(videoId) {
       const i = queue.findIndex(t => t.videoId === videoId);
-      if (i >= 0) play(i, true); else ensure();
+      if (i >= 0) play(i, true);
+      else if (!useRawMode) ensure();
     },
     toggle() {
+      if (useRawMode) {
+        // raw 모드: pause = iframe 제거(정지), play = iframe 생성
+        if (state.playing) {
+          rawRemoveIframe();
+          state.playing = false;
+          setDebug("정지");
+          emit();
+        } else if (queue.length) {
+          play(index, true);
+        }
+        return;
+      }
+      // YT.Player 모드
       ensure();
       unmuteSoon();
       if (!ready || !player) { if (queue.length) play(index, true); return; }
@@ -168,4 +247,7 @@
     getState() { return state; },
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
   };
+
+  // raw 모드는 시작부터 표시 (사용자에게 환경 알려주기)
+  if (useRawMode) setDebug("raw iframe 모드 (macOS)");
 })();

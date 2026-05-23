@@ -252,7 +252,7 @@ function PlaylistBar() {
         </div>
         <button onClick={() => setOpen(o => !o)} title="플레이리스트" style={pbBtn}>{open ? "▾" : "+"}</button>
       </div>
-      {/* v0.4.3 임시 진단: 플레이어 내부 상태 + 에러 코드 + 영상ID. 검증 끝나면 제거 */}
+      {/* v0.4.4 임시 진단: 모드/상태 표시 (raw iframe 모드 검증 끝나면 제거) */}
       {ms.debug && ms.debug !== "ready" && (
         <div style={{
           marginTop: 2, fontFamily: "var(--mono)", fontSize: 10,
