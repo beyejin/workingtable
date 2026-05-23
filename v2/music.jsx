@@ -33,7 +33,7 @@
     if (!el) {
       const wrap = document.createElement("div");
       wrap.style.cssText =
-        "position:fixed;right:0;bottom:0;width:320px;height:180px;opacity:0.06;" +
+        "position:fixed;right:0;bottom:0;width:356px;height:200px;opacity:0.08;" +
         "pointer-events:none;z-index:0;overflow:hidden;";
       el = document.createElement("div");
       el.id = "yt-music-host";
@@ -60,6 +60,7 @@
     if (!queue.length) return;
 
     const cur = queue[startIdx];
+    const embedOrigin = /^https?:\/\//i.test(origin) ? origin : "https://tauri.localhost";
     const rest = [];
     for (let k = 1; k < queue.length; k++) {
       rest.push(queue[(startIdx + k) % queue.length].videoId);
@@ -73,6 +74,8 @@
       rel: "0",
       modestbranding: "1",
       iv_load_policy: "3",
+      origin: embedOrigin,
+      widget_referrer: embedOrigin,
     });
     if (rest.length) params.set("playlist", rest.join(","));
 
@@ -149,8 +152,8 @@
     }, 5000);
 
     player = new YT.Player(host(), {
-      height: "180",
-      width: "320",
+      height: "200",
+      width: "356",
       playerVars,
       events: {
         onReady: function () {
