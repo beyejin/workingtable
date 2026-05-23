@@ -181,10 +181,12 @@ function TodoMonthCalendar({ dueDates, doneDates, selectedDate, onPick }) {
           }}>{w}</div>
         ))}
       </div>
-      {/* 날짜 그리드 */}
+      {/* 날짜 그리드 — 셀 최소 높이 보장 + 부족하면 스크롤 */}
       <div style={{
-        flex: 1, minHeight: 0, display: "grid",
-        gridTemplateColumns: "repeat(7,1fr)", gridTemplateRows: `repeat(${rows},1fr)`,
+        flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden",
+        display: "grid",
+        gridTemplateColumns: "repeat(7,1fr)",
+        gridTemplateRows: `repeat(${rows}, minmax(30px, 1fr))`,
       }}>
         {cells.map((d, i) => {
           if (d == null) return <div key={i} style={{ borderTop: "1px solid #eef0f3", borderLeft: i % 7 === 0 ? "none" : "1px solid #eef0f3" }} />;

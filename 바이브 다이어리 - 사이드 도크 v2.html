@@ -5,39 +5,147 @@
   <title>바이브 다이어리 — 사이드 도크 v2</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- 진단용: 로드/실행 에러를 화면에 직접 표시 (에러가 없으면 아무것도 안 보임) -->
+  <!-- 진단용: 큰 에러만 우상단 작은 토스트로. 외부 리소스 실패는 콘솔에만. -->
   <script>
     (function () {
-      function box() {
+      function show(msg) {
         var d = document.getElementById("__errbox");
         if (!d) {
-          d = document.createElement("pre");
+          d = document.createElement("div");
           d.id = "__errbox";
           d.style.cssText =
-            "position:fixed;inset:0;z-index:99999;margin:0;padding:16px;background:#fff;color:#c00;font:12px/1.5 monospace;white-space:pre-wrap;overflow:auto";
+            "position:fixed;top:6px;right:6px;max-width:300px;max-height:140px;z-index:99999;" +
+            "padding:6px 22px 6px 8px;background:#fff;color:#c00;" +
+            "font:11px/1.4 monospace;white-space:pre-wrap;overflow:auto;" +
+            "border:1px solid #c00;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);";
+          var close = document.createElement("button");
+          close.textContent = "×";
+          close.setAttribute("aria-label","close");
+          close.style.cssText = "position:absolute;top:0;right:2px;background:none;border:none;color:#c00;font-size:14px;cursor:pointer;line-height:1;padding:2px 4px;";
+          close.onclick = function () { if (d.parentNode) d.parentNode.removeChild(d); };
+          d.appendChild(close);
+          var pre = document.createElement("pre");
+          pre.id = "__errbox_text";
+          pre.style.cssText = "margin:0;font:inherit;color:inherit;white-space:inherit;";
+          d.appendChild(pre);
           (document.body || document.documentElement).appendChild(d);
         }
-        return d;
+        var pre = document.getElementById("__errbox_text");
+        if (pre.textContent.length > 1000) pre.textContent = pre.textContent.slice(-1000);
+        pre.textContent += msg + "\n";
       }
       window.addEventListener(
         "error",
         function (e) {
           var t = e.target;
           if (t && (t.src || t.href)) {
-            box().textContent += "[리소스 로드 실패] " + (t.src || t.href) + "\n";
-          } else {
-            box().textContent +=
-              "[error] " + (e.message || "") +
-              (e.filename ? " @ " + e.filename + ":" + e.lineno : "") + "\n";
+            // 외부 리소스 (예: youtube iframe_api) 실패는 화면 가리지 않음 — 콘솔에만
+            try { console.warn("[리소스 로드 실패]", t.src || t.href); } catch (_) {}
+            return;
           }
+          show("[error] " + (e.message || "") + (e.filename ? " @ " + e.filename + ":" + e.lineno : ""));
         },
         true
       );
       window.addEventListener("unhandledrejection", function (e) {
         var r = e.reason;
-        box().textContent +=
-          "[promise] " + (r && (r.stack || r.message) ? r.stack || r.message : r) + "\n";
+        show("[promise] " + (r && (r.stack || r.message) ? r.stack || r.message : r));
       });
+    })();
+  </script>
+
+  <!-- 커스텀 다이얼로그 — window.dialog.prompt / confirm / alert (Promise 기반)
+       Tauri WKWebView/WebView2에서 native prompt/confirm이 무응답이라 직접 구현 -->
+  <script>
+    (function () {
+      function modal(opts) {
+        return new Promise(function (resolve) {
+          var overlay = document.createElement("div");
+          overlay.style.cssText =
+            "position:fixed;inset:0;background:rgba(40,51,63,0.35);backdrop-filter:blur(2px);" +
+            "z-index:10001;display:grid;place-items:center;padding:20px;" +
+            "font-family:Gaegu,system-ui,sans-serif;";
+          var box = document.createElement("div");
+          box.style.cssText =
+            "background:#fff;border:1.1px solid #28333f;border-radius:10px;" +
+            "padding:14px 16px 12px;min-width:260px;max-width:min(420px,92vw);" +
+            "box-shadow:0 6px 0 #d4cdc3, 0 12px 24px rgba(40,51,63,0.3);";
+          var msg = document.createElement("div");
+          msg.textContent = String(opts.message || "");
+          msg.style.cssText = "font-size:14px;color:#28333f;margin-bottom:10px;line-height:1.5;white-space:pre-wrap;word-break:break-word;";
+          box.appendChild(msg);
+
+          var input = null;
+          if (opts.type === "prompt") {
+            input = document.createElement("input");
+            input.type = "text";
+            input.value = opts.defaultValue != null ? String(opts.defaultValue) : "";
+            input.style.cssText =
+              "width:100%;box-sizing:border-box;border:1px solid #28333f;border-radius:6px;" +
+              "padding:6px 10px;font-size:14px;font-family:inherit;color:#28333f;background:#fff;outline:none;margin-bottom:12px;";
+            box.appendChild(input);
+          }
+
+          var btnRow = document.createElement("div");
+          btnRow.style.cssText = "display:flex;gap:8px;justify-content:flex-end;";
+
+          function close(value) {
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            document.removeEventListener("keydown", onKey, true);
+            resolve(value);
+          }
+          function onKey(e) {
+            if (e.key === "Escape") { e.preventDefault(); close(opts.type === "prompt" ? null : false); }
+            else if (e.key === "Enter" && opts.type !== "prompt") { e.preventDefault(); close(opts.type === "alert" ? undefined : true); }
+          }
+
+          if (opts.type !== "alert") {
+            var cancelBtn = document.createElement("button");
+            cancelBtn.textContent = "취소";
+            cancelBtn.style.cssText =
+              "padding:4px 14px;border-radius:99px;border:1.1px solid #28333f;background:#fff;" +
+              "font-size:13px;font-family:inherit;color:#28333f;cursor:pointer;";
+            cancelBtn.onclick = function () { close(opts.type === "prompt" ? null : false); };
+            btnRow.appendChild(cancelBtn);
+          }
+
+          var okBtn = document.createElement("button");
+          okBtn.textContent = "확인";
+          okBtn.style.cssText =
+            "padding:4px 14px;border-radius:99px;border:1.1px solid #28333f;background:#ffc7d4;" +
+            "font-size:13px;font-family:inherit;color:#28333f;font-weight:700;cursor:pointer;";
+          okBtn.onclick = function () {
+            if (opts.type === "prompt") close(input.value);
+            else if (opts.type === "confirm") close(true);
+            else close(undefined);
+          };
+          btnRow.appendChild(okBtn);
+          box.appendChild(btnRow);
+          overlay.appendChild(box);
+
+          overlay.addEventListener("click", function (e) {
+            if (e.target === overlay) close(opts.type === "prompt" ? null : false);
+          });
+
+          document.addEventListener("keydown", onKey, true);
+          if (input) {
+            input.addEventListener("keydown", function (e) {
+              if (e.key === "Enter") { e.preventDefault(); close(input.value); }
+            });
+          }
+
+          document.body.appendChild(overlay);
+          setTimeout(function () {
+            if (input) { input.focus(); input.select(); }
+            else okBtn.focus();
+          }, 0);
+        });
+      }
+      window.dialog = {
+        prompt: function (message, defaultValue) { return modal({ type: "prompt", message: message, defaultValue: defaultValue }); },
+        confirm: function (message) { return modal({ type: "confirm", message: message }); },
+        alert: function (message) { return modal({ type: "alert", message: message }); },
+      };
     })();
   </script>
 

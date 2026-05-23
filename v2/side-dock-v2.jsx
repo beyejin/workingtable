@@ -418,8 +418,8 @@ function DecorateView({ tweaks, setTweak }) {
   };
   useI18n();
   const myThemes = t.myThemes ?? [];
-  const saveMyTheme = () => {
-    const name = prompt(L("deco.saveName"), L("deco.myThemeName") + (myThemes.length + 1));
+  const saveMyTheme = async () => {
+    const name = await window.dialog.prompt(L("deco.saveName"), L("deco.myThemeName") + (myThemes.length + 1));
     if (!name?.trim()) return;
     const cur = { name: name.trim(), type: bgType, angle: bgAngle, stops, chrome: t.chromeColor ?? "#a9cdf5", accent: t.tabAccent };
     set("myThemes", [...myThemes, cur]);

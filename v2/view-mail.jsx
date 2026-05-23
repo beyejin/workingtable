@@ -170,10 +170,10 @@ function MailDetail({ m, actions, onBack }) {
 
 // ---- 2번째 화면 아래 — 초안 + 프리셋 칩 ----
 function DraftEditor({ m, actions, presets }) {
-  function openPlatform() {
+  async function openPlatform() {
     let url = m.platformUrl;
     if (!url) {
-      url = prompt(L("mail.sitePrompt")) || "";
+      url = (await window.dialog.prompt(L("mail.sitePrompt"))) || "";
       if (!url.trim()) return;
       actions.updateEmail(m.id, { platformUrl: url.trim() });
       url = url.trim();
@@ -270,7 +270,10 @@ function PresetsList({ presets, actions }) {
     setEditing(null);
   };
   const cancel = () => setEditing(null);
-  const del = (id) => { if (confirm(L("mail.presetDelConfirm"))) actions.removeReplyPreset(id); };
+  const del = async (id) => {
+    const ok = await window.dialog.confirm(L("mail.presetDelConfirm"));
+    if (ok) actions.removeReplyPreset(id);
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: 0, height: "100%" }}>

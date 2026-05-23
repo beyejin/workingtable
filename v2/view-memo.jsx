@@ -34,10 +34,11 @@ function MemoListScreen({ onOpen }) {
     onOpen(id);
   };
 
-  const cleanEmpty = () => {
+  const cleanEmpty = async () => {
     const empty = allMemos.filter(m => isEmptyMemo(m));
-    if (!empty.length) { alert(L("memo.noEmpty")); return; }
-    if (!confirm(L("memo.cleanConfirm", { n: empty.length }))) return;
+    if (!empty.length) { await window.dialog.alert(L("memo.noEmpty")); return; }
+    const ok = await window.dialog.confirm(L("memo.cleanConfirm", { n: empty.length }));
+    if (!ok) return;
     empty.forEach(m => actions.removeMemo(m.id));
   };
 
@@ -51,7 +52,10 @@ function MemoListScreen({ onOpen }) {
           pickerOpenId={pickerOpenId}
           setPickerOpenId={setPickerOpenId}
           onPickIcon={(id, icon) => { actions.updateMemo(id, { icon }); setPickerOpenId(null); }}
-          onDelete={(m) => { if (confirm(L("memo.delConfirm", { x: m.title || L("memo.untitled") }))) actions.removeMemo(m.id); }}
+          onDelete={async (m) => {
+            const ok = await window.dialog.confirm(L("memo.delConfirm", { x: m.title || L("memo.untitled") }));
+            if (ok) actions.removeMemo(m.id);
+          }}
           onCreate={createNew}
         />
       }
@@ -406,7 +410,7 @@ function MemoEditScreen({ memoId, onBack }) {
 
   const onAddImage = (file) => {
     if (!file) return;
-    if (file.size > 600 * 1024) { alert(L("memo.imageTooLarge")); return; }
+    if (file.size > 600 * 1024) { window.dialog.alert(L("memo.imageTooLarge")); return; }
     const reader = new FileReader();
     reader.onload = (e) => {
       const url = e.target.result;
@@ -418,9 +422,9 @@ function MemoEditScreen({ memoId, onBack }) {
     reader.readAsDataURL(file);
   };
 
-  const onAddLink = () => {
-    let url = prompt(L("memo.linkUrl"));
-    if (!url?.trim()) return;
+  const onAddLink = async () => {
+    let url = await window.dialog.prompt(L("memo.linkUrl"));
+    if (!url || !url.trim()) return;
     url = url.trim();
     if (!/^https?:\/\//i.test(url)) url = "https://" + url;
     editorRef.current?.focus();
@@ -428,7 +432,7 @@ function MemoEditScreen({ memoId, onBack }) {
     if (sel && sel.toString().length > 0) {
       try { document.execCommand("createLink", false, url); } catch (_) {}
     } else {
-      const label = prompt(L("memo.linkLabel"), url) || url;
+      const label = (await window.dialog.prompt(L("memo.linkLabel"), url)) || url;
       try { document.execCommand("insertHTML", false, `<a href="${url}" target="_blank">${escapeAttr(label)}</a>`); } catch (_) {}
     }
     queueSave();
@@ -464,7 +468,10 @@ function MemoEditScreen({ memoId, onBack }) {
           }}>{(memo.title || "").trim() || L("memo.newDraft")}</div>
         </div>
         <button
-          onClick={() => { if (confirm(L("memo.delConfirm", { x: memo.title || L("memo.untitled") }))) { actions.removeMemo(memoId); onBack(); } }}
+          onClick={async () => {
+            const ok = await window.dialog.confirm(L("memo.delConfirm", { x: memo.title || L("memo.untitled") }));
+            if (ok) { actions.removeMemo(memoId); onBack(); }
+          }}
           title={L("memo.delete")}
           style={headerBtn}
         >🗑</button>

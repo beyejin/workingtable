@@ -14,9 +14,12 @@
   let index = 0;
   let started = false;
   let wantPlay = false; // 준비되면 재생할지
-  const state = { playing: false, title: "", videoId: null, hasQueue: false };
+  const state = { playing: false, title: "", videoId: null, hasQueue: false, debug: "" };
   const subs = new Set();
   const emit = () => { for (const fn of subs) fn(); };
+  // 다른 PC(특히 macOS)에서 안 되는 케이스를 시각적으로 추적하기 위한 임시 표시.
+  // 정상 동작 검증되면 다음 패치에서 제거.
+  const setDebug = (msg) => { state.debug = msg ? String(msg).slice(0, 40) : ""; emit(); };
 
   // 화면 안이지만 거의 보이지 않는 호스트.
   // 일부 WebView(WKWebView 등)는 opacity가 너무 낮거나 z-index가 음수면
@@ -37,32 +40,41 @@
 
   function ensure() {
     if (player) return;
-    if (window.YT && window.YT.Player) { create(); return; }
-    if (document.getElementById("__yt_api")) return;
+    if (window.YT && window.YT.Player) { setDebug("creating"); create(); return; }
+    if (document.getElementById("__yt_api")) { setDebug("api 로딩"); return; }
+    setDebug("api 받는중");
     const s = document.createElement("script");
     s.id = "__yt_api";
     s.src = "https://www.youtube.com/iframe_api";
+    s.onerror = () => setDebug("api 로드 실패");
     document.head.appendChild(s);
     const prev = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = function () {
       if (prev) { try { prev(); } catch (_) {} }
+      setDebug("creating");
       create();
     };
   }
 
   function create() {
     if (player) return;
+    // origin 파라미터: Tauri 의 비표준 스킴(예: macOS의 tauri://localhost)에서는
+    // YouTube IFrame API의 postMessage 검증이 깨져 onReady 가 안 불린다.
+    // http(s) 일 때만 전달.
+    const o = (typeof window !== "undefined" && window.location && window.location.origin) || "";
+    const playerVars = {
+      autoplay: 1, mute: 1, controls: 0, disablekb: 1, playsinline: 1,
+      enablejsapi: 1,
+    };
+    if (/^https?:\/\//i.test(o)) playerVars.origin = o;
     player = new YT.Player(host(), {
       height: "180", width: "320",
       // mute:1 — 자동재생 정책 우회. 사용자가 ▶ 누르면 unMute.
-      playerVars: {
-        autoplay: 1, mute: 1, controls: 0, disablekb: 1, playsinline: 1,
-        enablejsapi: 1,
-        origin: (typeof window !== "undefined" && window.location && window.location.origin) || "",
-      },
+      playerVars,
       events: {
         onReady: function () {
           ready = true;
+          setDebug("ready");
           // 사용자가 미리 ▶ 를 눌렀으면 → 즉시 로드 + unmute + 재생
           if (queue.length && wantPlay) {
             const tr = queue[index] || queue[0];
@@ -80,6 +92,9 @@
           state.playing = (e.data === YT.PlayerState.PLAYING);
           try { const d = player.getVideoData(); if (d && d.title) state.title = d.title; } catch (_) {}
           emit();
+        },
+        onError: function (e) {
+          setDebug("yt err " + (e && e.data));
         },
       },
     });

@@ -248,23 +248,22 @@ function ProjectSwitcher() {
   const project = diary.select.currentProject(state);
   const [open, setOpen] = useState(false);
 
-  function addNew() {
-    const name = prompt(L("proj.newPrompt"));
+  async function addNew() {
+    setOpen(false);
+    const name = await window.dialog.prompt(L("proj.newPrompt"));
     if (name?.trim()) actions.addProject({ name: name.trim() });
-    setOpen(false);
   }
-  function rename() {
+  async function rename() {
     if (!project) return;
-    const name = prompt(L("proj.renamePrompt"), project.name);
+    setOpen(false);
+    const name = await window.dialog.prompt(L("proj.renamePrompt"), project.name);
     if (name?.trim()) actions.updateProject(project.id, { name: name.trim() });
-    setOpen(false);
   }
-  function removeCurrent() {
+  async function removeCurrent() {
     if (!project) return;
-    if (confirm(L("proj.deleteConfirm", { name: project.name }))) {
-      actions.removeProject(project.id);
-    }
     setOpen(false);
+    const ok = await window.dialog.confirm(L("proj.deleteConfirm", { name: project.name }));
+    if (ok) actions.removeProject(project.id);
   }
 
   return (
@@ -324,20 +323,20 @@ function RepoButtons() {
   const project = diary.select.currentProject(state);
   if (!project) return null;
 
-  function openGit() {
+  async function openGit() {
     let url = project.repoUrl;
     if (!url) {
-      url = prompt("git 저장소 주소 (예: https://github.com/me/repo)") || "";
+      url = (await window.dialog.prompt("git 저장소 주소 (예: https://github.com/me/repo)")) || "";
       if (!url.trim()) return;
       actions.updateProject(project.id, { repoUrl: url.trim() });
       url = url.trim();
     }
     openExternalUrl(url);
   }
-  function openFolder() {
+  async function openFolder() {
     let p = project.path;
     if (!p) {
-      p = prompt("프로젝트 폴더 경로 (예: C:\\work\\my-repo)") || "";
+      p = (await window.dialog.prompt("프로젝트 폴더 경로 (예: C:\\\\work\\\\my-repo")) || "";
       if (!p.trim()) return;
       actions.updateProject(project.id, { path: p.trim() });
       p = p.trim();
