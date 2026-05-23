@@ -4495,8 +4495,10 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vibe-diary"
-version = "0.4.6"
+version = "0.4.7"
 dependencies = [
+ "objc2-foundation",
+ "objc2-web-kit",
  "serde",
  "serde_json",
  "tauri",
@@ -4504,6 +4506,7 @@ dependencies = [
  "tauri-plugin-notification",
  "tauri-plugin-opener",
  "tauri-plugin-updater",
+ "url",
 ]
 
 [[package]]

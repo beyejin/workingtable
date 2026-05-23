@@ -12,8 +12,10 @@
     /^(tauri|asset):$/i.test(protocol) ||
     /^https?:\/\/tauri\.localhost(?::\d+)?$/i.test(origin);
   const shouldStartRaw = isTauriLike || protocol === "file:";
+  const tauriInvoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
 
-  let useRawMode = shouldStartRaw;
+  let useNativeMode = isTauriLike && !!tauriInvoke;
+  let useRawMode = shouldStartRaw && !useNativeMode;
   let player = null;
   let ready = false;
   let queue = [];
@@ -27,6 +29,43 @@
 
   const emit = () => { for (const fn of subs) fn(); };
   const setDebug = (msg) => { state.debug = msg ? String(msg).slice(0, 90) : ""; emit(); };
+
+  function invokeNative(command, args) {
+    if (!tauriInvoke) return Promise.reject(new Error("tauri invoke unavailable"));
+    return tauriInvoke(command, args || {});
+  }
+
+  function playlistAfter(startIdx) {
+    const rest = [];
+    for (let k = 1; k < queue.length; k++) {
+      rest.push(queue[(startIdx + k) % queue.length].videoId);
+    }
+    return rest;
+  }
+
+  function fallbackToRaw(reason) {
+    useNativeMode = false;
+    useRawMode = true;
+    setDebug("raw iframe fallback" + (reason ? " - " + reason : ""));
+    if (queue.length && wantPlay) {
+      state.playing = true;
+      rawCreateIframe(index);
+    }
+  }
+
+  function nativePlay(startIdx) {
+    const cur = queue[startIdx];
+    if (!cur) return;
+    state.playing = true;
+    setDebug("native macOS player");
+    emit();
+    invokeNative("youtube_player_play", {
+      videoId: cur.videoId,
+      playlist: playlistAfter(startIdx),
+    }).catch(err => {
+      fallbackToRaw(err && err.message ? err.message : err);
+    });
+  }
 
   function host() {
     let el = document.getElementById("yt-music-host");
@@ -91,6 +130,7 @@
 
   function switchToRaw(reason) {
     if (useRawMode) return;
+    useNativeMode = false;
     useRawMode = true;
     clearTimers();
     try { if (player && player.destroy) player.destroy(); } catch (_) {}
@@ -104,7 +144,7 @@
   }
 
   function ensure() {
-    if (useRawMode || player) return;
+    if (useNativeMode || useRawMode || player) return;
     if (window.YT && window.YT.Player) {
       setDebug("creating");
       create();
@@ -212,6 +252,11 @@
     started = true;
     wantPlay = true;
 
+    if (useNativeMode) {
+      nativePlay(index);
+      return;
+    }
+
     if (useRawMode) {
       state.playing = true;
       setDebug("raw iframe" + (queue.length > 1 ? " · autoplay queue" : ""));
@@ -240,20 +285,42 @@
         state.videoId = null;
         state.playing = false;
         rawRemoveIframe();
+        if (useNativeMode) invokeNative("youtube_player_stop").catch(() => {});
       }
       if (index >= queue.length) index = 0;
-      if (useRawMode && state.playing && queue.length) {
+      if (useNativeMode && state.playing && queue.length) {
+        nativePlay(index);
+      } else if (useRawMode && state.playing && queue.length) {
         rawCreateIframe(index);
       }
       emit();
-      if (queue.length && !useRawMode) ensure();
+      if (queue.length && !useNativeMode && !useRawMode) ensure();
     },
     play(videoId) {
       const i = queue.findIndex(t => t.videoId === videoId);
       if (i >= 0) play(i, true);
-      else if (!useRawMode) ensure();
+      else if (!useNativeMode && !useRawMode) ensure();
     },
     toggle() {
+      if (useNativeMode) {
+        if (state.playing) {
+          invokeNative("youtube_player_pause").catch(err => fallbackToRaw(err));
+          state.playing = false;
+          setDebug("paused");
+          emit();
+        } else if (queue.length) {
+          if (state.videoId) {
+            invokeNative("youtube_player_resume").catch(() => play(index, true));
+            state.playing = true;
+            setDebug("native macOS player");
+            emit();
+          } else {
+            play(index, true);
+          }
+        }
+        return;
+      }
+
       if (useRawMode) {
         if (state.playing) {
           rawRemoveIframe();
