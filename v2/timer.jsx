@@ -43,6 +43,7 @@ function Timer() {
 }
 
 // ---- 작업 시간 (프로그램 켜둔 활동 시간 누적) — 00 H 00 M ----
+// 점(•)을 클릭하면 "외부 작업 모드" 토글. 켜지면 초록색, 다른 앱에서 일할 때도 카운트.
 function WorkTime() {
   const { state } = diary.useDiary();
   const min = diary.select.workMinutesToday(state);
@@ -50,18 +51,34 @@ function WorkTime() {
   const m = min % 60;
   const pad = (n) => String(n).padStart(2, "0");
   const [blink, setBlink] = useState(true);
+  const [external, setExternal] = useState(() => !!(window.workTracker && window.workTracker.isExternal()));
   useEffect(() => {
     const id = setInterval(() => setBlink(b => !b), 1100);
     return () => clearInterval(id);
   }, []);
+  useEffect(() => {
+    if (!window.workTracker) return;
+    return window.workTracker.subscribe(setExternal);
+  }, []);
+  const toggleExternal = () => { if (window.workTracker) window.workTracker.toggle(); };
+
+  const dotColor = external ? "#52c759" : "#ff5e5e";
+  const label = external ? L("worktrack.externalOn") : L("worktrack.externalOff");
+
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "var(--mono)", fontWeight: 700, fontSize: 15, color: "var(--ink)" }}>
-      <span style={{
-        width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
-        background: "#ff5e5e", opacity: blink ? 0.95 : 0.6,
-        transition: "opacity .5s ease",
+      <button onClick={toggleExternal} title={label} style={{
+        all: "unset", cursor: "pointer", flexShrink: 0,
+        width: 11, height: 11, borderRadius: "50%",
+        display: "grid", placeItems: "center",
+        background: dotColor,
+        opacity: external ? 1 : (blink ? 0.95 : 0.6),
+        border: external ? "1px solid rgba(0,0,0,0.2)" : "none",
+        transition: "opacity .5s ease, background .15s",
       }} />
-      <span style={{ fontSize: 9.5, letterSpacing: 1, color: "var(--ink-2)" }}>WORKING</span>
+      <span style={{ fontSize: 9.5, letterSpacing: 1, color: external ? "#2f7d44" : "var(--ink-2)" }}>
+        {external ? "EXTERNAL" : "WORKING"}
+      </span>
       <span>{pad(h)}</span>
       <span style={{ fontSize: 10, opacity: .6 }}>H</span>
       <span>{pad(m)}</span>

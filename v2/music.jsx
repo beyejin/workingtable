@@ -18,13 +18,15 @@
   const subs = new Set();
   const emit = () => { for (const fn of subs) fn(); };
 
-  // 화면 안이지만 보이지 않는 호스트 (offscreen 이면 macOS에서 재생이 막힘)
+  // 화면 안이지만 거의 보이지 않는 호스트.
+  // 일부 WebView(WKWebView 등)는 opacity가 너무 낮거나 z-index가 음수면
+  // "보이지 않음"으로 간주해 미디어 재생을 차단할 수 있어 살짝 보이게 둔다.
   function host() {
     let el = document.getElementById("yt-music-host");
     if (!el) {
       const wrap = document.createElement("div");
       wrap.style.cssText =
-        "position:fixed;right:0;bottom:0;width:320px;height:180px;opacity:0.001;pointer-events:none;z-index:-1;overflow:hidden;";
+        "position:fixed;right:0;bottom:0;width:320px;height:180px;opacity:0.05;pointer-events:none;z-index:0;overflow:hidden;";
       el = document.createElement("div");
       el.id = "yt-music-host";
       wrap.appendChild(el);
@@ -52,14 +54,25 @@
     if (player) return;
     player = new YT.Player(host(), {
       height: "180", width: "320",
-      playerVars: { autoplay: 1, controls: 0, disablekb: 1, playsinline: 1 },
+      // mute:1 — 자동재생 정책 우회. 사용자가 ▶ 누르면 unMute.
+      playerVars: {
+        autoplay: 1, mute: 1, controls: 0, disablekb: 1, playsinline: 1,
+        enablejsapi: 1,
+        origin: (typeof window !== "undefined" && window.location && window.location.origin) || "",
+      },
       events: {
         onReady: function () {
           ready = true;
-          // 사용자가 미리 ▶ 를 눌렀거나(또는 큐가 있으면) 준비되는 대로 로드
-          if (queue.length && (wantPlay || !started)) {
+          // 사용자가 미리 ▶ 를 눌렀으면 → 즉시 로드 + unmute + 재생
+          if (queue.length && wantPlay) {
             const tr = queue[index] || queue[0];
             try { player.loadVideoById(tr.videoId); } catch (_) {}
+            try { player.unMute(); player.setVolume(100); } catch (_) {}
+            try { player.playVideo(); } catch (_) {}
+          } else if (queue.length && !started) {
+            // 큐는 있지만 사용자가 아직 안 눌렀음 — 첫 곡만 미리 로드 (mute 상태)
+            const tr = queue[index] || queue[0];
+            try { player.cueVideoById(tr.videoId); } catch (_) {}
           }
         },
         onStateChange: function (e) {
@@ -90,7 +103,11 @@
     ensure();
     if (ready && player) {
       try { player.loadVideoById(tr.videoId); } catch (_) {}
-      if (gesture) { unmuteSoon(); }
+      if (gesture) {
+        // gesture context 안에서 동기 호출 — WKWebView 정책 통과 핵심
+        try { player.unMute(); player.setVolume(100); } catch (_) {}
+        try { player.playVideo(); } catch (_) {}
+      }
     }
   }
 

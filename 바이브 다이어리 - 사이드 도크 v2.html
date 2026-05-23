@@ -65,7 +65,7 @@
   <script type="text/babel" src="v2/music.jsx"></script>
   <script type="text/babel" src="v2/view-today.jsx"></script>
   <script type="text/babel" src="v2/view-todo.jsx"></script>
-  <script type="text/babel" src="v2/view-cheat.jsx"></script>
+  <script type="text/babel" src="v2/view-memo.jsx"></script>
   <script type="text/babel" src="v2/view-mail.jsx"></script>
   <script type="text/babel" src="v2/view-prompt.jsx"></script>
   <script type="text/babel" src="v2/view-ai.jsx"></script>
@@ -92,7 +92,8 @@
       "appSize": "normal",
       "appHeight": 0,
       "showFakeIde": true,
-      "desktopMode": false
+      "desktopMode": false,
+      "alwaysOnTop": false
     }/*EDITMODE-END*/;
 
     // Tauri 속에서 실행중이면 자동으로 데스크탑 모드 점이고 transparent body
@@ -132,6 +133,22 @@
           T.window.getCurrentWindow().setSize(new T.window.LogicalSize(440, h));
         } catch (_) {}
       }, [t.appSize]);
+
+      // 반복 할 일 인스턴스 자동 생성 (앱 시작 + 매 분 확인해 자정 넘어가면 새로 생성)
+      React.useEffect(() => {
+        try { diary.actions.generateRecurrences(); } catch (_) {}
+        const id = setInterval(() => { try { diary.actions.generateRecurrences(); } catch (_) {} }, 60 * 1000);
+        return () => clearInterval(id);
+      }, []);
+
+      // 항상 위 — tweak 변경 시 Tauri 창 옵션에 반영
+      React.useEffect(() => {
+        try {
+          const T = window.__TAURI__;
+          if (!T || !T.window || !T.window.getCurrentWindow) return;
+          T.window.getCurrentWindow().setAlwaysOnTop(!!t.alwaysOnTop);
+        } catch (_) {}
+      }, [t.alwaysOnTop]);
 
       // 창 높이 변화(드래그/프리셋)를 마지막 길이로 저장 (디바운스)
       React.useEffect(() => {

@@ -26,6 +26,62 @@ const fmtKDateShort = (iso) => {
   const [, m, d] = iso.split("-").map(Number);
   return `${m}/${d}`;
 };
+function memoEscapeHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function memoBodyToHtml(body) {
+  return (body || "").split(/\r?\n/).map(line => `<div>${memoEscapeHtml(line) || "<br>"}</div>`).join("");
+}
+function memoMessagesToHtml(messages) {
+  return (messages || []).map(m => {
+    if (m.type === "text") {
+      const style = [];
+      if (m.color && m.color !== "#222222" && m.color !== "#222") style.push(`color:${m.color}`);
+      if (m.fontSize === "small") style.push("font-size:12px");
+      else if (m.fontSize === "large") style.push("font-size:18px");
+      if (m.fontFamily === "mono") style.push("font-family:var(--mono),monospace");
+      else if (m.fontFamily === "serif") style.push("font-family:Georgia,serif");
+      const text = memoEscapeHtml(m.text || "").replace(/\n/g, "<br>");
+      return style.length
+        ? `<div><span style="${style.join(";")}">${text || "<br>"}</span></div>`
+        : `<div>${text || "<br>"}</div>`;
+    }
+    if (m.type === "image") return `<div><img src="${m.imageUrl}" style="max-width:100%;"/></div>`;
+    if (m.type === "link") return `<div><a href="${memoEscapeHtml(m.linkUrl)}">${memoEscapeHtml(m.linkLabel || m.linkUrl)}</a></div>`;
+    return "";
+  }).join("");
+}
+function memoTitleFromHtml(html) {
+  if (!html) return "";
+  // 태그 제거 → textContent 추출
+  let text = "";
+  try {
+    if (typeof document !== "undefined") {
+      const tmp = document.createElement("div");
+      tmp.innerHTML = html;
+      text = tmp.textContent || "";
+    } else {
+      text = String(html).replace(/<[^>]+>/g, " ");
+    }
+  } catch (_) {
+    text = String(html).replace(/<[^>]+>/g, " ");
+  }
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    const t = line.trim();
+    if (t) return t.slice(0, 60);
+  }
+  if (/<img/i.test(html)) return "🖼 이미지";
+  if (/<a /i.test(html)) return "🔗 링크";
+  return "";
+}
+const MEMO_ICONS = [
+  "🐰", "🐱", "🐶", "🦊", "🐻", "🐼", "🐸", "🐧",
+  "🌸", "🌷", "🍓", "🍰", "🍞", "🍵", "☕", "🍒",
+  "⭐", "💎", "🌙", "🌈", "💌", "🎀", "🎈", "🎁",
+  "📚", "✏️", "🖍", "💡", "🔑", "🎵", "🎲", "💖",
+];
+const randomMemoIcon = () => MEMO_ICONS[Math.floor(Math.random() * MEMO_ICONS.length)];
 
 // ---- 초기 시드 ----
 // 첫 실행 시엔 예시 데이터 없이 빈 상태로 시작한다.
@@ -53,6 +109,8 @@ function seed() {
       },
     ],
     todos: [],
+    recurrences: [],
+    lastGenDate: t,
     prompts: [],
     emails: [],
     aiBookmarks: [],
@@ -62,6 +120,9 @@ function seed() {
     dday: { date: "", label: "디데이" },
     mailUrl: "",
     notes: {},
+    weekNotes: {},
+    replyPresets: [],
+    memos: [],
     selectedDate: t,
     stuck: {},
     timer: {
@@ -87,6 +148,8 @@ function load() {
     // ---- 마이그레이션 (필드 추가에 안전) ----
     data.commands    ??= [];
     data.todos       ??= [];
+    data.recurrences ??= [];
+    data.lastGenDate ??= today();
     data.prompts     ??= [];
     data.emails      ??= [];
     data.aiBookmarks ??= [];
@@ -95,10 +158,43 @@ function load() {
     data.dday        ??= { date: "", label: "디데이" };
     data.mailUrl     ??= "";
     data.notes       ??= {};
+    data.weekNotes   ??= {};
+    data.replyPresets ??= [];
+    data.memos       ??= [];
+    // 기존 메모를 단일 html 본문으로 통합. body → html, messages → html.
+    data.memos = data.memos.map(m => {
+      const next = { ...m, icon: m.icon || randomMemoIcon() };
+      if (typeof next.html !== "string") next.html = "";
+      if (!next.html && Array.isArray(next.messages) && next.messages.length > 0) {
+        next.html = memoMessagesToHtml(next.messages);
+      }
+      if (!next.html && (next.body || "").trim()) {
+        next.html = memoBodyToHtml(next.body);
+      }
+      // body는 비워둠 (messages는 보존 — 데이터 보안용으로 일단 남김)
+      next.body = "";
+      if (!next.title) next.title = memoTitleFromHtml(next.html);
+      return next;
+    });
     data.selectedDate = today();   // 시작 시 항상 오늘
     data.stuck       ??= {};
     // 메일에 body/draft/platformUrl 보강
     data.emails = (data.emails ?? []).map(e => ({ body: "", draft: "", platformUrl: "", ...e }));
+    // 할 일 스키마 마이그레이션 (text→title, hot→pinned, doneTs→completedAt 등)
+    data.todos = (data.todos ?? []).map((t, i) => ({
+      id: t.id,
+      projectId: t.projectId,
+      title: t.title ?? t.text ?? "",
+      pinned: t.pinned ?? !!t.hot ?? false,
+      pinnedAt: t.pinnedAt ?? null,
+      dueDate: t.dueDate ?? null,
+      order: t.order ?? i,
+      done: !!t.done,
+      completedAt: t.completedAt ?? (t.doneTs ? new Date(t.doneTs).toISOString() : (t.doneAt ? t.doneAt + "T12:00:00" : null)),
+      recurrenceId: t.recurrenceId ?? null,
+      trackedSeconds: t.trackedSeconds ?? 0,
+      createdAt: t.createdAt ?? today(),
+    }));
     data.timer       ??= { lengthMin: 30, enabled: true, cycleStartedAt: null, paused: false, pausedRemainingMs: null, notificationsGranted: false, lastNotifiedAt: null };
     data.workSessions ??= [];
     // 프로젝트에 버전/저장소 필드 보강 (기존 값 우선)
@@ -169,33 +265,141 @@ const actions = {
   },
 
   // ----- 할 일 -----
-  addTodo(text, opts = {}) {
-    if (!text?.trim()) return;
-    setState(s => ({
-      ...s,
-      todos: [...s.todos, {
-        id: uid(), projectId: s.currentProjectId,
-        text: text.trim(), done: false, hot: !!opts.hot,
-        createdAt: today(),
-      }],
-    }));
+  addTodo(title, opts = {}) {
+    if (!title?.trim()) return;
+    setState(s => {
+      const myTodos = s.todos.filter(t => t.projectId === s.currentProjectId);
+      const nextOrder = myTodos.reduce((m, t) => Math.max(m, t.order ?? 0), -1) + 1;
+      return {
+        ...s,
+        todos: [...s.todos, {
+          id: uid(), projectId: s.currentProjectId,
+          title: title.trim(),
+          pinned: !!opts.pinned, pinnedAt: opts.pinned ? Date.now() : null,
+          dueDate: opts.dueDate ?? null,
+          order: nextOrder,
+          done: false, completedAt: null,
+          recurrenceId: opts.recurrenceId ?? null,
+          trackedSeconds: 0,
+          createdAt: today(),
+        }],
+      };
+    });
   },
   toggleTodo(id) {
     setState(s => ({
       ...s,
       todos: s.todos.map(t => t.id === id
-        ? { ...t, done: !t.done, doneAt: !t.done ? today() : undefined, doneTs: !t.done ? Date.now() : undefined }
+        ? { ...t, done: !t.done, completedAt: !t.done ? new Date().toISOString() : null }
         : t),
     }));
   },
-  toggleHot(id) {
+  togglePin(id) {
     setState(s => ({
       ...s,
-      todos: s.todos.map(t => t.id === id ? { ...t, hot: !t.hot } : t),
+      todos: s.todos.map(t => t.id === id
+        ? { ...t, pinned: !t.pinned, pinnedAt: !t.pinned ? Date.now() : null }
+        : t),
     }));
+  },
+  setTodoDue(id, date) {
+    setState(s => ({ ...s, todos: s.todos.map(t => t.id === id ? { ...t, dueDate: date || null } : t) }));
+  },
+  updateTodo(id, patch) {
+    setState(s => ({ ...s, todos: s.todos.map(t => t.id === id ? { ...t, ...patch } : t) }));
+  },
+  reorderTodoBefore(fromId, beforeId) {
+    if (fromId === beforeId) return;
+    setState(s => {
+      const my = s.todos.filter(t => t.projectId === s.currentProjectId)
+        .slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const fromIdx = my.findIndex(t => t.id === fromId);
+      if (fromIdx < 0) return s;
+      const [moved] = my.splice(fromIdx, 1);
+      let beforeIdx = beforeId ? my.findIndex(t => t.id === beforeId) : my.length;
+      if (beforeIdx < 0) beforeIdx = my.length;
+      my.splice(beforeIdx, 0, moved);
+      const newOrder = {};
+      my.forEach((t, i) => { newOrder[t.id] = i; });
+      return { ...s, todos: s.todos.map(t => t.projectId === s.currentProjectId ? { ...t, order: newOrder[t.id] ?? t.order } : t) };
+    });
+  },
+  autoSortTodos() {
+    setState(s => {
+      const my = s.todos.filter(t => t.projectId === s.currentProjectId && !t.done && !t.pinned).slice();
+      my.sort((a, b) => {
+        if (!a.dueDate && !b.dueDate) return (a.order ?? 0) - (b.order ?? 0);
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return a.dueDate.localeCompare(b.dueDate);
+      });
+      const newOrder = {};
+      my.forEach((t, i) => { newOrder[t.id] = i; });
+      return { ...s, todos: s.todos.map(t => newOrder[t.id] != null ? { ...t, order: newOrder[t.id] } : t) };
+    });
   },
   removeTodo(id) {
     setState(s => ({ ...s, todos: s.todos.filter(t => t.id !== id) }));
+  },
+
+  // ----- 반복 (템플릿) -----
+  addRecurrence({ title, frequency, weeklyDays = [] }) {
+    const id = uid();
+    setState(s => ({
+      ...s,
+      recurrences: [...(s.recurrences ?? []), {
+        id, projectId: s.currentProjectId,
+        title: title.trim(), frequency, weeklyDays, active: true,
+        createdAt: today(),
+      }],
+    }));
+    return id;
+  },
+  updateRecurrence(id, patch) {
+    setState(s => ({ ...s, recurrences: (s.recurrences ?? []).map(r => r.id === id ? { ...r, ...patch } : r) }));
+  },
+  removeRecurrence(id) {
+    setState(s => ({
+      ...s,
+      recurrences: (s.recurrences ?? []).filter(r => r.id !== id),
+      // 연결된 할 일은 recurrenceId 만 끊고 본체는 유지
+      todos: s.todos.map(t => t.recurrenceId === id ? { ...t, recurrenceId: null } : t),
+    }));
+  },
+  // 오늘 생성돼야 할 반복 인스턴스를 만든다. 중복 생성 방지: (rule.id + dueDate=today) 조합 검사.
+  generateRecurrences() {
+    setState(s => {
+      const t = today();
+      const dow = new Date(t + "T00:00:00").getDay();   // 0=일 .. 6=토
+      const rules = (s.recurrences ?? []).filter(r => r.active);
+      const newTodos = [];
+      const orderMap = {};
+      // 프로젝트별 현재 최대 order
+      for (const r of rules) {
+        const matches =
+          r.frequency === "daily" ? true
+          : r.frequency === "weekdays" ? (dow >= 1 && dow <= 5)
+          : r.frequency === "weekly" ? (r.weeklyDays || []).includes(dow)
+          : false;
+        if (!matches) continue;
+        const exists = s.todos.some(td => td.recurrenceId === r.id && td.dueDate === t && td.projectId === r.projectId);
+        if (exists) continue;
+        if (orderMap[r.projectId] == null) {
+          orderMap[r.projectId] = s.todos.filter(td => td.projectId === r.projectId).reduce((m, td) => Math.max(m, td.order ?? 0), -1);
+        }
+        orderMap[r.projectId] += 1;
+        newTodos.push({
+          id: uid(), projectId: r.projectId,
+          title: r.title, pinned: false, pinnedAt: null,
+          dueDate: t, order: orderMap[r.projectId],
+          done: false, completedAt: null,
+          recurrenceId: r.id, trackedSeconds: 0,
+          createdAt: t,
+        });
+      }
+      if (!newTodos.length && s.lastGenDate === t) return s;
+      return { ...s, todos: [...s.todos, ...newTodos], lastGenDate: t };
+    });
   },
 
   // ----- 프롬프트 -----
@@ -321,6 +525,39 @@ const actions = {
     if (c && navigator.clipboard) navigator.clipboard.writeText(c.code).catch(() => {});
   },
 
+  // ----- 메모 (단일 html 본문) -----
+  addMemo({ html = "", icon } = {}) {
+    const id = uid();
+    const now = new Date().toISOString();
+    setState(s => ({
+      ...s,
+      memos: [
+        { id, projectId: s.currentProjectId,
+          title: memoTitleFromHtml(html), html,
+          icon: icon || randomMemoIcon(),
+          createdAt: now, updatedAt: now },
+        ...(s.memos ?? []),
+      ],
+    }));
+    return id;
+  },
+  updateMemo(id, patch) {
+    setState(s => ({
+      ...s,
+      memos: (s.memos ?? []).map(m => {
+        if (m.id !== id) return m;
+        const touchesContent = "html" in patch || "title" in patch;
+        const next = { ...m, ...patch };
+        if (touchesContent) next.updatedAt = new Date().toISOString();
+        if (!("title" in patch) && "html" in patch) next.title = memoTitleFromHtml(next.html);
+        return next;
+      }),
+    }));
+  },
+  removeMemo(id) {
+    setState(s => ({ ...s, memos: (s.memos ?? []).filter(m => m.id !== id) }));
+  },
+
   // ----- 회고 (날짜별 1개) -----
   saveRetro({ date = today(), text = "", good = "", bad = "" }) {
     setState(s => {
@@ -371,6 +608,33 @@ const actions = {
       const prev = s.notes[date] ?? "";
       return { ...s, notes: { ...s.notes, [date]: prev ? prev + "\n" + line.trim() : line.trim() } };
     });
+  },
+
+  // ----- 주간 노트 (월요일 기준) -----
+  setWeekNote(monday, text) {
+    setState(s => ({ ...s, weekNotes: { ...(s.weekNotes ?? {}), [monday]: text } }));
+  },
+
+  // ----- 빠른 답장 프리셋 -----
+  addReplyPreset({ label = "", text = "" } = {}) {
+    const id = uid();
+    setState(s => ({
+      ...s,
+      replyPresets: [
+        { id, label: label.trim(), text, createdAt: today() },
+        ...(s.replyPresets ?? []),
+      ],
+    }));
+    return id;
+  },
+  updateReplyPreset(id, patch) {
+    setState(s => ({
+      ...s,
+      replyPresets: (s.replyPresets ?? []).map(p => p.id === id ? { ...p, ...patch } : p),
+    }));
+  },
+  removeReplyPreset(id) {
+    setState(s => ({ ...s, replyPresets: (s.replyPresets ?? []).filter(p => p.id !== id) }));
   },
 
   // ----- Stuck note -----
@@ -469,6 +733,10 @@ const select = {
   todosForCurrent: (s) => s.todos.filter(t => t.projectId === s.currentProjectId),
   bookmarksForCurrent: (s) => s.aiBookmarks.filter(b => b.projectId === s.currentProjectId),
   commandsForCurrent: (s) => (s.commands ?? []).filter(c => c.projectId === s.currentProjectId),
+  memosForCurrent: (s) => (s.memos ?? [])
+    .filter(m => m.projectId === s.currentProjectId)
+    .slice()
+    .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || "")),
   retroForDate: (s, date = today()) => s.retros.find(r => r.date === date) ?? null,
   stuckForCurrent: (s) => s.stuck[s.currentProjectId] ?? "",
   workMinutesToday: (s) => {
@@ -479,4 +747,4 @@ const select = {
 };
 
 // 글로벌 노출
-window.diary = { useDiary, actions, select, today, fmtKDate, fmtKDateShort, getState };
+window.diary = { useDiary, actions, select, today, fmtKDate, fmtKDateShort, getState, memoTitleFromHtml, MEMO_ICONS };

@@ -1,194 +1,318 @@
-/* global React, diary, SplitPane */
+/* global React, diary */
 // ===========================================================
-// 달력 — 위: 선택한 날의 자동 기록 + 일기 메모 / 아래: 월간 달력(전체)
-// 마친 일/작업시간/받은 메일이 날짜별로 자동 기록됨. 다른 날짜도 편집 가능.
+// 주간 — Weekly Planner (자동 기록)
+//   2열 4행: 월/화, 수/목, 금/토, 일/Notes
+//   할 일 탭에서 등록한 마감일 · 완료한 일 · 작업 시간이 자동으로 모임.
+//   디데이는 헤더와 해당 날짜 셀에 표시. 직접 일정 추가는 없음.
 // ===========================================================
+const { useState, useEffect, useRef } = React;
 
 function pad2(n) { return String(n).padStart(2, "0"); }
-function ymLabel(year, month) {
-  const lng = window.i18n.get();
-  if (lng === "en") return `${["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][month]} ${year}`;
-  if (lng === "ko") return `${year}년 ${month + 1}월`;
-  return `${year}年 ${month + 1}月`; // zh / ja
+function dateOnly(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function startOfWeekMonday(date) {
+  const d = new Date(date);
+  const dow = d.getDay();
+  const offset = dow === 0 ? -6 : 1 - dow;
+  d.setDate(d.getDate() + offset);
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
-function dateStr(y, m, d) { return `${y}-${pad2(m + 1)}-${pad2(d)}`; }
-function tsTime(ts) { return ts ? new Date(ts).toTimeString().slice(0, 5) : ""; }
+function addDays(date, n) { const d = new Date(date); d.setDate(d.getDate() + n); return d; }
+function fmtMins(min) {
+  if (!min || min < 1) return null;
+  const h = Math.floor(min / 60); const m = min % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+function dDayLabel(target, base) {
+  if (!target) return null;
+  const a = new Date(target + "T00:00:00").getTime();
+  const b = new Date(dateOnly(base) + "T00:00:00").getTime();
+  const days = Math.round((a - b) / 86400000);
+  if (days === 0) return "D-DAY";
+  if (days > 0) return `D-${days}`;
+  return `D+${-days}`;
+}
 
 function CalendarView() {
   const { state, actions } = diary.useDiary();
-  const sel = state.selectedDate || diary.today();
+  const today = new Date();
+  const [weekStart, setWeekStart] = useState(() => startOfWeekMonday(today));
 
-  // 선택한 날의 자동 기록
-  const mins = (state.workSessions ?? []).find(w => w.date === sel)?.minutes ?? 0;
-  const doneTodos = (state.todos ?? [])
-    .filter(t => t.done && t.doneAt === sel)
-    .sort((a, b) => (a.doneTs ?? 0) - (b.doneTs ?? 0));
-  const mails = (state.emails ?? [])
-    .filter(e => e.createdAt === sel)
-    .sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
-  const note = state.notes?.[sel] ?? "";
+  const mondayStr = dateOnly(weekStart);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const dayStrings = days.map(dateOnly);
 
-  const h = Math.floor(mins / 60), m = mins % 60;
+  // 그 날 표시할 항목들 모으기
+  const todos = (state.todos ?? []).filter(t => t.projectId === state.currentProjectId);
+  const dueByDay = {};
+  const doneByDay = {};
+  dayStrings.forEach(d => { dueByDay[d] = []; doneByDay[d] = []; });
+  todos.forEach(t => {
+    if (t.dueDate && dueByDay[t.dueDate]) dueByDay[t.dueDate].push(t);
+    if (!t.dueDate && t.done && t.completedAt) {
+      const k = t.completedAt.slice(0, 10);
+      if (doneByDay[k]) doneByDay[k].push(t);
+    }
+  });
+  const workByDay = {};
+  (state.workSessions ?? []).forEach(w => { if (dayStrings.includes(w.date)) workByDay[w.date] = w.minutes; });
+
+  const weekNote = (state.weekNotes ?? {})[mondayStr] ?? "";
+  const dday = state.dday || {};
+
+  const goPrev = () => setWeekStart(s => addDays(s, -7));
+  const goNext = () => setWeekStart(s => addDays(s, 7));
+  const goThis = () => setWeekStart(startOfWeekMonday(new Date()));
+  const isThisWeek = mondayStr === dateOnly(startOfWeekMonday(new Date()));
+
+  // 이번 주 총 작업시간
+  const weekTotalMin = dayStrings.reduce((sum, d) => sum + (workByDay[d] || 0), 0);
 
   return (
-    <SplitPane
-      topLabel={`📖 ${window.i18n.fmtDate(sel)}`}
-      topRight={
-        sel !== diary.today() && (
-          <button onClick={() => actions.setSelectedDate(diary.today())} style={miniBtn}>{L("cal.todayBtn")}</button>
-        )
-      }
-      top={
-        <div>
-          {/* 자동 기록 */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-            <LogChip icon="🕒">{pad2(h)} H {pad2(m)} M</LogChip>
-            <LogChip icon="✓">{L("cal.done", { n: doneTodos.length })}</LogChip>
-            <LogChip icon="✉️">{L("cal.mails", { n: mails.length })}</LogChip>
+    <div style={{ height: "100%", padding: "8px 8px 8px", boxSizing: "border-box", background: "transparent" }}>
+      {/* 별도 창 — 95% 알파, 그라데이션 타이틀바/푸터, 검은 보더 */}
+      <div style={{
+        height: "100%", display: "flex", flexDirection: "column", minHeight: 0,
+        background: "rgba(255,255,255,0.95)",
+        border: "1.1px solid var(--ink)", borderRadius: 10,
+        boxShadow: "0 2px 0 var(--paper-3)",
+        overflow: "hidden",
+      }}>
+        {/* 타이틀바 (그라데이션) */}
+        <div style={{
+          flexShrink: 0,
+          padding: "6px 10px",
+          display: "flex", alignItems: "center", gap: 6,
+          background: "linear-gradient(180deg, color-mix(in srgb, var(--chrome,#a9cdf5) 42%, white) 0%, color-mix(in srgb, var(--chrome,#a9cdf5) 12%, white) 100%)",
+          borderBottom: "1.1px solid var(--ink)",
+        }}>
+          <button onClick={goPrev} title={L("planner.prev")} style={gradNavBtn}>◀</button>
+          <div style={{
+            flex: 1, textAlign: "center",
+            fontFamily: "var(--hand)", fontSize: 14, fontWeight: 700,
+            color: "var(--ink)",
+          }}>
+            {rangeLabel(weekStart)}
           </div>
-
-          {(doneTodos.length > 0 || mails.length > 0) && (
-            <div style={{
-              background: "var(--paper-2)", border: "1px dashed var(--ink-soft)", borderRadius: 8,
-              padding: "6px 9px", marginBottom: 8,
-            }}>
-              {doneTodos.map(t => (
-                <div key={t.id} style={logLine}>
-                  <span style={{ color: "var(--ink-3)", fontFamily: "var(--mono)", fontSize: 11, width: 38, flexShrink: 0 }}>{tsTime(t.doneTs) || "—"}</span>
-                  <span>✓ {t.text}</span>
-                </div>
-              ))}
-              {mails.map(e => (
-                <div key={e.id} style={logLine}>
-                  <span style={{ color: "var(--ink-3)", fontFamily: "var(--mono)", fontSize: 11, width: 38, flexShrink: 0 }}>{tsTime(e.ts) || "—"}</span>
-                  <span>✉️ {e.subject || e.body?.slice(0, 24) || "문의"}</span>
-                </div>
-              ))}
-            </div>
+          <button onClick={goNext} title={L("planner.next")} style={gradNavBtn}>▶</button>
+          {!isThisWeek && (
+            <button onClick={goThis} title={L("planner.thisWeek")} style={pillBtn}>{L("planner.thisWeek")}</button>
           )}
+        </div>
 
-          {/* 일기 메모 */}
-          <textarea
-            value={note}
-            onChange={e => actions.setNote(sel, e.target.value)}
-            placeholder={L("cal.note")}
-            rows={4}
-            style={{
-              width: "100%", boxSizing: "border-box", resize: "vertical", minHeight: 70,
-              border: "1.1px solid var(--ink-soft)", borderRadius: 8, outline: "none",
-              background: "var(--paper)", padding: "8px 10px",
-              fontFamily: "var(--hand)", fontSize: 15, color: "var(--ink)", lineHeight: 1.5,
-            }}
+        {/* 2x4 그리드 */}
+        <div style={{
+          flex: 1, minHeight: 0,
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gridTemplateRows: "repeat(4, 1fr)",
+        }}>
+          {[0, 1, 2, 3, 4, 5, 6].map(i => (
+            <DayCell key={i}
+              date={days[i]}
+              dateStr={dayStrings[i]}
+              labelKey={DAY_KEYS[i]}
+              due={dueByDay[dayStrings[i]] || []}
+              doneFloat={doneByDay[dayStrings[i]] || []}
+              workMin={workByDay[dayStrings[i]] || 0}
+              ddayLabel={dday.date === dayStrings[i] ? dDayLabel(dday.date, today) : null}
+              ddayName={dday.date === dayStrings[i] ? (dday.label || L("dday.dday")) : null}
+              isToday={dayStrings[i] === diary.today()}
+              actions={actions}
+              colIdx={i % 2}
+              rowIdx={Math.floor(i / 2)}
+            />
+          ))}
+          <NotesCell
+            mondayStr={mondayStr}
+            value={weekNote}
+            onSave={(text) => actions.setWeekNote(mondayStr, text)}
           />
         </div>
-      }
-      bottomScroll={false}
-      bottom={<MonthCalendar state={state} selected={sel} onPick={d => actions.setSelectedDate(d)} />}
-    />
-  );
-}
 
-function LogChip({ icon, children }) {
-  return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: 4,
-      padding: "2px 9px", borderRadius: 99, border: "1.1px solid var(--ink)",
-      background: "white", fontFamily: "var(--mono)", fontSize: 11, fontWeight: 700, color: "var(--ink)",
-    }}>{icon} {children}</span>
-  );
-}
-
-const logLine = {
-  display: "flex", gap: 6, alignItems: "baseline",
-  fontFamily: "var(--hand)", fontSize: 13, color: "var(--ink-2)", lineHeight: 1.5,
-};
-const miniBtn = {
-  all: "unset", cursor: "pointer", padding: "1px 9px", borderRadius: 99,
-  border: "1.1px solid var(--ink)", background: "var(--paper)",
-  fontFamily: "var(--hand)", fontSize: 12, color: "var(--ink)",
-};
-
-// ---- 월간 달력 (아래칸 전체 사용) ----
-function MonthCalendar({ state, selected, onPick }) {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const todayStr = diary.today();
-
-  const startDow = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  const dday = state.dday ?? { date: "" };
-  const ddayStr = dday.date;
-
-  // 활동 있는 날 집합
-  const activity = new Set();
-  (state.workSessions ?? []).forEach(w => { if (w.minutes > 0) activity.add(w.date); });
-  (state.todos ?? []).forEach(t => { if (t.done && t.doneAt) activity.add(t.doneAt); });
-  (state.emails ?? []).forEach(e => { if (e.createdAt) activity.add(e.createdAt); });
-  Object.keys(state.notes ?? {}).forEach(d => { if ((state.notes[d] ?? "").trim()) activity.add(d); });
-
-  const cells = [];
-  for (let i = 0; i < startDow; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-  while (cells.length % 7 !== 0) cells.push(null);
-  const rows = cells.length / 7;
-  const dows = window.i18n.weekdays();
-
-  return (
-    <div style={{
-      height: "100%", minHeight: 0, display: "flex", flexDirection: "column",
-      border: "1.1px solid var(--ink)", borderRadius: 10, overflow: "hidden", background: "white",
-    }}>
-      <div style={{
-        padding: "5px 10px",
-        background: "linear-gradient(180deg, color-mix(in srgb, var(--chrome) 45%, white), var(--chrome))",
-        borderBottom: "1.1px solid var(--ink)", textAlign: "center",
-        fontFamily: "var(--hand)", fontSize: 14, fontWeight: 700, color: "var(--ink)", flexShrink: 0,
-      }}>{ymLabel(year, month)}</div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", flexShrink: 0 }}>
-        {dows.map((w, i) => (
-          <div key={w} style={{
-            textAlign: "center", padding: "3px 0", fontFamily: "var(--mono)", fontSize: 10,
-            color: i === 0 ? "#e06a7a" : (i === 6 ? "#5b8fd6" : "var(--ink-3)"),
-          }}>{w}</div>
-        ))}
-      </div>
-
-      <div style={{
-        flex: 1, minHeight: 0, display: "grid",
-        gridTemplateColumns: "repeat(7,1fr)", gridTemplateRows: `repeat(${rows},1fr)`,
-      }}>
-        {cells.map((d, i) => {
-          if (d == null) return <div key={i} style={{ borderTop: "1px solid var(--paper-3)", borderLeft: i % 7 === 0 ? "none" : "1px solid var(--paper-3)" }} />;
-          const ds = dateStr(year, month, d);
-          const isToday = ds === todayStr;
-          const isSel = ds === selected;
-          const isDday = ds === ddayStr;
-          const hasAct = activity.has(ds);
-          return (
-            <button key={i} onClick={() => onPick(ds)} style={{
-              all: "unset", cursor: "pointer", position: "relative",
-              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2,
-              borderTop: "1px solid var(--paper-3)",
-              borderLeft: i % 7 === 0 ? "none" : "1px solid var(--paper-3)",
-              background: isSel ? "var(--hi-soft)" : "transparent",
-              boxShadow: isSel ? "inset 0 0 0 1.6px var(--ink)" : "none",
-            }}>
-              <span style={{
-                width: 22, height: 22, display: "grid", placeItems: "center", borderRadius: "50%",
-                fontFamily: "var(--mono)", fontSize: 11, fontWeight: isToday || isDday ? 700 : 400,
-                background: isToday ? "var(--point)" : "transparent",
-                border: isDday ? "1.6px solid #ff8da1" : "none", color: "var(--ink)",
-              }}>{d}</span>
-              {hasAct && <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#5b8fd6" }} />}
-            </button>
-          );
-        })}
+        {/* 푸터 — 이번 주 총 작업시간 (그라데이션) */}
+        <div style={{
+          flexShrink: 0,
+          padding: "6px 12px",
+          display: "flex", alignItems: "center", gap: 6,
+          background: "linear-gradient(180deg, color-mix(in srgb, var(--chrome,#a9cdf5) 40%, white) 0%, color-mix(in srgb, var(--chrome,#a9cdf5) 14%, white) 100%)",
+          borderTop: "1.1px solid var(--ink)",
+        }}>
+          <span style={{ fontSize: 12 }}>🕒</span>
+          <span style={{ fontFamily: "var(--hand)", fontSize: 12, color: "var(--ink-2)", fontWeight: 700 }}>
+            {L("planner.weekTotal")}
+          </span>
+          <span style={{ flex: 1 }} />
+          <span style={{ fontFamily: "var(--mono)", fontSize: 12, fontWeight: 700, color: "var(--ink)" }}>
+            {fmtMins(weekTotalMin) || "0m"}
+          </span>
+        </div>
       </div>
     </div>
   );
 }
+
+const DAY_KEYS = [
+  "planner.mon", "planner.tue", "planner.wed", "planner.thu",
+  "planner.fri", "planner.sat", "planner.sun",
+];
+
+function rangeLabel(weekStart) {
+  const end = addDays(weekStart, 6);
+  const lng = (window.i18n && window.i18n.get && window.i18n.get()) || "ko";
+  const fmt = (d) => {
+    if (lng === "en") return `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]} ${d.getDate()}`;
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  };
+  return `${fmt(weekStart)} – ${fmt(end)}`;
+}
+
+function DayCell({ date, dateStr, labelKey, due, doneFloat, workMin, ddayLabel, ddayName, isToday, actions, colIdx, rowIdx }) {
+  const allItems = [...due, ...doneFloat];
+  return (
+    <div style={{
+      borderRight: colIdx === 0 ? "1px solid var(--ink)" : "none",
+      borderBottom: rowIdx < 3 ? "1px solid var(--ink)" : "none",
+      padding: "6px 8px 5px",
+      display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden",
+      background: "transparent",
+    }}>
+      {/* 셀 헤더 */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexShrink: 0, flexWrap: "wrap" }}>
+        <span style={{
+          fontFamily: "var(--hand)",
+          fontSize: 13, fontWeight: 700, color: "var(--ink)",
+        }}>{L(labelKey)}</span>
+        <span style={{ fontFamily: "var(--mono)", fontSize: 9.5, color: "var(--ink-3)" }}>
+          {date.getMonth() + 1}/{date.getDate()}
+        </span>
+        {isToday && <span style={{
+          fontFamily: "var(--mono)", fontSize: 9, color: "var(--ink)",
+          background: "var(--point)", padding: "0 5px", borderRadius: 99,
+          border: "1px solid var(--ink)",
+        }}>{L("planner.today")}</span>}
+        {ddayLabel && <span title={ddayName} style={{
+          fontFamily: "var(--mono)", fontSize: 9, color: "var(--ink)",
+          background: "#ffd0d8", padding: "0 5px", borderRadius: 99,
+          border: "1px solid var(--ink)",
+        }}>★ {ddayLabel}</span>}
+      </div>
+
+      {/* 자동 기록된 항목들 */}
+      <div style={{
+        flex: 1, minHeight: 0, overflowY: "auto",
+        marginTop: 4,
+      }}>
+        {allItems.length === 0 && !workMin && (
+          <div style={{ fontFamily: "var(--hand)", fontSize: 10.5, color: "var(--ink-3)", marginTop: 2 }}>
+            ·
+          </div>
+        )}
+        {allItems.map(t => (
+          <div key={t.id} style={{
+            display: "flex", alignItems: "flex-start", gap: 5,
+            padding: "1.5px 0",
+            fontFamily: "var(--hand)", fontSize: 11.5,
+            color: t.done ? "var(--ink-3)" : "var(--ink)",
+            lineHeight: 1.35,
+          }}>
+            <button
+              onClick={() => actions.toggleTodo(t.id)}
+              title={t.done ? "되돌리기" : "끝냄으로 표시"}
+              style={{
+                all: "unset", cursor: "pointer", flexShrink: 0,
+                width: 11, height: 11, marginTop: 2,
+                border: "1px solid var(--ink)", borderRadius: 2,
+                background: t.done ? "var(--ink)" : "transparent",
+                display: "grid", placeItems: "center",
+                fontSize: 8, color: "#fff",
+              }}
+            >{t.done ? "✓" : ""}</button>
+            <span style={{
+              flex: 1, minWidth: 0,
+              textDecoration: t.done ? "line-through" : "none",
+              wordBreak: "break-word",
+            }}>{t.title}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* 작업시간 푸터 */}
+      {!!workMin && (
+        <div style={{
+          flexShrink: 0, marginTop: 4,
+          display: "inline-flex", alignItems: "center", gap: 4,
+          fontFamily: "var(--mono)", fontSize: 10, color: "var(--ink-2)",
+        }}>
+          <span>🕒</span><span>{fmtMins(workMin)}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NotesCell({ mondayStr, value, onSave }) {
+  const [text, setText] = useState(value);
+  const timerRef = useRef(null);
+  useEffect(() => { setText(value); }, [mondayStr]);
+
+  const onChange = (v) => {
+    setText(v);
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => onSave(v), 500);
+  };
+  useEffect(() => {
+    return () => {
+      clearTimeout(timerRef.current);
+      onSave(text);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mondayStr]);
+
+  return (
+    <div style={{
+      padding: "6px 8px",
+      display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden",
+      background: "transparent",
+    }}>
+      <div style={{
+        fontFamily: "var(--hand)",
+        fontSize: 13, fontWeight: 700, color: "var(--ink)",
+        flexShrink: 0, marginBottom: 3,
+      }}>{L("planner.notes")}:</div>
+      <textarea
+        value={text}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={L("planner.notesPh")}
+        style={{
+          flex: 1, minHeight: 0,
+          width: "100%", boxSizing: "border-box",
+          border: 0, outline: "none", resize: "none",
+          background: "transparent",
+          fontFamily: "var(--hand)", fontSize: 12, color: "var(--ink)",
+          lineHeight: 1.55,
+        }}
+      />
+    </div>
+  );
+}
+
+const gradNavBtn = {
+  all: "unset", cursor: "pointer",
+  width: 26, height: 22, borderRadius: 5,
+  display: "grid", placeItems: "center",
+  fontSize: 10, color: "var(--ink)",
+  background: "linear-gradient(180deg, color-mix(in srgb, var(--chrome,#a9cdf5) 42%, white) 0%, color-mix(in srgb, var(--chrome,#a9cdf5) 12%, white) 100%)",
+  border: "1.1px solid var(--ink)",
+  boxShadow: "0 1px 0 var(--paper-3)",
+};
+const pillBtn = {
+  all: "unset", cursor: "pointer",
+  padding: "2px 9px", borderRadius: 99,
+  fontFamily: "var(--hand)", fontSize: 11, color: "var(--ink)",
+  border: "1.1px solid var(--ink)", background: "var(--paper)",
+};
 
 window.CalendarView = CalendarView;

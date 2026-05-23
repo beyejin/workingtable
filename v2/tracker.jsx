@@ -18,6 +18,29 @@ const IDLE_MS = 5 * 60 * 1000;   // 5분 무입력 = 유휴
 const TICK_MS = 10 * 1000;       // 체크 간격
 const TICK_SEC = TICK_MS / 1000;
 
+// ---- 외부 작업 모드 (module-level) ----
+// 사용자가 클튜/포토샵 등 다른 앱에서 일할 때 켜는 모드.
+// 켜져있으면 ActivityTracker가 visible/focused/idle 체크를 무시하고 무조건 카운트.
+// 안전상 새 세션마다 OFF로 시작 (영구 저장 안 함).
+(function () {
+  let externalMode = false;
+  let startedAt = null;
+  const subs = new Set();
+  window.workTracker = {
+    isExternal() { return externalMode; },
+    startedAt() { return startedAt; },
+    setExternal(on) {
+      const next = !!on;
+      if (next === externalMode) return;
+      externalMode = next;
+      startedAt = next ? Date.now() : null;
+      for (const fn of subs) fn(externalMode);
+    },
+    toggle() { this.setExternal(!externalMode); },
+    subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
+  };
+})();
+
 // ---- 트래커 ----
 function ActivityTracker() {
   const { actions } = diary.useDiary();
@@ -40,11 +63,17 @@ function ActivityTracker() {
 
   useEffect(() => {
     const id = setInterval(() => {
-      const now = Date.now();
-      const idle = now - lastActivityRef.current > IDLE_MS;
-      const visible = document.visibilityState === "visible";
-      const focused = document.hasFocus();
-      const active = visible && focused && !idle;
+      const external = window.workTracker && window.workTracker.isExternal();
+      let active;
+      if (external) {
+        active = true; // 외부 작업 모드 — 무조건 카운트
+      } else {
+        const now = Date.now();
+        const idle = now - lastActivityRef.current > IDLE_MS;
+        const visible = document.visibilityState === "visible";
+        const focused = document.hasFocus();
+        active = visible && focused && !idle;
+      }
       if (!active) return;
 
       pendingSecRef.current += TICK_SEC;

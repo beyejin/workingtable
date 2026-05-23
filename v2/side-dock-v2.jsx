@@ -1,4 +1,4 @@
-/* global React, TodayView, TodoView, MailView, PromptView, AIView, RetroView */
+/* global React, TodayView, TodoView, MemoView, MailView, PromptView, AIView, RetroView */
 // ===========================================================
 // 사이드 도크 v2 — 다이어리 인덱스 탭 + 뷰 전환
 // 도크 본체 + 옆에 삐죽 나오는 종이 탭들.
@@ -10,9 +10,9 @@ const { useState } = React;
 
 const TABS = [
   { id: "todo",  labelKey: "tab.todo",     glyph: "✓", color: "#d4ecdb", view: () => <TodoView /> },
-  { id: "cheat", labelKey: "tab.cheat",    glyph: "❯", color: "#ffe8c8", view: () => <CheatView /> },
+  { id: "cal",   labelKey: "tab.week",     glyph: "📅", color: "#d4e6fa", view: () => <CalendarView /> },
+  { id: "memo",  labelKey: "tab.memo",     glyph: "📝", color: "#fff0c0", view: () => <MemoView /> },
   { id: "mail",  labelKey: "tab.mail",     glyph: "✉", color: "#ffe0d2", view: () => <MailView /> },
-  { id: "cal",   labelKey: "tab.cal",      glyph: "📅", color: "#d4e6fa", view: () => <CalendarView /> },
   { id: "deco",  labelKey: "tab.deco",     glyph: "🎨", color: "#ffe6f0", view: () => null, foot: true },
   { id: "settings", labelKey: "tab.settings", glyph: "⚙", color: "#e6e6ee", view: () => null, foot: true },
 ];
@@ -151,9 +151,9 @@ function tabHeaderInfo(active, state) {
       const hot = items.filter(t => t.hot && !t.done).length;
       return { ttl: "할 일", sub: `${notDone}개 남음 · ${hot}개 급함` };
     }
-    case "cheat": {
-      const cnt = sel.commandsForCurrent(state).length;
-      return { ttl: "치트", sub: `${project?.name ?? "프로젝트"} · ${cnt}개 · 클릭 → 복사` };
+    case "memo": {
+      const cnt = (sel.memosForCurrent ? sel.memosForCurrent(state) : []).length;
+      return { ttl: "메모", sub: `${project?.name ?? "프로젝트"} · ${cnt}개 · 자동 저장` };
     }
     case "prompt":
       return { ttl: "프롬프트 함", sub: `${(state.prompts ?? []).length}개 보관됨 · 자주 쓰는 순` };
@@ -355,14 +355,10 @@ function SettingsView({ tweaks, setTweak }) {
           options={[["left", L("set.left")], ["right", L("set.right")]]} />
       </SetSection>
 
-      <SetSection label={L("set.tabDir")}>
-        <SetSeg value={t.tabSide ?? "right"} onChange={v => set("tabSide", v)}
-          options={[["right", L("set.outer")], ["left", L("set.inner")]]} />
-      </SetSection>
-
-      <SetSection label={L("set.desktop")}>
-        <SetSeg value={t.desktopMode ? "on" : "off"} onChange={v => set("desktopMode", v === "on")}
+      <SetSection label={L("set.alwaysOnTop")}>
+        <SetSeg value={t.alwaysOnTop ? "on" : "off"} onChange={v => set("alwaysOnTop", v === "on")}
           options={[["on", L("set.on")], ["off", L("set.off")]]} />
+        <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.alwaysOnTopHint")}</div>
       </SetSection>
 
       <SetSection label={L("set.data")}>
@@ -662,7 +658,7 @@ function KeyboardInput({ active }) {
 
   const CFG = {
     todo:  { ph: "할 일 추가…  (Enter 저장 · Shift+Enter 줄바꿈)",      add: (t) => actions.addTodo(t) },
-    cheat: { ph: "명령어 저장…  (Enter 저장 · Shift+Enter 줄바꿈)",    add: (t) => actions.addCommand({ code: t }) },
+    memo:  { ph: "메모 추가…  (Enter 저장 · Shift+Enter 줄바꿈)",       add: (t) => actions.addMemo({ body: t }) },
     mail:  { ph: "받은 메일 붙여넣고 Enter…  (Shift+Enter 줄바꿈)",     add: (t) => actions.addInquiry({ subject: t.split("\n")[0].slice(0, 60), body: t }) },
     cal:   { ph: "이 날짜에 메모 추가…  (Enter 저장)",                  add: (t) => actions.appendNote(state.selectedDate || diary.today(), t) },
   };
