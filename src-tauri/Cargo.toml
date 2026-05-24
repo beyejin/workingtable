@@ -1,6 +1,6 @@
 [package]
 name = "vibe-diary"
-version = "0.4.7"
+version = "0.4.8"
 description = "바이브코딩 다이어리"
 edition = "2021"
 rust-version = "1.77"
@@ -11,7 +11,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # devtools: 릴리스 빌드에서도 우클릭 → 요소 검사 가능 (v0.4.3 진단용).
 # 원인 파악되면 다음 패치에서 제거.
-tauri = { version = "2", features = ["macos-private-api", "devtools"] }
+tauri = { version = "2", features = ["macos-private-api", "devtools", "unstable"] }
 tauri-plugin-notification = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-opener = "2"

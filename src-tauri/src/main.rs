@@ -9,6 +9,7 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             youtube_player_mode,
+            youtube_player_set_bounds,
             youtube_player_play,
             youtube_player_pause,
             youtube_player_resume,
@@ -63,6 +64,18 @@ fn youtube_player_stop(app: tauri::AppHandle) -> Result<(), String> {
     native_youtube::stop(app)
 }
 
+#[tauri::command]
+fn youtube_player_set_bounds(
+    app: tauri::AppHandle,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    visible: bool,
+) -> Result<(), String> {
+    native_youtube::set_bounds(app, x, y, width, height, visible)
+}
+
 async fn check_update(app: tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let updater = app.updater()?;
     if let Some(update) = updater.check().await? {
@@ -78,7 +91,7 @@ async fn check_update(app: tauri::AppHandle) -> Result<(), Box<dyn std::error::E
 mod native_youtube {
     use objc2_foundation::{NSMutableURLRequest, NSURL, NSString};
     use objc2_web_kit::WKWebView;
-    use tauri::{Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+    use tauri::{LogicalPosition, LogicalSize, Manager, Webview, WebviewBuilder, WebviewUrl};
 
     const LABEL: &str = "youtube-player";
     const REFERRER: &str = "https://app.vibe-diary";
@@ -94,18 +107,18 @@ mod native_youtube {
             .filter(|id| validate_video_id(id).is_ok())
             .collect::<Vec<_>>();
         let embed_url = embed_url(&video_id, &playlist);
-        let window = get_or_create_window(&app)?;
+        let webview = get_or_create_webview(&app)?;
 
-        window.show().map_err(|e| e.to_string())?;
-        let _ = window.set_focus();
-        load_with_referer(&window, embed_url, REFERRER.to_string())
+        let _ = webview.show();
+        let _ = webview.set_focus();
+        load_with_referer(&webview, embed_url, REFERRER.to_string())
     }
 
     pub fn pause(app: tauri::AppHandle) -> Result<(), String> {
-        eval_player(
-            &app,
-            r#"(function(){var v=document.querySelector("video");if(v)v.pause();})()"#,
-        )
+        let webview = app
+            .get_webview(LABEL)
+            .ok_or_else(|| "youtube player is not open".to_string())?;
+        load_with_referer(&webview, "about:blank".to_string(), REFERRER.to_string())
     }
 
     pub fn resume(app: tauri::AppHandle) -> Result<(), String> {
@@ -116,39 +129,67 @@ mod native_youtube {
     }
 
     pub fn stop(app: tauri::AppHandle) -> Result<(), String> {
-        if let Some(window) = app.get_webview_window(LABEL) {
-            window.close().map_err(|e| e.to_string())?;
+        if let Some(webview) = app.get_webview(LABEL) {
+            webview.close().map_err(|e| e.to_string())?;
         }
         Ok(())
     }
 
-    fn get_or_create_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
-        if let Some(window) = app.get_webview_window(LABEL) {
-            return Ok(window);
+    pub fn set_bounds(
+        app: tauri::AppHandle,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+        visible: bool,
+    ) -> Result<(), String> {
+        let webview = get_or_create_webview(&app)?;
+        webview
+            .set_position(LogicalPosition::new(x, y))
+            .map_err(|e| e.to_string())?;
+        webview
+            .set_size(LogicalSize::new(width, height))
+            .map_err(|e| e.to_string())?;
+        if visible {
+            webview.show().map_err(|e| e.to_string())?;
+        } else {
+            webview.hide().map_err(|e| e.to_string())?;
         }
+        Ok(())
+    }
+
+    fn get_or_create_webview(app: &tauri::AppHandle) -> Result<Webview, String> {
+        if let Some(webview) = app.get_webview(LABEL) {
+            return Ok(webview);
+        }
+
+        let main = app
+            .get_webview_window("main")
+            .ok_or_else(|| "main webview window not found".to_string())?;
+        let parent = main.as_ref().window();
 
         let url = "about:blank"
             .parse()
             .map_err(|e: url::ParseError| e.to_string())?;
+        let builder = WebviewBuilder::new(LABEL, WebviewUrl::External(url));
 
-        WebviewWindowBuilder::new(app, LABEL, WebviewUrl::External(url))
-            .title("vibe diary music")
-            .inner_size(480.0, 270.0)
-            .min_inner_size(356.0, 200.0)
-            .resizable(true)
-            .decorations(true)
-            .skip_taskbar(true)
-            .visible(false)
-            .build()
-            .map_err(|e| e.to_string())
+        let webview = parent
+            .add_child(
+                builder,
+                LogicalPosition::new(0.0, 0.0),
+                LogicalSize::new(356.0, 200.0),
+            )
+            .map_err(|e| e.to_string())?;
+        let _ = webview.hide();
+        Ok(webview)
     }
 
     fn load_with_referer(
-        window: &WebviewWindow,
+        webview: &Webview,
         embed_url: String,
         referer: String,
     ) -> Result<(), String> {
-        window
+        webview
             .with_webview(move |webview| unsafe {
                 let view: &WKWebView = &*webview.inner().cast();
                 let Some(url) = NSURL::URLWithString(&NSString::from_str(&embed_url)) else {
@@ -165,10 +206,10 @@ mod native_youtube {
     }
 
     fn eval_player(app: &tauri::AppHandle, js: &str) -> Result<(), String> {
-        let window = app
-            .get_webview_window(LABEL)
+        let webview = app
+            .get_webview(LABEL)
             .ok_or_else(|| "youtube player is not open".to_string())?;
-        window.eval(js).map_err(|e| e.to_string())
+        webview.eval(js).map_err(|e| e.to_string())
     }
 
     fn embed_url(video_id: &str, playlist: &[String]) -> String {
@@ -197,6 +238,17 @@ mod native_youtube {
 
 #[cfg(not(target_os = "macos"))]
 mod native_youtube {
+    pub fn set_bounds(
+        _app: tauri::AppHandle,
+        _x: f64,
+        _y: f64,
+        _width: f64,
+        _height: f64,
+        _visible: bool,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+
     pub fn play(
         _app: tauri::AppHandle,
         _video_id: String,

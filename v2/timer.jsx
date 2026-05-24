@@ -214,7 +214,9 @@ function PlaylistBar() {
   const tracks = state.playlist ?? [];
   const music = useMusic();
   const [open, setOpen] = useState(false);
+  const [playerOpen, setPlayerOpen] = useState(false);
   const [err, setErr] = useState("");
+  const playerSlotRef = useRef(null);
 
   // 플레이리스트 변경 시 전역 큐 동기화 (저장 곡 자동 재생)
   useEffect(() => { window.musicPlayer.setQueue(tracks); }, [tracks]);
@@ -234,14 +236,58 @@ function PlaylistBar() {
   const ms = music.getState();
   const label = ms.hasQueue ? (ms.title || L("music.loading")) : L("music.add");
 
+  const syncNativePlayer = () => {
+    if (!ms.nativeMode || !music.setNativeViewport) return;
+    const visible = open && playerOpen;
+    const el = playerSlotRef.current;
+    if (!visible || !el) {
+      music.setNativeViewport({ x: 0, y: 0, width: 1, height: 1, visible: false });
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    music.setNativeViewport({
+      x: Math.round(r.left),
+      y: Math.round(r.top),
+      width: Math.max(1, Math.round(r.width)),
+      height: Math.max(1, Math.round(r.height)),
+      visible: true,
+    });
+  };
+
+  useEffect(() => {
+    if (!ms.nativeMode || !music.setNativeViewport) return;
+    let raf = requestAnimationFrame(syncNativePlayer);
+    const on = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(syncNativePlayer);
+    };
+    window.addEventListener("resize", on);
+    window.addEventListener("scroll", on, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", on);
+      window.removeEventListener("scroll", on, true);
+    };
+  }, [ms.nativeMode, ms.videoId, ms.playing, open, playerOpen]);
+
+  const runMusic = (fn) => {
+    if (ms.nativeMode && tracks.length && !playerOpen) {
+      setOpen(true);
+      setPlayerOpen(true);
+      setTimeout(fn, 80);
+    } else {
+      fn();
+    }
+  };
+
   return (
     <div style={{ position: "relative" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <button onClick={() => music.prev()} title="이전" style={pbBtn}>⏮</button>
-        <button onClick={() => music.toggle()} title={ms.playing ? "일시정지" : "재생"} style={pbBtn}>
+        <button onClick={() => runMusic(() => music.prev())} title="이전" style={pbBtn}>⏮</button>
+        <button onClick={() => runMusic(() => music.toggle())} title={ms.playing ? "일시정지" : "재생"} style={pbBtn}>
           {ms.playing ? "⏸" : "▶"}
         </button>
-        <button onClick={() => music.next()} title="다음" style={pbBtn}>⏭</button>
+        <button onClick={() => runMusic(() => music.next())} title="다음" style={pbBtn}>⏭</button>
         <div className="marquee" style={{
           flex: 1, height: 20, lineHeight: "20px",
           borderRadius: 6, padding: "0 4px",
@@ -270,6 +316,39 @@ function PlaylistBar() {
         }}>
           <div className="sk-label" style={{ marginBottom: 6 }}>{L("music.playlist")}</div>
           <InlineAdd placeholder={L("music.paste")} onAdd={add} />
+          {ms.nativeMode && (
+            <div style={{ marginTop: 8 }}>
+              <button
+                onClick={() => setPlayerOpen(v => !v)}
+                title="YouTube"
+                style={{
+                  all: "unset", cursor: "pointer", width: "100%",
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  boxSizing: "border-box", padding: "4px 6px",
+                  border: "1.1px solid var(--ink)", borderRadius: 6,
+                  background: "var(--paper-2)", color: "var(--ink)",
+                  fontFamily: "var(--mono)", fontSize: 11,
+                }}
+              >
+                <span>YouTube</span>
+                <span>{playerOpen ? "▾" : "▸"}</span>
+              </button>
+              {playerOpen && (
+                <div
+                  ref={playerSlotRef}
+                  style={{
+                    marginTop: 6,
+                    width: "100%",
+                    height: 200,
+                    overflow: "hidden",
+                    border: "1.1px solid var(--ink)",
+                    borderRadius: 6,
+                    background: "#111",
+                  }}
+                />
+              )}
+            </div>
+          )}
           {err && <div className="sk-cap" style={{ color: "var(--bad)", marginTop: 4 }}>{err}</div>}
           {tracks.length > 0 ? (
             <div style={{ marginTop: 6, maxHeight: 160, overflowY: "auto", overflowX: "hidden" }}>
@@ -281,7 +360,7 @@ function PlaylistBar() {
                     padding: "3px 5px", borderRadius: 6,
                     background: isCur ? "var(--hi-soft)" : "transparent",
                   }}>
-                    <button onClick={() => music.play(t.videoId)} title="재생" style={{
+                    <button onClick={() => runMusic(() => music.play(t.videoId))} title="재생" style={{
                       all: "unset", cursor: "pointer", width: 16, textAlign: "center",
                       color: "var(--ink)", fontSize: 12,
                     }}>{isCur && ms.playing ? "♪" : "▶"}</button>

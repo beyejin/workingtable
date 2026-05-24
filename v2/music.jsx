@@ -24,7 +24,14 @@
   let wantPlay = false;
   let apiTimer = null;
   let readyTimer = null;
-  const state = { playing: false, title: "", videoId: null, hasQueue: false, debug: "" };
+  const state = {
+    playing: false,
+    title: "",
+    videoId: null,
+    hasQueue: false,
+    debug: "",
+    nativeMode: useNativeMode,
+  };
   const subs = new Set();
 
   const emit = () => { for (const fn of subs) fn(); };
@@ -64,6 +71,7 @@
       playlist: playlistAfter(startIdx),
     }).catch(err => {
       fallbackToRaw(err && err.message ? err.message : err);
+      state.nativeMode = false;
     });
   }
 
@@ -132,6 +140,7 @@
     if (useRawMode) return;
     useNativeMode = false;
     useRawMode = true;
+    state.nativeMode = false;
     clearTimers();
     try { if (player && player.destroy) player.destroy(); } catch (_) {}
     player = null;
@@ -310,10 +319,7 @@
           emit();
         } else if (queue.length) {
           if (state.videoId) {
-            invokeNative("youtube_player_resume").catch(() => play(index, true));
-            state.playing = true;
-            setDebug("native macOS player");
-            emit();
+            play(index, true);
           } else {
             play(index, true);
           }
@@ -346,6 +352,10 @@
     },
     next() { if (queue.length) play(index + 1, true); },
     prev() { if (queue.length) play(index - 1, true); },
+    setNativeViewport(rect) {
+      if (!useNativeMode) return;
+      invokeNative("youtube_player_set_bounds", rect).catch(err => fallbackToRaw(err));
+    },
     getState() { return state; },
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
   };
