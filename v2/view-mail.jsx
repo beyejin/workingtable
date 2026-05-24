@@ -169,6 +169,29 @@ function MailDetail({ m, actions, onBack }) {
 }
 
 // ---- 2번째 화면 아래 — 초안 + 프리셋 칩 ----
+function copyText(text) {
+  if (!text || !String(text).trim()) return;
+  const value = String(text);
+  const fallback = () => {
+    const ta = document.createElement("textarea");
+    ta.value = value;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (_) {}
+    document.body.removeChild(ta);
+  };
+  try {
+    const p = navigator.clipboard && navigator.clipboard.writeText(value);
+    if (p && p.catch) p.catch(fallback);
+    else fallback();
+  } catch (_) {
+    fallback();
+  }
+}
+
 function DraftEditor({ m, actions, presets }) {
   async function openPlatform() {
     let url = m.platformUrl;
@@ -182,11 +205,11 @@ function DraftEditor({ m, actions, presets }) {
   }
   function copyDraft() {
     const text = m.draft ?? "";
-    if (!text.trim()) return;
-    try { navigator.clipboard.writeText(text); } catch (_) {}
+    copyText(text);
   }
   function applyPreset(p) {
     actions.updateEmail(m.id, { draft: p.text });
+    copyText(p.text);
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
@@ -297,14 +320,14 @@ function PresetsList({ presets, actions }) {
         {presets.map(p => editing === p.id ? (
           <PresetEditor key={p.id} label={label} setLabel={setLabel} text={text} setText={setText} onSave={save} onCancel={cancel} />
         ) : (
-          <PresetRow key={p.id} p={p} onEdit={() => startEdit(p)} onDelete={() => del(p.id)} />
+          <PresetRow key={p.id} p={p} onCopy={() => copyText(p.text)} onEdit={() => startEdit(p)} onDelete={() => del(p.id)} />
         ))}
       </div>
     </div>
   );
 }
 
-function PresetRow({ p, onEdit, onDelete }) {
+function PresetRow({ p, onCopy, onEdit, onDelete }) {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 7, padding: "5px 9px", marginBottom: 5,
@@ -312,7 +335,7 @@ function PresetRow({ p, onEdit, onDelete }) {
       background: "var(--paper)",
     }}>
       <span style={{ fontSize: 12, flexShrink: 0 }}>⚡</span>
-      <button onClick={onEdit} style={{
+      <button onClick={onCopy} title="클립보드에 복사" style={{
         all: "unset", cursor: "pointer", flex: 1, minWidth: 0,
       }}>
         <div style={{
@@ -324,6 +347,7 @@ function PresetRow({ p, onEdit, onDelete }) {
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.3,
         }}>{(p.text || "").slice(0, 60)}</div>
       </button>
+      <button onClick={onEdit} title="편집" style={mailIconBtn}>✎</button>
       <DelBtn onClick={onDelete} />
     </div>
   );
@@ -378,6 +402,12 @@ const mailBtn = {
   padding: "4px 12px", borderRadius: 99,
   border: "1.1px solid var(--ink)", background: "var(--paper)",
   fontFamily: "var(--hand)", fontSize: 13, color: "var(--ink)",
+};
+const mailIconBtn = {
+  ...mailBtn,
+  width: 23, height: 23, padding: 0,
+  display: "grid", placeItems: "center",
+  borderRadius: 6, flexShrink: 0,
 };
 
 window.MailView = MailView;

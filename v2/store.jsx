@@ -173,7 +173,9 @@ function load() {
       }
       // body는 비워둠 (messages는 보존 — 데이터 보안용으로 일단 남김)
       next.body = "";
-      if (!next.title) next.title = memoTitleFromHtml(next.html);
+      const inferredTitle = memoTitleFromHtml(next.html);
+      if (!next.title) next.title = inferredTitle;
+      next.manualTitle = next.manualTitle ?? (!!String(next.title || "").trim() && next.title !== inferredTitle);
       return next;
     });
     data.selectedDate = today();   // 시작 시 항상 오늘
@@ -188,6 +190,8 @@ function load() {
       pinned: t.pinned ?? !!t.hot ?? false,
       pinnedAt: t.pinnedAt ?? null,
       dueDate: t.dueDate ?? null,
+      startDate: t.startDate ?? null,
+      endDate: t.endDate ?? null,
       order: t.order ?? i,
       done: !!t.done,
       completedAt: t.completedAt ?? (t.doneTs ? new Date(t.doneTs).toISOString() : (t.doneAt ? t.doneAt + "T12:00:00" : null)),
@@ -277,6 +281,8 @@ const actions = {
           title: title.trim(),
           pinned: !!opts.pinned, pinnedAt: opts.pinned ? Date.now() : null,
           dueDate: opts.dueDate ?? null,
+          startDate: opts.startDate ?? null,
+          endDate: opts.endDate ?? null,
           order: nextOrder,
           done: false, completedAt: null,
           recurrenceId: opts.recurrenceId ?? null,
@@ -304,6 +310,16 @@ const actions = {
   },
   setTodoDue(id, date) {
     setState(s => ({ ...s, todos: s.todos.map(t => t.id === id ? { ...t, dueDate: date || null } : t) }));
+  },
+  setTodoPeriod(id, startDate, endDate) {
+    setState(s => ({
+      ...s,
+      todos: s.todos.map(t => t.id === id ? {
+        ...t,
+        startDate: startDate || null,
+        endDate: endDate || null,
+      } : t),
+    }));
   },
   updateTodo(id, patch) {
     setState(s => ({ ...s, todos: s.todos.map(t => t.id === id ? { ...t, ...patch } : t) }));
@@ -391,7 +407,7 @@ const actions = {
         newTodos.push({
           id: uid(), projectId: r.projectId,
           title: r.title, pinned: false, pinnedAt: null,
-          dueDate: t, order: orderMap[r.projectId],
+          dueDate: t, startDate: null, endDate: null, order: orderMap[r.projectId],
           done: false, completedAt: null,
           recurrenceId: r.id, trackedSeconds: 0,
           createdAt: t,
@@ -533,7 +549,7 @@ const actions = {
       ...s,
       memos: [
         { id, projectId: s.currentProjectId,
-          title: memoTitleFromHtml(html), html,
+          title: memoTitleFromHtml(html), html, manualTitle: false,
           icon: icon || randomMemoIcon(),
           createdAt: now, updatedAt: now },
         ...(s.memos ?? []),
@@ -549,7 +565,8 @@ const actions = {
         const touchesContent = "html" in patch || "title" in patch;
         const next = { ...m, ...patch };
         if (touchesContent) next.updatedAt = new Date().toISOString();
-        if (!("title" in patch) && "html" in patch) next.title = memoTitleFromHtml(next.html);
+        if ("title" in patch) next.manualTitle = true;
+        if (!next.manualTitle && !("title" in patch) && "html" in patch) next.title = memoTitleFromHtml(next.html);
         return next;
       }),
     }));

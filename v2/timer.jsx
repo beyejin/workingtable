@@ -298,15 +298,6 @@ function PlaylistBar() {
         </div>
         <button onClick={() => setOpen(o => !o)} title="플레이리스트" style={pbBtn}>{open ? "▾" : "+"}</button>
       </div>
-      {/* v0.4.4 임시 진단: 모드/상태 표시 (raw iframe 모드 검증 끝나면 제거) */}
-      {ms.debug && ms.debug !== "ready" && (
-        <div style={{
-          marginTop: 2, fontFamily: "var(--mono)", fontSize: 10,
-          color: ms.debug.startsWith("yt err") || ms.debug.includes("실패") ? "var(--bad)" : "#888",
-          textAlign: "right",
-        }}>♫ {ms.debug}</div>
-      )}
-
       {/* 펼침: 곡 추가 + 목록 (위로 팝오버) */}
       {open && (
         <div className="sk-box" style={{

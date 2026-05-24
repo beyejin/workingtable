@@ -256,17 +256,22 @@ function DayCell({ date, dateStr, labelKey, due, doneFloat, workMin, ddayLabel, 
 function NotesCell({ mondayStr, value, onSave }) {
   const [text, setText] = useState(value);
   const timerRef = useRef(null);
-  useEffect(() => { setText(value); }, [mondayStr]);
+  const textRef = useRef(value);
+  useEffect(() => {
+    setText(value);
+    textRef.current = value;
+  }, [mondayStr, value]);
 
   const onChange = (v) => {
     setText(v);
+    textRef.current = v;
     clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => onSave(v), 500);
   };
   useEffect(() => {
     return () => {
       clearTimeout(timerRef.current);
-      onSave(text);
+      onSave(textRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mondayStr]);
@@ -285,6 +290,10 @@ function NotesCell({ mondayStr, value, onSave }) {
       <textarea
         value={text}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={() => {
+          clearTimeout(timerRef.current);
+          onSave(textRef.current);
+        }}
         placeholder={L("planner.notesPh")}
         style={{
           flex: 1, minHeight: 0,

@@ -9,6 +9,28 @@ const { useState, useEffect } = React;
 
 function dateOf(ts) { return ts ? (ts.length >= 10 ? ts.slice(0, 10) : ts) : null; }
 function fmtMD(iso) { if (!iso) return ""; const [, m, d] = iso.split("-").map(Number); return `${m}/${d}`; }
+function normalizedPeriod(t) {
+  const a = t.startDate || null;
+  const b = t.endDate || null;
+  if (!a && !b) return null;
+  const start = a || b;
+  const end = b || a;
+  return start <= end ? { start, end } : { start: end, end: start };
+}
+function isInTodoPeriod(t, day) {
+  const p = normalizedPeriod(t);
+  return !!p && p.start <= day && day <= p.end;
+}
+function periodLabel(t) {
+  const p = normalizedPeriod(t);
+  if (!p) return "";
+  return p.start === p.end ? fmtMD(p.start) : `${fmtMD(p.start)}-${fmtMD(p.end)}`;
+}
+function addDaysIso(iso, days) {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
 // 연한 파스텔 마스킹테이프 색 (행마다 순환)
 const LIGHT_TAPE = [
@@ -46,12 +68,13 @@ function TodoView() {
   //  - 다른 날짜: 그 날짜에 마감인 일만
   const list = items.filter(t => {
     if (isToday) {
+      if (isInTodoPeriod(t, todayStr)) return true;
       if (!t.dueDate) return true;
       if (t.dueDate === todayStr) return true;
       if (t.dueDate < todayStr && !t.done) return true;
       return false;
     }
-    return t.dueDate === selectedDate;
+    return t.dueDate === selectedDate || isInTodoPeriod(t, selectedDate);
   }).slice().sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1;
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
@@ -66,9 +89,16 @@ function TodoView() {
   );
 
   // 월간 달력 점
-  const dueDates = new Set(
-    items.filter(t => !t.done && t.dueDate).map(t => t.dueDate)
-  );
+  const dueDates = new Set(items.filter(t => !t.done && t.dueDate).map(t => t.dueDate));
+  items.filter(t => !t.done).forEach(t => {
+    const p = normalizedPeriod(t);
+    if (!p) return;
+    let d = p.start;
+    for (let i = 0; i < 370 && d <= p.end; i += 1) {
+      dueDates.add(d);
+      d = addDaysIso(d, 1);
+    }
+  });
   const doneDates = new Set(
     items.filter(t => t.done && t.completedAt).map(t => t.completedAt.slice(0, 10))
   );
@@ -286,6 +316,9 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
         {t.dueDate && (
           <span title={`마감 ${t.dueDate}`} style={dueBadge}>{fmtMD(t.dueDate)}</span>
         )}
+        {normalizedPeriod(t) && (
+          <span title={`기간 ${normalizedPeriod(t).start} ~ ${normalizedPeriod(t).end}`} style={{ ...dueBadge, background: "#eef7ff" }}>{periodLabel(t)}</span>
+        )}
         {/* 반복 표시 */}
         {recRule && <span title={`반복 — ${recLabel(recRule)}`} style={{ fontSize: 12, color: "var(--ink-2)" }}>↻</span>}
 
@@ -305,8 +338,14 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
       {/* 마감일 펼침 */}
       {dueOpen && showActions && (
         <div style={expanderRow} onClick={stop}>
+          <span style={miniLabel}>마감</span>
           <input type="date" value={t.dueDate || ""} onChange={(e) => actions.setTodoDue(t.id, e.target.value)} style={dateInput} />
           {t.dueDate && <button onClick={(e) => { stop(e); actions.setTodoDue(t.id, null); setDueOpen(false); }} style={miniBtn}>지우기</button>}
+          <span style={miniLabel}>기간</span>
+          <input type="date" value={t.startDate || ""} onChange={(e) => actions.setTodoPeriod(t.id, e.target.value, t.endDate || e.target.value)} style={dateInput} />
+          <span style={miniLabel}>~</span>
+          <input type="date" value={t.endDate || ""} onChange={(e) => actions.setTodoPeriod(t.id, t.startDate || e.target.value, e.target.value)} style={dateInput} />
+          {(t.startDate || t.endDate) && <button onClick={(e) => { stop(e); actions.setTodoPeriod(t.id, null, null); }} style={miniBtn}>기간 지우기</button>}
           <button onClick={(e) => { stop(e); setDueOpen(false); }} style={miniBtn}>닫기</button>
         </div>
       )}
@@ -379,7 +418,7 @@ const dueBadge = {
   fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--ink-2)", flexShrink: 0,
 };
 const expanderRow = {
-  display: "flex", alignItems: "center", gap: 6, marginTop: 5,
+  display: "flex", alignItems: "center", gap: 6, marginTop: 5, flexWrap: "wrap",
   padding: "5px 8px", borderRadius: 8, background: "rgba(255,255,255,.55)",
   border: "1px dashed rgba(40,51,63,.25)",
 };
@@ -392,6 +431,9 @@ const miniBtn = {
   all: "unset", cursor: "pointer", padding: "1px 8px", borderRadius: 99,
   border: "1.1px solid var(--ink)", background: "var(--paper)",
   fontFamily: "var(--hand)", fontSize: 11, color: "var(--ink)",
+};
+const miniLabel = {
+  fontFamily: "var(--hand)", fontSize: 11, fontWeight: 700, color: "var(--ink-2)",
 };
 const dateInput = {
   border: "1px solid var(--ink-soft)", borderRadius: 6, padding: "2px 6px",
