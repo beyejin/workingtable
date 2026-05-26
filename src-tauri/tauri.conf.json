@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "vibe-diary",
-  "version": "0.4.9",
-  "identifier": "app.vibe-diary",
+  "productName": "vibe-diary-yejin",
+  "version": "0.4.10",
+  "identifier": "app.vibe-diary-yejin",
   "build": {
     "frontendDist": "../dist",
     "beforeDevCommand": "node scripts/build-dist.mjs",
