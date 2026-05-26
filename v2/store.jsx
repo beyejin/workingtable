@@ -139,73 +139,84 @@ function seed() {
 }
 
 // ---- 저장 / 불러오기 ----
+function migrateState(data) {
+  if (!data || typeof data !== "object" || data.schemaVersion !== 1) {
+    throw new Error("지원하지 않는 백업 파일이에요.");
+  }
+  if (!Array.isArray(data.projects)) {
+    throw new Error("프로젝트 데이터가 없는 백업 파일이에요.");
+  }
+
+  // ---- 마이그레이션 (필드 추가에 안전) ----
+  data.commands    ??= [];
+  data.todos       ??= [];
+  data.recurrences ??= [];
+  data.lastGenDate ??= today();
+  data.prompts     ??= [];
+  data.emails      ??= [];
+  data.aiBookmarks ??= [];
+  data.retros      ??= [];
+  data.playlist    ??= [];
+  data.dday        ??= { date: "", label: "디데이" };
+  data.mailUrl     ??= "";
+  data.notes       ??= {};
+  data.weekNotes   ??= {};
+  data.replyPresets ??= [];
+  data.memos       ??= [];
+  // 기존 메모를 단일 html 본문으로 통합. body → html, messages → html.
+  data.memos = data.memos.map(m => {
+    const next = { ...m, icon: m.icon || randomMemoIcon() };
+    if (typeof next.html !== "string") next.html = "";
+    if (!next.html && Array.isArray(next.messages) && next.messages.length > 0) {
+      next.html = memoMessagesToHtml(next.messages);
+    }
+    if (!next.html && (next.body || "").trim()) {
+      next.html = memoBodyToHtml(next.body);
+    }
+    // body는 비워둠 (messages는 보존 — 데이터 보안용으로 일단 남김)
+    next.body = "";
+    const inferredTitle = memoTitleFromHtml(next.html);
+    if (!next.title) next.title = inferredTitle;
+    next.manualTitle = next.manualTitle ?? (!!String(next.title || "").trim() && next.title !== inferredTitle);
+    return next;
+  });
+  data.selectedDate = today();   // 시작 시 항상 오늘
+  data.stuck       ??= {};
+  // 메일에 body/draft/platformUrl 보강
+  data.emails = (data.emails ?? []).map(e => ({ body: "", draft: "", platformUrl: "", ...e }));
+  // 할 일 스키마 마이그레이션 (text→title, hot→pinned, doneTs→completedAt 등)
+  data.todos = (data.todos ?? []).map((t, i) => ({
+    id: t.id,
+    projectId: t.projectId,
+    title: t.title ?? t.text ?? "",
+    pinned: t.pinned ?? !!t.hot ?? false,
+    pinnedAt: t.pinnedAt ?? null,
+    dueDate: t.dueDate ?? null,
+    startDate: t.startDate ?? null,
+    endDate: t.endDate ?? null,
+    order: t.order ?? i,
+    done: !!t.done,
+    completedAt: t.completedAt ?? (t.doneTs ? new Date(t.doneTs).toISOString() : (t.doneAt ? t.doneAt + "T12:00:00" : null)),
+    recurrenceId: t.recurrenceId ?? null,
+    trackedSeconds: t.trackedSeconds ?? 0,
+    createdAt: t.createdAt ?? today(),
+  }));
+  data.timer       ??= { lengthMin: 30, enabled: true, cycleStartedAt: null, paused: false, pausedRemainingMs: null, notificationsGranted: false, lastNotifiedAt: null };
+  data.workSessions ??= [];
+  // 프로젝트에 버전/저장소 필드 보강 (기존 값 우선)
+  data.projects = (data.projects ?? []).map(p => ({
+    repoUrl: "", version: "0.1.0", nextVersion: "", ...p,
+  }));
+
+  return data;
+}
+
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return seed();
     const data = JSON.parse(raw);
-    if (!data || data.schemaVersion !== 1) return seed();
-    // ---- 마이그레이션 (필드 추가에 안전) ----
-    data.commands    ??= [];
-    data.todos       ??= [];
-    data.recurrences ??= [];
-    data.lastGenDate ??= today();
-    data.prompts     ??= [];
-    data.emails      ??= [];
-    data.aiBookmarks ??= [];
-    data.retros      ??= [];
-    data.playlist    ??= [];
-    data.dday        ??= { date: "", label: "디데이" };
-    data.mailUrl     ??= "";
-    data.notes       ??= {};
-    data.weekNotes   ??= {};
-    data.replyPresets ??= [];
-    data.memos       ??= [];
-    // 기존 메모를 단일 html 본문으로 통합. body → html, messages → html.
-    data.memos = data.memos.map(m => {
-      const next = { ...m, icon: m.icon || randomMemoIcon() };
-      if (typeof next.html !== "string") next.html = "";
-      if (!next.html && Array.isArray(next.messages) && next.messages.length > 0) {
-        next.html = memoMessagesToHtml(next.messages);
-      }
-      if (!next.html && (next.body || "").trim()) {
-        next.html = memoBodyToHtml(next.body);
-      }
-      // body는 비워둠 (messages는 보존 — 데이터 보안용으로 일단 남김)
-      next.body = "";
-      const inferredTitle = memoTitleFromHtml(next.html);
-      if (!next.title) next.title = inferredTitle;
-      next.manualTitle = next.manualTitle ?? (!!String(next.title || "").trim() && next.title !== inferredTitle);
-      return next;
-    });
-    data.selectedDate = today();   // 시작 시 항상 오늘
-    data.stuck       ??= {};
-    // 메일에 body/draft/platformUrl 보강
-    data.emails = (data.emails ?? []).map(e => ({ body: "", draft: "", platformUrl: "", ...e }));
-    // 할 일 스키마 마이그레이션 (text→title, hot→pinned, doneTs→completedAt 등)
-    data.todos = (data.todos ?? []).map((t, i) => ({
-      id: t.id,
-      projectId: t.projectId,
-      title: t.title ?? t.text ?? "",
-      pinned: t.pinned ?? !!t.hot ?? false,
-      pinnedAt: t.pinnedAt ?? null,
-      dueDate: t.dueDate ?? null,
-      startDate: t.startDate ?? null,
-      endDate: t.endDate ?? null,
-      order: t.order ?? i,
-      done: !!t.done,
-      completedAt: t.completedAt ?? (t.doneTs ? new Date(t.doneTs).toISOString() : (t.doneAt ? t.doneAt + "T12:00:00" : null)),
-      recurrenceId: t.recurrenceId ?? null,
-      trackedSeconds: t.trackedSeconds ?? 0,
-      createdAt: t.createdAt ?? today(),
-    }));
-    data.timer       ??= { lengthMin: 30, enabled: true, cycleStartedAt: null, paused: false, pausedRemainingMs: null, notificationsGranted: false, lastNotifiedAt: null };
-    data.workSessions ??= [];
-    // 프로젝트에 버전/저장소 필드 보강 (기존 값 우선)
-    data.projects = (data.projects ?? []).map(p => ({
-      repoUrl: "", version: "0.1.0", nextVersion: "", ...p,
-    }));
-    return data;
+    return migrateState(data);
   } catch (e) {
     console.warn("diary: load failed, reseeding", e);
     return seed();
@@ -226,6 +237,9 @@ function setState(updater) {
   const next = typeof updater === "function" ? updater(_state) : updater;
   _state = next;
   save(_state);
+  _subs.forEach(fn => fn(_state));
+}
+function emitState() {
   _subs.forEach(fn => fn(_state));
 }
 function getState() { return _state; }
@@ -727,6 +741,28 @@ const actions = {
       }
       return { ...s, workSessions: sessions };
     });
+  },
+
+  // ----- 데이터 백업/복원 -----
+  exportData() {
+    return {
+      app: "vibe-diary-yejin",
+      version: 1,
+      storageKey: STORAGE_KEY,
+      exportedAt: new Date().toISOString(),
+      state: _state,
+    };
+  },
+
+  importData(payload) {
+    const next = payload?.state ?? payload;
+    if (payload?.app && payload.app !== "vibe-diary-yejin") {
+      throw new Error("다른 앱의 백업 파일이에요.");
+    }
+
+    _state = migrateState(next);
+    save(_state);
+    emitState();
   },
 
   // ----- 위험: 리셋 -----
