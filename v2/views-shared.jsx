@@ -4,6 +4,36 @@
 // ===========================================================
 const { useState, useRef, useEffect } = React;
 
+// ---- 도트 스프라이트 아이콘 (16x16 셀, 6x4 = 24 인덱스) ----
+// Sprite-0002.png (96x64) 한 장에서 인덱스로 잘라 표시한다.
+// 표시 크기는 size 로 조절 (배수 — 16/24/32/48 ...).
+const SPRITE_COLS = 6;
+const SPRITE_ROWS = 4;
+const SPRITE_CELL = 16;
+function SpriteIcon({ idx = 0, size = 16, title, style }) {
+  const col = idx % SPRITE_COLS;
+  const row = Math.floor(idx / SPRITE_COLS);
+  const scale = size / SPRITE_CELL;
+  return (
+    <span
+      className="sprite-icon"
+      title={title}
+      style={{
+        width: size,
+        height: size,
+        backgroundSize: `${SPRITE_COLS * size}px ${SPRITE_ROWS * size}px`,
+        backgroundPosition: `${-col * size}px ${-row * size}px`,
+        ...style,
+      }}
+    />
+  );
+}
+// 메모 픽커용 인덱스 모음 — store.jsx 에서 채워 넣음. 기본은 0..23 전체.
+const MEMO_SPRITE_IDXS = Array.from({ length: SPRITE_COLS * SPRITE_ROWS }, (_, i) => i);
+// 전역 노출
+window.SpriteIcon = SpriteIcon;
+window.MEMO_SPRITE_IDXS = MEMO_SPRITE_IDXS;
+
 function ViewHeader({ ttl, sub, action }) {
   return (
     <div style={{ marginBottom: 14 }}>

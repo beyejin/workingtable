@@ -75,12 +75,9 @@ function memoTitleFromHtml(html) {
   if (/<a /i.test(html)) return "🔗 링크";
   return "";
 }
-const MEMO_ICONS = [
-  "🐰", "🐱", "🐶", "🦊", "🐻", "🐼", "🐸", "🐧",
-  "🌸", "🌷", "🍓", "🍰", "🍞", "🍵", "☕", "🍒",
-  "⭐", "💎", "🌙", "🌈", "💌", "🎀", "🎈", "🎁",
-  "📚", "✏️", "🖍", "💡", "🔑", "🎵", "🎲", "💖",
-];
+// 메모 아이콘 — 도트 스프라이트 인덱스 (Sprite-0002.png, 6x4=24).
+// 문자열이 아니라 숫자(0..23). 표시는 <SpriteIcon idx={...} /> 로.
+const MEMO_ICONS = Array.from({ length: 24 }, (_, i) => i);
 const randomMemoIcon = () => MEMO_ICONS[Math.floor(Math.random() * MEMO_ICONS.length)];
 
 // ---- 초기 시드 ----
@@ -163,7 +160,8 @@ function load() {
     data.memos       ??= [];
     // 기존 메모를 단일 html 본문으로 통합. body → html, messages → html.
     data.memos = data.memos.map(m => {
-      const next = { ...m, icon: m.icon || randomMemoIcon() };
+      // icon: 숫자 인덱스(0..23). 기존 문자열 이모지는 마이그레이션 시 랜덤 도트로 교체.
+      const next = { ...m, icon: (typeof m.icon === "number" ? m.icon : randomMemoIcon()) };
       if (typeof next.html !== "string") next.html = "";
       if (!next.html && Array.isArray(next.messages) && next.messages.length > 0) {
         next.html = memoMessagesToHtml(next.messages);

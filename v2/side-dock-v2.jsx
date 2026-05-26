@@ -1,4 +1,4 @@
-/* global React, TodayView, TodoView, MemoView, MailView, PromptView, AIView, RetroView */
+/* global React, TodayView, TodoView, MemoView, MailView, PromptView, AIView, RetroView, SpriteIcon */
 // ===========================================================
 // 사이드 도크 v2 — 다이어리 인덱스 탭 + 뷰 전환
 // 도크 본체 + 옆에 삐죽 나오는 종이 탭들.
@@ -8,13 +8,16 @@
 
 const { useState } = React;
 
+// 탭별 도트 스프라이트 인덱스 — public/asset/Sprite-0002.png (6x4=24 셀, 16x16 각)
+// [0]💖 [1]✨ [2]❗ [3]❓ [4]✓ [5]🔥 [6]☀ [7]☁ [8]🌧 [9]🌈 [10]🌙 [11]🌱
+// [12]🍰 [13]☕ [14]🐭 [15]🐱 [16]🐻 [17]🐰 [18]✏ [19]📕 [20]🪙 [21]💊 [22]📝 [23]😺
 const TABS = [
-  { id: "todo",  labelKey: "tab.todo",     glyph: "✓", color: "#d4ecdb", view: () => <TodoView /> },
-  { id: "cal",   labelKey: "tab.week",     glyph: "📅", color: "#d4e6fa", view: () => <CalendarView /> },
-  { id: "memo",  labelKey: "tab.memo",     glyph: "📝", color: "#fff0c0", view: () => <MemoView /> },
-  { id: "mail",  labelKey: "tab.mail",     glyph: "✉", color: "#ffe0d2", view: () => <MailView /> },
-  { id: "deco",  labelKey: "tab.deco",     glyph: "🎨", color: "#ffe6f0", view: () => null, foot: true },
-  { id: "settings", labelKey: "tab.settings", glyph: "⚙", color: "#e6e6ee", view: () => null, foot: true },
+  { id: "todo",     labelKey: "tab.todo",     sprite:  4, color: "#d4ecdb", view: () => <TodoView /> },     // ✓ 체크
+  { id: "cal",      labelKey: "tab.week",     sprite:  6, color: "#d4e6fa", view: () => <CalendarView /> }, // ☀ 해 (하루/달력)
+  { id: "memo",     labelKey: "tab.memo",     sprite: 22, color: "#fff0c0", view: () => <MemoView /> },     // 📝 메모지
+  { id: "mail",     labelKey: "tab.mail",     sprite:  0, color: "#ffe0d2", view: () => <MailView /> },     // 💖 하트 (러브레터 느낌)
+  { id: "deco",     labelKey: "tab.deco",     sprite:  9, color: "#ffe6f0", view: () => null, foot: true }, // 🌈 무지개
+  { id: "settings", labelKey: "tab.settings", sprite:  1, color: "#e6e6ee", view: () => null, foot: true }, // ✨ 반짝 (커스터마이즈)
 ];
 
 function SideDockV2({ tweaks, setTweak }) {
@@ -237,7 +240,7 @@ function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSt
         }}
         title={L(t.labelKey)}
       >
-        <span style={{ fontSize: compact ? 18 : 15, color: "var(--ink)", flexShrink: 0 }}>{t.glyph}</span>
+        <SpriteIcon idx={t.sprite} size={compact ? 20 : 16} title={L(t.labelKey)} style={{ flexShrink: 0 }} />
         {!compact && (
           <span style={{
             writingMode: "vertical-rl", textOrientation: "mixed",
