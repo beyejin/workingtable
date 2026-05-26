@@ -323,33 +323,46 @@ function PlaylistBar() {
           {ms.nativeMode && (
             <div style={{ marginTop: 8 }}>
               <button
-                onClick={() => setPlayerOpen(v => !v)}
-                title="YouTube"
-                style={{
-                  all: "unset", cursor: "pointer", width: "100%",
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  boxSizing: "border-box", padding: "4px 6px",
-                  border: "1.1px solid var(--ink)", borderRadius: 6,
-                  background: "var(--paper-2)", color: "var(--ink)",
-                  fontFamily: "var(--mono)", fontSize: 11,
-                }}
+                  onClick={() => {
+                    if (!ms.videoId) return;
+
+                    const url = `https://www.youtube.com/watch?v=${ms.videoId}`;
+
+                    if (window.__TAURI__?.opener?.openUrl) {
+                      window.__TAURI__.opener.openUrl(url);
+                    } else {
+                      window.open(url, "_blank");
+                    }
+                  }}
+                  style={{
+                    width: "100%",
+                    margin: "6px 0",
+                    padding: "6px 8px",
+                    borderRadius: 8,
+                    border: "1px solid var(--line)",
+                    background: "var(--paper)",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 700,
+                  }}
               >
-                <span>YouTube</span>
-                <span>{playerOpen ? "▾" : "▸"}</span>
+                YouTube에서 크게 보기
               </button>
               {playerOpen && (
-                <div
-                  ref={playerSlotRef}
-                  style={{
-                    marginTop: 6,
-                    width: "100%",
-                    height: 200,
-                    overflow: "hidden",
-                    border: "1.1px solid var(--ink)",
-                    borderRadius: 6,
-                    background: "#111",
-                  }}
-                />
+                  <>
+                    <div
+                        ref={playerSlotRef}
+                        style={{
+                          marginTop: 6,
+                          width: "100%",
+                          height: 200,
+                          overflow: "hidden",
+                          border: "1.1px solid var(--ink)",
+                          borderRadius: 6,
+                          background: "#111",
+                        }}
+                    />
+                  </>
               )}
             </div>
           )}
