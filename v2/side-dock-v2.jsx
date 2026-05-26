@@ -364,6 +364,57 @@ function SettingsView({ tweaks, setTweak }) {
         <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.alwaysOnTopHint")}</div>
       </SetSection>
 
+      <SetSection label="업데이트">
+        <button
+            onClick={async () => {
+              try {
+                const updater = window.__TAURI__?.updater;
+
+                if (!updater?.check) {
+                  alert("업데이트 기능을 사용할 수 없어요.");
+                  return;
+                }
+
+                const update = await updater.check();
+
+                if (!update) {
+                  alert("현재 최신 버전입니다.");
+                  return;
+                }
+
+                const ok = confirm(`새 버전 ${update.version}이 있습니다. 업데이트할까요?`);
+                if (!ok) return;
+
+                await update.downloadAndInstall();
+                alert("업데이트가 완료되었습니다. 앱을 다시 실행해주세요.");
+              } catch (e) {
+                alert("업데이트 확인 중 오류가 발생했습니다: " + (e?.message || e));
+              }
+            }}
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              display: "block",
+              width: "100%",
+              boxSizing: "border-box",
+              textAlign: "center",
+              padding: "8px 12px",
+              borderRadius: 10,
+              border: "1.1px solid var(--ink)",
+              background: "var(--mint)",
+              color: "var(--ink)",
+              fontFamily: "var(--hand)",
+              fontWeight: 700,
+              fontSize: 14,
+            }}
+        >
+          업데이트 확인
+        </button>
+        <div className="sk-cap" style={{ marginTop: 6, fontSize: 12 }}>
+          새 버전이 있으면 다운로드 후 설치합니다.
+        </div>
+      </SetSection>
+
       <SetSection label={L("set.data")}>
         <button onClick={() => diary.actions.hardReset()} style={{
           all: "unset", cursor: "pointer", display: "block", width: "100%", boxSizing: "border-box",

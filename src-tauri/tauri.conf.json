@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "vibe-diary-yejin",
-  "version": "0.4.10",
+  "version": "0.4.11",
   "identifier": "app.vibe-diary-yejin",
   "build": {
     "frontendDist": "../dist",
@@ -48,9 +48,9 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/binglehaepi/workingtable/releases/latest/download/latest.json"
+        "https://github.com/beyejin/workingtable/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ4NDA5NDJERjQ5OUIzQjQKUldTMHM1bjBMWlJBU1BFUVkyRnErc05BTXVJVDNQUmZPakY4eGtkTWJpMHp2akhZaW42N0JoVkEK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVBQTg5RTk5OTc2MUM3NTMKUldSVHgyR1htWjZvNnArWXVqS01mdzdsTkdjU2xzR1F3Znc3MG1VakxqU2dReC9sMTdqclo1bVMK"
     }
   }
 }
