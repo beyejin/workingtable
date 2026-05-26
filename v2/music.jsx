@@ -44,7 +44,7 @@
 
   function playlistAfter(startIdx) {
     const rest = [];
-    for (let k = 1; k < queue.length; k++) {
+    for (let k = 0; k < queue.length; k++) {
       rest.push(queue[(startIdx + k) % queue.length].videoId);
     }
     return rest;
@@ -109,7 +109,7 @@
     const cur = queue[startIdx];
     const embedOrigin = /^https?:\/\//i.test(origin) ? origin : "https://tauri.localhost";
     const rest = [];
-    for (let k = 1; k < queue.length; k++) {
+    for (let k = 0; k < queue.length; k++) {
       rest.push(queue[(startIdx + k) % queue.length].videoId);
     }
 
