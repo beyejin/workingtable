@@ -44,13 +44,15 @@ function Timer() {
 
 // ---- 작업 시간 (프로그램 켜둔 활동 시간 누적) — 00 H 00 M ----
 // 점(•)을 클릭하면 "외부 작업 모드" 토글. 켜지면 초록색, 다른 앱에서 일할 때도 카운트.
+// 호버하면 우측에 작은 ⟳ 버튼이 나타남 — 클릭 시 오늘 작업 시간을 0으로 초기화.
 function WorkTime() {
-  const { state } = diary.useDiary();
+  const { state, actions } = diary.useDiary();
   const min = diary.select.workMinutesToday(state);
   const h = Math.floor(min / 60);
   const m = min % 60;
   const pad = (n) => String(n).padStart(2, "0");
   const [blink, setBlink] = useState(true);
+  const [hover, setHover] = useState(false);
   const [external, setExternal] = useState(() => !!(window.workTracker && window.workTracker.isExternal()));
   useEffect(() => {
     const id = setInterval(() => setBlink(b => !b), 1100);
@@ -61,12 +63,23 @@ function WorkTime() {
     return window.workTracker.subscribe(setExternal);
   }, []);
   const toggleExternal = () => { if (window.workTracker) window.workTracker.toggle(); };
+  const resetWork = async () => {
+    const msg = L("worktrack.resetConfirm");
+    const ok = await (window.dialog
+      ? window.dialog.confirm(msg)
+      : Promise.resolve(window.confirm(msg)));
+    if (ok) actions.resetWorkMinutes();
+  };
 
   const dotColor = external ? "#52c759" : "#ff5e5e";
   const label = external ? L("worktrack.externalOn") : L("worktrack.externalOff");
 
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "var(--mono)", fontWeight: 700, fontSize: 15, color: "var(--ink)" }}>
+    <span
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "var(--mono)", fontWeight: 700, fontSize: 15, color: "var(--ink)" }}
+    >
       <button onClick={toggleExternal} title={label} style={{
         all: "unset", cursor: "pointer", flexShrink: 0,
         width: 11, height: 11, borderRadius: "50%",
@@ -83,6 +96,22 @@ function WorkTime() {
       <span style={{ fontSize: 10, opacity: .6 }}>H</span>
       <span>{pad(m)}</span>
       <span style={{ fontSize: 10, opacity: .6 }}>M</span>
+      <button
+        onClick={resetWork}
+        title={L("worktrack.resetTip")}
+        aria-label={L("worktrack.resetTip")}
+        style={{
+          all: "unset", cursor: "pointer", flexShrink: 0,
+          marginLeft: 2,
+          width: 16, height: 16, borderRadius: "50%",
+          display: "grid", placeItems: "center",
+          fontSize: 11, fontWeight: 700, lineHeight: 1,
+          color: "var(--ink-2)",
+          opacity: hover ? 0.85 : 0,
+          pointerEvents: hover ? "auto" : "none",
+          transition: "opacity 0.15s",
+        }}
+      >⟳</button>
     </span>
   );
 }

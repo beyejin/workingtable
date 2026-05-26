@@ -38,6 +38,15 @@ function SideDockV2({ tweaks, setTweak }) {
   const dockSide = tweaks?.dockSide ?? "left";
   const tabStyle = tweaks?.tabStyle ?? "paper";
   const desktopMode = tweaks?.desktopMode ?? false;
+  const dockHidden = tweaks?.dockHidden ?? false;
+  const tabsHidden = tweaks?.tabsHidden ?? false;
+
+  // 도크 미니화 — 본체/탭/페이크 IDE 전부 가리고 작은 디지털 타이머 위젯만 남김.
+  // 잡고 드래그로 옮길 수 있고, 클릭하면 도크 복귀.
+  if (dockHidden) {
+    return <DockRevealEdge tweaks={tweaks} setTweak={setTweak}
+      onReveal={() => setTweak && setTweak("dockHidden", false)} />;
+  }
   // 배경 (그라데이션 / 도형)
   const dockBg = buildBackground(
     tweaks?.bgType ?? "linear",
@@ -132,8 +141,183 @@ function SideDockV2({ tweaks, setTweak }) {
         tabStyle={tabStyle}
         chrome={chrome}
         compact={compactTabs}
+        autoHide={tabsHidden}
       />
     </div>
+  );
+}
+
+// ---- 도크 미니화 시 디지털 타이머 위젯 ----
+// 사용자가 끌어서 옮길 수 있는 작은 위젯. 배경은 도크와 같은 테마를 따라감.
+// 클릭하면 도크 복귀, 드래그하면 위치 이동(저장됨).
+function DockRevealEdge({ tweaks, setTweak, onReveal }) {
+  const [hover, setHover] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const dockSide = tweaks?.dockSide ?? "left";
+  const isLeft = dockSide === "left";
+
+  // 저장된 위치(없으면 도크 측 가장자리 세로 중앙에 붙임)
+  const savedPos = tweaks?.dockMiniPos ?? null;
+  const [pos, setPos] = useState(savedPos);
+  React.useEffect(() => { setPos(savedPos); }, [savedPos]);
+
+  // 작업 시간 구독
+  const { state } = diary.useDiary();
+  const minutes = diary.select.workMinutesToday(state);
+
+  // 음악 재생 상태 구독
+  const [musicPlaying, setMusicPlaying] = useState(
+    () => !!(window.musicPlayer && window.musicPlayer.getState().playing)
+  );
+  React.useEffect(() => {
+    if (!window.musicPlayer) return;
+    const sync = () => setMusicPlaying(!!window.musicPlayer.getState().playing);
+    sync();
+    return window.musicPlayer.subscribe(sync);
+  }, []);
+
+  // 시간 표기 — 디지털 시계처럼
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const display = h > 0
+    ? `${h}:${String(m).padStart(2, "0")}`
+    : `${m}m`;
+
+  const W = hover ? 82 : 74;
+  const H = hover ? 44 : 40;
+  const DRAG_THRESHOLD = 4;
+
+  // 창 크기 바뀌면 위치 안전하게 클램프
+  React.useEffect(() => {
+    if (!pos) return;
+    const onResize = () => {
+      setPos(p => {
+        if (!p) return p;
+        return {
+          x: Math.max(0, Math.min(window.innerWidth - W, p.x)),
+          y: Math.max(0, Math.min(window.innerHeight - H, p.y)),
+        };
+      });
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [!!pos, W, H]);
+
+  // 마우스 다운 — 드래그 시작. 거의 안 움직이면 클릭으로 간주.
+  const onMouseDown = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const startMouseX = e.clientX;
+    const startMouseY = e.clientY;
+    const startElX = rect.left;
+    const startElY = rect.top;
+    let moved = false;
+    let lastPos = { x: startElX, y: startElY };
+    setDragging(true);
+
+    const onMove = (ev) => {
+      const dx = ev.clientX - startMouseX;
+      const dy = ev.clientY - startMouseY;
+      if (!moved && Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD) {
+        moved = true;
+      }
+      if (moved) {
+        const nx = Math.max(0, Math.min(window.innerWidth - W, startElX + dx));
+        const ny = Math.max(0, Math.min(window.innerHeight - H, startElY + dy));
+        lastPos = { x: nx, y: ny };
+        setPos(lastPos);
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      setDragging(false);
+      if (moved) {
+        if (setTweak) setTweak("dockMiniPos", lastPos);
+      } else if (onReveal) {
+        onReveal();
+      }
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  // 위치 모드: 드래그 한 적 있음 → 떠다님(사방 둥근 모서리). 없음 → 도크 측 가장자리에 붙음.
+  const isFloating = !!pos;
+  const positionStyle = isFloating
+    ? { left: pos.x, top: pos.y, transform: "none" }
+    : { top: "50%", transform: "translateY(-50%)", [isLeft ? "left" : "right"]: 0 };
+  const borderRadius = isFloating
+    ? 10
+    : (isLeft ? "0 10px 10px 0" : "10px 0 0 10px");
+  const borderStyle = "1.1px solid var(--ink)";
+
+  // 도크 본체와 같은 테마 배경 (그라데이션 + 도형)
+  const themeBg = buildBackground(
+    tweaks?.bgType ?? "linear",
+    tweaks?.bgAngle ?? 180,
+    tweaks?.bgStops ?? [{ c: "#a9cdf5", p: 0 }, { c: "#ffffff", p: 100 }],
+    tweaks?.bgShape ?? "none"
+  );
+
+  return (
+    <button
+      onMouseDown={onMouseDown}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={L("set.dockMiniTip")}
+      style={{
+        all: "unset",
+        cursor: dragging ? "grabbing" : "grab",
+        position: "fixed",
+        ...positionStyle,
+        width: W,
+        height: H,
+        background: themeBg,
+        // 작은 위젯 안에서도 패턴이 잘 보이도록 약간 줌인
+        backgroundSize: "180% 180%",
+        backgroundPosition: "center center",
+        border: borderStyle,
+        // 가장자리 붙은 상태면 화면 모서리 쪽만 보더 없앰
+        borderLeft:  (!isFloating && isLeft)  ? "none" : borderStyle,
+        borderRight: (!isFloating && !isLeft) ? "none" : borderStyle,
+        borderRadius,
+        boxShadow: "inset 0 1px 2px rgba(255,255,255,0.35), inset 0 -1px 1px rgba(0,0,0,0.08), 2px 2px 0 var(--paper-3), 3px 3px 12px rgba(138,106,94,0.18)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 5,
+        color: "var(--ink)",
+        fontFamily: "var(--mono)",
+        fontSize: hover ? 17 : 16,
+        fontWeight: 700,
+        letterSpacing: "0.02em",
+        // 글자가 패턴 위에서 잘 보이게 가는 종이 그림자
+        textShadow: "0 1px 0 rgba(255,255,255,0.55)",
+        transition: dragging ? "none" : "width 0.18s, height 0.18s, font-size 0.18s",
+        zIndex: 10,
+        userSelect: "none",
+        overflow: "hidden",
+      }}
+    >
+      <span style={{ fontSize: 11, opacity: 0.7, textShadow: "none" }}>⏱</span>
+      <span style={{ lineHeight: 1 }}>{display}</span>
+
+      {/* 음악 재생 중 — 모서리 작은 ♪ */}
+      {musicPlaying && (
+        <span style={{
+          position: "absolute",
+          top: 3,
+          right: 5,
+          fontSize: 9,
+          color: "var(--ink-2)",
+          opacity: 0.85,
+          letterSpacing: 0,
+          textShadow: "none",
+        }}>♪</span>
+      )}
+    </button>
   );
 }
 
@@ -191,7 +375,7 @@ function TabHeader({ active }) {
 }
 
 // ---- 다이어리 인덱스 탭 ----
-function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabStyle, chrome, compact }) {
+function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabStyle, chrome, compact, autoHide }) {
   const cm = (pct) => `color-mix(in srgb, ${chrome || "#a9cdf5"} ${pct}%, white)`;
   // 탭이 도크의 어느 쪽 바깥에 붙는지 → 위치 계산
   const onLeft = tabSide === "left";
@@ -210,6 +394,61 @@ function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSt
   const TAB_W = 32;     // 삐쳐나온 깊이
   const TAB_H = compact ? 40 : 74;   // 짧을 땐 아이콘만(낮은 탭)
   const TAB_GAP = 4;
+
+  // ---- 자동 숨김 로직 ----
+  // autoHide=true 일 때: 처음엔 숨김. 가장자리 영역에 마우스 2초 호버 → 슬라이드로 노출.
+  // 마우스가 영역 밖으로 나가면 다시 접힘. (호버 중 2초 안 채우고 떼면 타이머 취소.)
+  const REVEAL_DELAY = 1500;
+  const HIDE_DELAY = 220;  // 살짝 여유 — 탭 사이 갭으로 마우스가 잠깐 빠져나가도 바로 안 접힘
+  const [revealed, setRevealed] = useState(false);
+  const revealTimerRef = React.useRef(null);
+  const hideTimerRef = React.useRef(null);
+
+  React.useEffect(() => {
+    // autoHide 끄면 즉시 보이게
+    if (!autoHide) {
+      setRevealed(false);  // shown state moot
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    } else {
+      // 처음엔 숨김
+      setRevealed(false);
+    }
+    return () => {
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
+  }, [autoHide]);
+
+  const onZoneEnter = () => {
+    if (!autoHide) return;
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+    if (revealed) return;
+    if (revealTimerRef.current) return;
+    revealTimerRef.current = setTimeout(() => {
+      setRevealed(true);
+      revealTimerRef.current = null;
+    }, REVEAL_DELAY);
+  };
+
+  const onZoneLeave = () => {
+    if (!autoHide) return;
+    if (revealTimerRef.current) {
+      clearTimeout(revealTimerRef.current);
+      revealTimerRef.current = null;
+    }
+    if (!revealed) return;
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => {
+      setRevealed(false);
+      hideTimerRef.current = null;
+    }, HIDE_DELAY);
+  };
+
+  const hidden = autoHide && !revealed;
 
   const renderTab = (t) => {
     const isActive = t.id === active;
@@ -254,16 +493,56 @@ function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSt
     );
   };
 
+  // 슬라이드 — 숨김 시 도크 본체 쪽으로 살짝 들어가서 본체에 가려짐 (dock-body z-index:2 > tabs z-index:1)
+  // 약간 더 들여서(TAB_W + 8) 살짝 비어 보이는 틈을 없앤다.
+  const slideOffset = TAB_W + 8;
+  const hiddenTransform = stickRight
+    ? `translateX(-${slideOffset}px)`
+    : `translateX(${slideOffset}px)`;
+
+  // 호버 감지 영역 — 도크 본체 바로 옆. 숨김 상태에서도 충분히 넓어야 마우스가 쉽게 닿음.
+  // (TAB_W=32, 펼친 탭은 +6 → 38px. 호버 영역은 이보다 약간 더 넓게 둠.)
+  const HOVER_ZONE_W = autoHide && !revealed ? 36 : (TAB_W + 12);
+
   return (
-    <div style={{
-      position: "absolute",
-      top: 70,
-      ...containerPos,
-      display: "flex", flexDirection: "column", gap: TAB_GAP,
-      alignItems: stickRight ? "flex-start" : "flex-end",
-      zIndex: 1,
-    }}>
-      {tabs.map(renderTab)}
+    <div
+      onMouseEnter={onZoneEnter}
+      onMouseLeave={onZoneLeave}
+      style={{
+        position: "absolute",
+        top: 0, bottom: 0,
+        ...containerPos,
+        width: HOVER_ZONE_W,
+        zIndex: 1,
+        pointerEvents: "auto",
+      }}
+    >
+      {/* 숨김 상태에서 가장자리에 살짝 보이는 힌트 — 마우스 가져오라는 표시 */}
+      {hidden && (
+        <div style={{
+          position: "absolute",
+          top: 72,
+          [stickRight ? "left" : "right"]: 0,
+          width: 3,
+          height: 60,
+          background: cm(35),
+          borderRadius: stickRight ? "0 3px 3px 0" : "3px 0 0 3px",
+          opacity: 0.6,
+          pointerEvents: "none",
+        }} />
+      )}
+
+      <div style={{
+        position: "absolute",
+        top: 70,
+        [stickRight ? "left" : "right"]: 0,
+        display: "flex", flexDirection: "column", gap: TAB_GAP,
+        alignItems: stickRight ? "flex-start" : "flex-end",
+        transform: hidden ? hiddenTransform : "none",
+        transition: "transform 0.32s cubic-bezier(0.4, 0, 0.2, 1)",
+      }}>
+        {tabs.map(renderTab)}
+      </div>
     </div>
   );
 }
@@ -356,6 +635,18 @@ function SettingsView({ tweaks, setTweak }) {
       <SetSection label={L("set.dock")}>
         <SetSeg value={t.dockSide ?? "left"} onChange={v => set("dockSide", v)}
           options={[["left", L("set.left")], ["right", L("set.right")]]} />
+      </SetSection>
+
+      <SetSection label={L("set.dockHide")}>
+        <SetSeg value={t.dockHidden ? "on" : "off"} onChange={v => set("dockHidden", v === "on")}
+          options={[["on", L("set.on")], ["off", L("set.off")]]} />
+        <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.dockHideHint")}</div>
+      </SetSection>
+
+      <SetSection label={L("set.tabsAutoHide")}>
+        <SetSeg value={t.tabsHidden ? "on" : "off"} onChange={v => set("tabsHidden", v === "on")}
+          options={[["on", L("set.on")], ["off", L("set.off")]]} />
+        <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.tabsAutoHideHint")}</div>
       </SetSection>
 
       <SetSection label={L("set.alwaysOnTop")}>

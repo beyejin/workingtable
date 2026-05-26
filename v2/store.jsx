@@ -726,6 +726,18 @@ const actions = {
       return { ...s, workSessions: sessions };
     });
   },
+  // 특정 날짜(기본: 오늘)의 작업 시간을 0으로 — 해당 항목을 통째로 제거.
+  // ActivityTracker가 누적 중이던 초도 같이 비우라고 이벤트 발사.
+  resetWorkMinutes(date) {
+    const d = date || today();
+    setState(s => ({
+      ...s,
+      workSessions: s.workSessions.filter(w => w.date !== d),
+    }));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("work-minutes-reset", { detail: { date: d } }));
+    }
+  },
 
   // ----- 위험: 리셋 -----
   async hardReset() {

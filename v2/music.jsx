@@ -83,8 +83,10 @@
     let el = document.getElementById("yt-music-host");
     if (!el) {
       const wrap = document.createElement("div");
+      // opacity:0 — iframe은 살아있어서 오디오는 재생되지만 보이지 않음.
+      // 윈도우 창이 transparent라 0.08만 줘도 바탕화면 위로 썸네일이 새어 나옴.
       wrap.style.cssText =
-        "position:fixed;right:0;bottom:0;width:356px;height:200px;opacity:0.08;" +
+        "position:fixed;right:0;bottom:0;width:356px;height:200px;opacity:0;" +
         "pointer-events:none;z-index:0;overflow:hidden;";
       el = document.createElement("div");
       el.id = "yt-music-host";

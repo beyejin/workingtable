@@ -201,7 +201,10 @@
       "appHeight": 0,
       "showFakeIde": true,
       "desktopMode": false,
-      "alwaysOnTop": false
+      "alwaysOnTop": false,
+      "dockHidden": false,
+      "tabsHidden": false,
+      "dockMiniPos": null
     }/*EDITMODE-END*/;
 
     // Tauri 속에서 실행중이면 자동으로 데스크탑 모드 점이고 transparent body
@@ -297,6 +300,16 @@
                   { value: "right", label: "바깥" },
                   { value: "left",  label: "안쪽" },
                 ]}
+              />
+              <TweakToggle
+                label="도크 미니화"
+                value={t.dockHidden}
+                onChange={(v) => setTweak("dockHidden", v)}
+              />
+              <TweakToggle
+                label="탭 자동 숨김"
+                value={t.tabsHidden}
+                onChange={(v) => setTweak("tabsHidden", v)}
               />
             </TweakSection>
             <TweakSection label="액센트">

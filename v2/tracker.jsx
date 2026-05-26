@@ -49,15 +49,18 @@ function ActivityTracker() {
 
   useEffect(() => {
     const bump = () => { lastActivityRef.current = Date.now(); };
+    const onReset = () => { pendingSecRef.current = 0; };
     window.addEventListener("mousemove", bump);
     window.addEventListener("keydown", bump);
     window.addEventListener("mousedown", bump);
     window.addEventListener("focus", bump);
+    window.addEventListener("work-minutes-reset", onReset);
     return () => {
       window.removeEventListener("mousemove", bump);
       window.removeEventListener("keydown", bump);
       window.removeEventListener("mousedown", bump);
       window.removeEventListener("focus", bump);
+      window.removeEventListener("work-minutes-reset", onReset);
     };
   }, []);
 
