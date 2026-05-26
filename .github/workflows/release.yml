@@ -82,7 +82,7 @@ jobs:
       - name: Generate latest.json
         if: matrix.platform == 'macos-latest'
         run: |
-          SIG=$(cat src-tauri/target/release/bundle/macos/*.sig)
+          SIG=$(find src-tauri/target/release/bundle -name "*.sig" | head -n 1 | xargs cat)
 
           cat > latest.json <<EOF
           {
