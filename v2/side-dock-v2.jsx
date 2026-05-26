@@ -122,7 +122,10 @@ function SideDockV2({ tweaks, setTweak }) {
       <DiaryTabs
         tabs={TABS}
         active={active}
-        onSelect={setActive}
+        onSelect={(tab) => {
+          window.dispatchEvent(new Event("closeMusicPanel"));
+          setActive(tab);
+        }}
         dockSide={dockSide}
         tabSide={effectiveTabSide}
         dockWidth={DOCK_W}

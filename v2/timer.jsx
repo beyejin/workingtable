@@ -215,6 +215,19 @@ function PlaylistBar() {
   const music = useMusic();
   const [open, setOpen] = useState(false);
   const [playerOpen, setPlayerOpen] = useState(false);
+
+  React.useEffect(() => {
+    const closeMusic = () => {
+      setOpen(false);
+      setPlayerOpen(false);
+    };
+
+    window.addEventListener("closeMusicPanel", closeMusic);
+
+    return () => {
+      window.removeEventListener("closeMusicPanel", closeMusic);
+    };
+  }, []);
   const [err, setErr] = useState("");
   const playerSlotRef = useRef(null);
 
