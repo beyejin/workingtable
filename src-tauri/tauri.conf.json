@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "vibe-diary",
-  "version": "0.4.9",
+  "version": "0.5.0",
   "identifier": "app.vibe-diary",
   "build": {
     "frontendDist": "../dist",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "url": "바이브 다이어리 - 사이드 도크 v2.html",
+        "url": "index.html",
         "title": "vibe diary",
         "width": 440,
         "height": 1000,

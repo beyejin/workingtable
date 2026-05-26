@@ -12,7 +12,7 @@ const dist = join(root, "dist");
 
 // 메인 HTML 이 로드하는 자산 목록
 const assets = [
-  "바이브 다이어리 - 사이드 도크 v2.html",
+  "index.html",
   "styles.css",
   "tweaks-panel.jsx",
   "v2",
@@ -35,4 +35,16 @@ for (const name of assets) {
   copyRecursive(join(root, name), join(dist, name));
 }
 
-console.log(`dist/ 준비 완료 (${assets.length}개 자산)`);
+// public/ 안의 내용을 dist/ 루트로 평탄화 복사 (예: public/asset/x.png → dist/asset/x.png)
+const publicDir = join(root, "public");
+try {
+  if (statSync(publicDir).isDirectory()) {
+    for (const entry of readdirSync(publicDir)) {
+      copyRecursive(join(publicDir, entry), join(dist, entry));
+    }
+  }
+} catch {
+  // public/ 폴더가 없으면 건너뜀
+}
+
+console.log(`dist/ 준비 완료 (${assets.length}개 자산 + public/)`);
