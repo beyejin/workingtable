@@ -42,9 +42,13 @@
     return tauriInvoke(command, args || {});
   }
 
+  // 검증 빌드 (③): path 비디오를 playlist 첫 번째에도 넣는다.
+  // YouTube embed가 path를 무시하고 playlist[0]부터 재생하는 환경 대응.
+  // 공식 시맨틱("path 먼저, 그 다음 playlist") 환경에서는 첫 곡이 두 번 재생될
+  // 수 있음 — 그게 관측되면 path-honor 환경이라는 증거.
   function playlistAfter(startIdx) {
     const rest = [];
-    for (let k = 1; k < queue.length; k++) {
+    for (let k = 0; k < queue.length; k++) {
       rest.push(queue[(startIdx + k) % queue.length].videoId);
     }
     return rest;
@@ -108,8 +112,10 @@
 
     const cur = queue[startIdx];
     const embedOrigin = /^https?:\/\//i.test(origin) ? origin : "https://tauri.localhost";
+    // 검증 빌드 (③): path 비디오를 playlist 첫 번째에도 포함.
+    // playlistAfter() 의 주석 참고.
     const rest = [];
-    for (let k = 1; k < queue.length; k++) {
+    for (let k = 0; k < queue.length; k++) {
       rest.push(queue[(startIdx + k) % queue.length].videoId);
     }
 
