@@ -1,4 +1,4 @@
-/* global React, diary, SplitPane */
+/* global React, diary, SplitPane, SpriteIcon */
 // ===========================================================
 // 메모 — 작은 노션 + 버디버디 UI
 //   화면1: 친구목록(버디버디 흰 창) + 메모 관리(검색/정렬/일괄)
@@ -174,9 +174,11 @@ function BuddyRow({ memo, pickerOpen, onClick, onTogglePicker, onPickIcon, onDel
           style={{
             all: "unset", cursor: "pointer", flexShrink: 0,
             width: 22, height: 22, borderRadius: 4,
-            display: "grid", placeItems: "center", fontSize: 17, lineHeight: 1,
+            display: "grid", placeItems: "center", lineHeight: 1,
             background: pickerOpen ? "var(--hi)" : "transparent",
-          }}>{memo.icon || "📝"}</button>
+          }}>
+          <SpriteIcon idx={typeof memo.icon === "number" ? memo.icon : 22} size={16} />
+        </button>
         <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 6 }}>
           <span style={{
             fontFamily: "var(--hand)", fontSize: 13, fontWeight: 700, color: "#2b2f36",
@@ -215,10 +217,12 @@ function BuddyRow({ memo, pickerOpen, onClick, onTogglePicker, onPickIcon, onDel
               style={{
                 all: "unset", cursor: "pointer",
                 width: 22, height: 22, borderRadius: 4,
-                display: "grid", placeItems: "center", fontSize: 15, lineHeight: 1,
+                display: "grid", placeItems: "center", lineHeight: 1,
                 background: memo.icon === icon ? "var(--hi)" : "transparent",
                 border: memo.icon === icon ? "1px solid var(--ink)" : "1px solid transparent",
-              }}>{icon}</button>
+              }}>
+              <SpriteIcon idx={icon} size={16} />
+            </button>
           ))}
         </div>
       )}
@@ -551,7 +555,7 @@ function MemoEditScreen({ memoId, onBack }) {
         borderBottom: "1.1px solid var(--ink)",
       }}>
         <button onClick={onBack} title={L("memo.back")} style={headerBtn}>←</button>
-        <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>{memo.icon || "📝"}</span>
+        <SpriteIcon idx={typeof memo.icon === "number" ? memo.icon : 22} size={18} style={{ flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <input
             value={memo.title || ""}

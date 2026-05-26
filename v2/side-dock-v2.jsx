@@ -1,4 +1,4 @@
-/* global React, TodayView, TodoView, MemoView, MailView, PromptView, AIView, RetroView */
+/* global React, TodayView, TodoView, MemoView, MailView, PromptView, AIView, RetroView, SpriteIcon */
 // ===========================================================
 // 사이드 도크 v2 — 다이어리 인덱스 탭 + 뷰 전환
 // 도크 본체 + 옆에 삐죽 나오는 종이 탭들.
@@ -8,13 +8,16 @@
 
 const {useState} = React;
 
+// 탭별 도트 스프라이트 인덱스 — public/asset/Sprite-0002.png (6x4=24 셀, 16x16 각)
+// [0]heart [1]sparkle [2]alert [3]question [4]check [5]fire [6]sun [7]cloud [8]rain [9]rainbow [10]moon [11]sprout
+// [12]cake [13]coffee [14]mouse [15]cat [16]bear [17]rabbit [18]pencil [19]book [20]coin [21]pill [22]memo [23]face
 const TABS = [
-    {id: "todo", labelKey: "tab.todo", glyph: "✓", color: "#d4ecdb", view: () => <TodoView/>},
-    {id: "cal", labelKey: "tab.week", glyph: "📅", color: "#d4e6fa", view: () => <CalendarView/>},
-    {id: "memo", labelKey: "tab.memo", glyph: "📝", color: "#fff0c0", view: () => <MemoView/>},
-    {id: "mail", labelKey: "tab.mail", glyph: "✉", color: "#ffe0d2", view: () => <MailView/>},
-    {id: "deco", labelKey: "tab.deco", glyph: "🎨", color: "#ffe6f0", view: () => null, foot: true},
-    {id: "settings", labelKey: "tab.settings", glyph: "⚙", color: "#e6e6ee", view: () => null, foot: true},
+    {id: "todo", labelKey: "tab.todo", glyph: "✓", sprite: 4, color: "#d4ecdb", view: () => <TodoView/>},
+    {id: "cal", labelKey: "tab.week", glyph: "17", sprite: 6, color: "#d4e6fa", view: () => <CalendarView/>},
+    {id: "memo", labelKey: "tab.memo", glyph: "▤", sprite: 22, color: "#fff0c0", view: () => <MemoView/>},
+    {id: "mail", labelKey: "tab.mail", glyph: "@", sprite: 0, color: "#ffe0d2", view: () => <MailView/>},
+    {id: "deco", labelKey: "tab.deco", glyph: "◇", sprite: 9, color: "#ffe6f0", view: () => null, foot: true},
+    {id: "settings", labelKey: "tab.settings", glyph: "⚙", sprite: 1, color: "#e6e6ee", view: () => null, foot: true},
 ];
 
 const TAB_ICONS = {
@@ -27,12 +30,12 @@ const TAB_ICONS = {
         settings: "⚙",
     },
     kitsch: {
-        todo: "✓",
-        cal: "☀",
-        memo: "🎀",
-        mail: "♡",
-        deco: "🌈",
-        settings: "✨",
+        todo: 4,
+        cal: 6,
+        memo: 22,
+        mail: 0,
+        deco: 9,
+        settings: 1,
     },
 };
 
@@ -266,6 +269,7 @@ function DiaryTabs({tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSty
         const isActive = t.id === active;
         const icon = TAB_ICONS[tabIconStyle]?.[t.id] ?? t.glyph;
         const showIcon = tabIconStyle !== "none";
+        const isSpriteIcon = typeof icon === "number";
         return (
             <button
                 key={t.id}
@@ -304,12 +308,16 @@ function DiaryTabs({tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSty
                     transform: isActive ? (stickRight ? "translateX(-2px)" : "translateX(2px)") : "none",
                 }}>
                     {showIcon && (
-                        <span style={{
-                            fontSize: compact ? 17 : 14,
-                            lineHeight: 1,
-                            color: "var(--ink)",
-                            flexShrink: 0,
-                        }}>{icon}</span>
+                        isSpriteIcon
+                            ? <SpriteIcon idx={icon} size={compact ? 20 : 16} title={L(t.labelKey)}/>
+                            : (
+                                <span style={{
+                                    fontSize: compact ? 17 : 14,
+                                    lineHeight: 1,
+                                    color: "var(--ink)",
+                                    flexShrink: 0,
+                                }}>{icon}</span>
+                            )
                     )}
                     {!compact && (
                         <span style={{

@@ -34,5 +34,6 @@ mkdirSync(dist, { recursive: true });
 for (const name of assets) {
   copyRecursive(join(root, name), join(dist, name));
 }
+copyRecursive(join(root, "public/asset"), join(dist, "asset"));
 
-console.log(`dist/ 준비 완료 (${assets.length}개 자산)`);
+console.log(`dist/ 준비 완료 (${assets.length + 1}개 자산)`);
