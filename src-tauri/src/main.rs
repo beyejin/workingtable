@@ -7,7 +7,9 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            export_backup_file,
             youtube_player_mode,
             youtube_player_set_bounds,
             youtube_player_play,
@@ -26,6 +28,34 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+async fn export_backup_file(
+    app: tauri::AppHandle,
+    file_name: String,
+    contents: String,
+) -> Result<bool, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let Some(file_path) = app
+        .dialog()
+        .file()
+        .set_title("백업 저장")
+        .set_file_name(file_name)
+        .add_filter("JSON", &["json"])
+        .blocking_save_file()
+    else {
+        return Ok(false);
+    };
+
+    let mut path = file_path.into_path().map_err(|e| e.to_string())?;
+    if path.extension().is_none() {
+        path.set_extension("json");
+    }
+
+    std::fs::write(path, contents).map_err(|e| e.to_string())?;
+    Ok(true)
 }
 
 #[tauri::command]

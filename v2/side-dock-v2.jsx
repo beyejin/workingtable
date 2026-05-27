@@ -31,6 +31,33 @@ function SideDockV2({tweaks, setTweak}) {
     }, []);
     const compactTabs = winH < 640;
 
+    React.useEffect(() => {
+        if (active !== "memo") return;
+
+        const isEditableTarget = (target) => {
+            if (!target || target === document.body) return false;
+            const el = target instanceof Element ? target : target.parentElement;
+            if (!el) return false;
+
+            const editable = el.closest("input, textarea, select, [role='textbox'], [contenteditable]");
+            if (!editable) return false;
+            return editable.getAttribute("contenteditable") !== "false";
+        };
+
+        const onKeyDown = (event) => {
+            const isSpace = event.key === " " || event.key === "Spacebar" || event.code === "Space";
+            if (!isSpace || event.repeat || event.defaultPrevented) return;
+            if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+            if (isEditableTarget(event.target)) return;
+
+            event.preventDefault();
+            window.musicPlayer?.toggle?.();
+        };
+
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [active]);
+
     const tabSide = tweaks?.tabSide ?? "right";
     const dockSide = tweaks?.dockSide ?? "left";
     const tabStyle = tweaks?.tabStyle ?? "paper";
@@ -456,13 +483,22 @@ function SettingsView({tweaks, setTweak}) {
                         try {
                             const data = diary.actions.exportData();
                             const json = JSON.stringify(data, null, 2);
+                            const stamp = new Date().toISOString().slice(0, 10);
+                            const fileName = `vibe-diary-backup-${stamp}.json`;
+                            const invoke = window.__TAURI__?.core?.invoke;
+
+                            if (invoke) {
+                                const saved = await invoke("export_backup_file", {fileName, contents: json});
+                                if (saved) await notify("백업 파일을 저장했어요.", setBackupStatus);
+                                return;
+                            }
+
                             const blob = new Blob([json], {type: "application/json"});
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement("a");
-                            const stamp = new Date().toISOString().slice(0, 10);
 
                             a.href = url;
-                            a.download = `vibe-diary-backup-${stamp}.json`;
+                            a.download = fileName;
                             document.body.appendChild(a);
                             a.click();
                             a.remove();
