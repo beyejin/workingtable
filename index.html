@@ -213,6 +213,32 @@
     if (runningInTauri) TWEAK_DEFAULTS.desktopMode = true;
     document.documentElement.setAttribute("data-desktop-mode", String(TWEAK_DEFAULTS.desktopMode));
 
+    // 하단 가장자리 리사이즈 핸들 — decorations:false + transparent:true 조합에서
+    // OS native hit-area가 불안정해 명시적인 invisible strip을 깐다.
+    function WindowResizeHandle() {
+      return (
+        <div
+          onMouseDown={(e) => {
+            if (e.button !== 0) return;
+            try {
+              const T = window.__TAURI__;
+              const w = T && T.window && T.window.getCurrentWindow && T.window.getCurrentWindow();
+              if (w && w.startResizeDragging) w.startResizeDragging("South");
+            } catch (_) {}
+          }}
+          aria-hidden="true"
+          style={{
+            position: "fixed",
+            left: 0, right: 0, bottom: 0,
+            height: 6,
+            cursor: "ns-resize",
+            zIndex: 9999,
+            background: "transparent",
+          }}
+        />
+      );
+    }
+
     function App() {
       useI18n(); // 언어 변경 시 전체 리렌더
       const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
@@ -276,6 +302,7 @@
           <SideDockV2 tweaks={t} setTweak={setTweak} />
           <ActivityTracker />
           <RetroModal />
+          {runningInTauri && <WindowResizeHandle />}
           <TweaksPanel title="Tweaks">
             <TweakSection label="레이아웃">
               <TweakToggle
