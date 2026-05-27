@@ -10,14 +10,6 @@ const { useState, useEffect, useRef } = React;
 function pad2(n) { return String(n).padStart(2, "0"); }
 function dateOnly(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
 
-// 프로젝트 id → 안정적 색상 (없으면 회색)
-function projectColor(id) {
-  if (!id) return "#bdbdbd";
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-  const hue = Math.abs(h) % 360;
-  return `hsl(${hue}, 58%, 70%)`;
-}
 function startOfWeekMonday(date) {
   const d = new Date(date);
   const dow = d.getDay();
@@ -65,12 +57,13 @@ function CalendarView() {
       if (doneByDay[k]) doneByDay[k].push(t);
     }
   });
-  // 날짜별 — 총 작업시간 + 프로젝트별 브레이크다운
-  const workByDay = {};      // date → totalMinutes
-  const breakdownByDay = {}; // date → [{ projectId, project, minutes }] 분 내림차순
-  dayStrings.forEach(d => {
-    workByDay[d] = diary.select.workMinutesForDate(state, d);
-    breakdownByDay[d] = diary.select.workByProjectForDate(state, d);
+  // 날짜별 — 현재 프로젝트의 작업시간만 표시. 다른 프로젝트나 미분류는 숨김.
+  const workByDay = {};
+  const curPid = state.currentProjectId;
+  (state.workSessions ?? []).forEach(w => {
+    if (w.projectId !== curPid) return;
+    if (!dayStrings.includes(w.date)) return;
+    workByDay[w.date] = (workByDay[w.date] || 0) + (w.minutes || 0);
   });
 
   const weekNote = (state.weekNotes ?? {})[mondayStr] ?? "";
@@ -131,7 +124,6 @@ function CalendarView() {
               due={dueByDay[dayStrings[i]] || []}
               doneFloat={doneByDay[dayStrings[i]] || []}
               workMin={workByDay[dayStrings[i]] || 0}
-              workBreakdown={breakdownByDay[dayStrings[i]] || []}
               ddayLabel={dday.date === dayStrings[i] ? dDayLabel(dday.date, today) : null}
               ddayName={dday.date === dayStrings[i] ? (dday.label || L("dday.dday")) : null}
               isToday={dayStrings[i] === diary.today()}
@@ -184,10 +176,8 @@ function rangeLabel(weekStart) {
   return `${fmt(weekStart)} – ${fmt(end)}`;
 }
 
-function DayCell({ date, dateStr, labelKey, due, doneFloat, workMin, workBreakdown, ddayLabel, ddayName, isToday, actions, colIdx, rowIdx }) {
+function DayCell({ date, dateStr, labelKey, due, doneFloat, workMin, ddayLabel, ddayName, isToday, actions, colIdx, rowIdx }) {
   const allItems = [...due, ...doneFloat];
-  // 한 프로젝트만(혹은 미분류만)이면 브레이크다운 생략, 총합만 보여줌
-  const multipleProjects = (workBreakdown?.length ?? 0) > 1;
   return (
     <div style={{
       borderRight: colIdx === 0 ? "1px solid var(--ink)" : "none",
@@ -256,46 +246,14 @@ function DayCell({ date, dateStr, labelKey, due, doneFloat, workMin, workBreakdo
         ))}
       </div>
 
-      {/* 작업시간 푸터 — 총합 + (여러 프로젝트면) 칩 */}
+      {/* 작업시간 푸터 — 현재 프로젝트만 (다른 프로젝트나 미분류는 숨김) */}
       {!!workMin && (
-        <div style={{ flexShrink: 0, marginTop: 4 }}>
-          <div style={{
-            display: "inline-flex", alignItems: "center", gap: 4,
-            fontFamily: "var(--mono)", fontSize: 10, color: "var(--ink-2)",
-          }}>
-            <span>🕒</span><span>{fmtMins(workMin)}</span>
-          </div>
-          {multipleProjects && (
-            <div style={{
-              marginTop: 2, display: "flex", flexWrap: "wrap", gap: 3,
-            }}>
-              {workBreakdown.map(b => (
-                <span
-                  key={b.projectId ?? "_"}
-                  title={`${b.project?.name ?? L("planner.unattributed")} · ${fmtMins(b.minutes)}`}
-                  style={{
-                    display: "inline-flex", alignItems: "center", gap: 3,
-                    padding: "0 5px", borderRadius: 99,
-                    border: "1px solid var(--ink-soft)",
-                    background: "rgba(255,255,255,0.55)",
-                    fontFamily: "var(--mono)", fontSize: 9, lineHeight: 1.5,
-                    color: "var(--ink-2)",
-                    maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                  }}
-                >
-                  <span style={{
-                    width: 7, height: 7, borderRadius: "50%",
-                    background: projectColor(b.projectId),
-                    border: "1px solid rgba(0,0,0,0.15)", flexShrink: 0,
-                  }} />
-                  <span style={{ maxWidth: 56, overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {(b.project?.name ?? L("planner.unattributed")).slice(0, 8)}
-                  </span>
-                  <span style={{ color: "var(--ink-3)" }}>{fmtMins(b.minutes)}</span>
-                </span>
-              ))}
-            </div>
-          )}
+        <div style={{
+          flexShrink: 0, marginTop: 4,
+          display: "inline-flex", alignItems: "center", gap: 4,
+          fontFamily: "var(--mono)", fontSize: 10, color: "var(--ink-2)",
+        }}>
+          <span>🕒</span><span>{fmtMins(workMin)}</span>
         </div>
       )}
     </div>

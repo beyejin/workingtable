@@ -52,12 +52,36 @@ function recLabel(r) {
   return (r.weeklyDays || []).map(d => DOW[d]).join("·") || "특정 요일";
 }
 
+// 달력 영역 높이 — 1주 단위로 스냅. (헤더+요일행+컨테이너 보더+패딩 ≈ 70px, 주 한 행 ≈ 30px)
+const CAL_WEEK_PX = 30;
+const CAL_BASE_PX = 70;
+const CAL_MIN_WEEKS = 1;
+const CAL_MAX_WEEKS = 6;
+const CAL_STORAGE_KEY = "vibe.todoCalendarHeight";
+function calSnap(h) {
+  const weeks = Math.round((h - CAL_BASE_PX) / CAL_WEEK_PX);
+  const clamped = Math.max(CAL_MIN_WEEKS, Math.min(CAL_MAX_WEEKS, weeks));
+  return CAL_BASE_PX + clamped * CAL_WEEK_PX;
+}
+
 function TodoView() {
   const { state, actions } = diary.useDiary();
   const [selId, setSel] = useState(null);
   const todayStr = diary.today();
   // 현재 보고 있는 날짜. null = 오늘.
   const [selectedDate, setSelectedDate] = useState(todayStr);
+  // 달력 영역 높이 — 저장된 값 복원, 없으면 4주 기본
+  const [calHeight, setCalHeight] = useState(() => {
+    try {
+      const v = parseInt(localStorage.getItem(CAL_STORAGE_KEY) || "", 10);
+      return Number.isFinite(v) ? calSnap(v) : calSnap(CAL_BASE_PX + 4 * CAL_WEEK_PX);
+    } catch (_) { return CAL_BASE_PX + 4 * CAL_WEEK_PX; }
+  });
+  const onCalResize = (h) => {
+    const snapped = calSnap(h);
+    setCalHeight(snapped);
+    try { localStorage.setItem(CAL_STORAGE_KEY, String(snapped)); } catch (_) {}
+  };
   useEffect(() => { actions.generateRecurrences(); }, []);
 
   const items = diary.select.todosForCurrent(state);
@@ -114,6 +138,10 @@ function TodoView() {
   const dateLabel = isToday ? L("todo.today") : (window.i18n && window.i18n.fmtDate ? window.i18n.fmtDate(selectedDate) : selectedDate);
   const placeholder = isToday ? L("todo.addPh") : `${fmtMD(selectedDate)} ${L("todo.addPhDate")}`;
 
+  // 진행도 — 보이는 할 일 + 그들의 서브태스크 체크박스 전체 카운팅
+  const progressTotal = list.reduce((s, t) => s + 1 + (t.subTasks?.length ?? 0), 0);
+  const progressDone = list.reduce((s, t) => s + (t.done ? 1 : 0) + (t.subTasks?.filter(st => st.done).length ?? 0), 0);
+
   return (
     <SplitPane
       topLabel={`📅 ${dateLabel} · ${list.filter(t => !t.done).length}`}
@@ -141,6 +169,9 @@ function TodoView() {
           )}
         </div>
       }
+      middle={progressTotal > 0 && <TodoProgressBar done={progressDone} total={progressTotal} />}
+      bottomHeight={calHeight}
+      onBottomHeightChange={onCalResize}
       bottomScroll={false}
       bottom={
         <TodoMonthCalendar
@@ -148,18 +179,96 @@ function TodoView() {
           doneDates={doneDates}
           selectedDate={selectedDate}
           onPick={(d) => setSelectedDate(d)}
+          actions={actions}
+          selId={selId}
+          selectedTodo={selId ? items.find(t => t.id === selId) : null}
         />
       }
     />
   );
 }
 
+// ---- 진행도 바 — 투두리스트와 달력 사이 ----
+// 보이는 모든 체크박스(상위 + 하위) 합산 비율.
+function TodoProgressBar({ done, total }) {
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  const complete = total > 0 && done === total;
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 6,
+      padding: "3px 12px",
+      background: "rgba(255,255,255,0.55)",
+      borderTop: "1px solid var(--ink-soft)",
+    }}>
+      <div style={{
+        flex: 1, height: 5, borderRadius: 99,
+        background: "rgba(0,0,0,0.1)", overflow: "hidden",
+      }}>
+        <div style={{
+          width: `${pct}%`, height: "100%",
+          background: complete
+            ? "#52c759"
+            : "linear-gradient(90deg, var(--point-soft, #ffe3a0), var(--point, #fdff85))",
+          transition: "width 0.2s ease",
+        }} />
+      </div>
+      <span style={{
+        fontFamily: "var(--mono)", fontSize: 10,
+        color: complete ? "#2f7d44" : "var(--ink-2)",
+        flexShrink: 0, minWidth: 28, textAlign: "right",
+      }}>{done}/{total}</span>
+    </div>
+  );
+}
+
 // ---- 컴팩트 월간 달력 (할 일 탭 아래) ----
-function TodoMonthCalendar({ dueDates, doneDates, selectedDate, onPick }) {
+// 추가 인터랙션:
+// (1) 할 일이 선택된 상태에서 셀 위에 드래그 → 기간(startDate/endDate) 설정.
+// (2) 할 일 행을 잡아서 셀에 드롭 → 그 날짜로 dueDate 이동 (기간 클리어).
+function TodoMonthCalendar({ dueDates, doneDates, selectedDate, onPick, actions, selId, selectedTodo }) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const todayStr = diary.today();
+
+  // 범위 드래그 상태 — selId 있는 동안만 활성
+  const [downDate, setDownDate] = useState(null);
+  const [hoverDate, setHoverDate] = useState(null);
+  // HTML5 drop 호버 (시각 피드백용)
+  const [dropDate, setDropDate] = useState(null);
+
+  // mouseup 윈도우 핸들러 — 범위 드래그 종료
+  useEffect(() => {
+    if (!downDate) return;
+    const onUp = () => {
+      const draggedAcross = hoverDate && hoverDate !== downDate;
+      if (draggedAcross && selId && actions) {
+        const lo = downDate < hoverDate ? downDate : hoverDate;
+        const hi = downDate < hoverDate ? hoverDate : downDate;
+        actions.setTodoPeriod(selId, lo, hi);
+        actions.setTodoDue(selId, null);
+      } else {
+        // 단순 클릭이거나 selId 없이 드래그한 경우 → 평소처럼 날짜 필터
+        onPick(downDate);
+      }
+      setDownDate(null);
+      setHoverDate(null);
+    };
+    window.addEventListener("mouseup", onUp);
+    return () => window.removeEventListener("mouseup", onUp);
+  }, [downDate, hoverDate, selId, actions, onPick]);
+
+  // 셀이 현재 드래그 중인 범위 안에 있는지 — selId 있을 때만 시각화 (그래야 의미 있음)
+  const inRangeDrag = (d) => {
+    if (!selId || !downDate || !hoverDate) return false;
+    const lo = downDate < hoverDate ? downDate : hoverDate;
+    const hi = downDate < hoverDate ? hoverDate : downDate;
+    return lo <= d && d <= hi;
+  };
+
+  // 선택된 할 일의 기존 기간 — 시각적으로 미리 깔아둠 (드래그 안 하는 평소에도)
+  const selPeriod = selectedTodo ? normalizedPeriod(selectedTodo) : null;
+  const inSelPeriod = (d) => !!selPeriod && selPeriod.start <= d && d <= selPeriod.end;
 
   const startDow = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -211,40 +320,78 @@ function TodoMonthCalendar({ dueDates, doneDates, selectedDate, onPick }) {
           }}>{w}</div>
         ))}
       </div>
-      {/* 날짜 그리드 — 셀 최소 높이 보장 + 부족하면 스크롤 */}
+      {/* 날짜 그리드 — 셀 최소 높이 보장 + 부족하면 스크롤. 스크롤은 주 단위로 스냅. */}
       <div style={{
         flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden",
         display: "grid",
         gridTemplateColumns: "repeat(7,1fr)",
         gridTemplateRows: `repeat(${rows}, minmax(30px, 1fr))`,
+        scrollSnapType: "y mandatory",
+        scrollPaddingTop: 0,
       }}>
         {cells.map((d, i) => {
-          if (d == null) return <div key={i} style={{ borderTop: "1px solid #eef0f3", borderLeft: i % 7 === 0 ? "none" : "1px solid #eef0f3" }} />;
+          if (d == null) return <div key={i} style={{ borderTop: "1px solid #eef0f3", borderLeft: i % 7 === 0 ? "none" : "1px solid #eef0f3", scrollSnapAlign: "start" }} />;
           const ds = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
           const isToday = ds === todayStr;
           const isSelected = ds === selectedDate;
           const hasDue = dueDates.has(ds);
           const hasDone = doneDates.has(ds);
+          const isInRange = inRangeDrag(ds);
+          const isInSelPeriod = !isInRange && inSelPeriod(ds);
+          const isDropHover = dropDate === ds;
+
+          // 배경 — 드롭 호버 > 드래그 범위 > 선택 셀 > 선택 할 일의 기간 표시
+          let cellBg = "transparent";
+          if (isDropHover) cellBg = "var(--hi)";
+          else if (isInRange) cellBg = "var(--hi-soft)";
+          else if (isSelected) cellBg = "var(--hi-soft)";
+          else if (isInSelPeriod) cellBg = "rgba(168, 196, 232, 0.22)";
+
           return (
-            <button key={i} onClick={() => onPick(ds)} style={{
-              all: "unset", cursor: "pointer", position: "relative",
-              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1,
-              borderTop: "1px solid #eef0f3",
-              borderLeft: i % 7 === 0 ? "none" : "1px solid #eef0f3",
-              background: isSelected ? "var(--hi-soft)" : "transparent",
-              boxShadow: isSelected ? "inset 0 0 0 1.5px var(--ink)" : "none",
-            }}>
+            <div
+              key={i}
+              onMouseDown={(e) => {
+                if (e.button !== 0) return;
+                setDownDate(ds);
+                setHoverDate(ds);
+              }}
+              onMouseEnter={() => { if (downDate) setHoverDate(ds); }}
+              onDragOver={(e) => {
+                if (!actions) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                if (dropDate !== ds) setDropDate(ds);
+              }}
+              onDragLeave={() => { if (dropDate === ds) setDropDate(null); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const id = e.dataTransfer.getData("text/todo-id");
+                setDropDate(null);
+                if (id && actions) actions.moveTodoToDate(id, ds);
+              }}
+              style={{
+                cursor: "pointer", position: "relative",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1,
+                borderTop: "1px solid #eef0f3",
+                borderLeft: i % 7 === 0 ? "none" : "1px solid #eef0f3",
+                background: cellBg,
+                boxShadow: isSelected && !isInRange && !isDropHover ? "inset 0 0 0 1.5px var(--ink)" : "none",
+                userSelect: "none",
+                scrollSnapAlign: "start",
+              }}>
               <span style={{
                 width: 20, height: 20, display: "grid", placeItems: "center", borderRadius: "50%",
                 fontFamily: "var(--mono)", fontSize: 10.5, fontWeight: isToday ? 700 : 400,
                 background: isToday ? "var(--point)" : "transparent",
                 color: "var(--ink)",
+                pointerEvents: "none",
               }}>{d}</span>
-              <span style={{ display: "inline-flex", gap: 2, height: 4 }}>
+              <span style={{ display: "inline-flex", gap: 2, height: 4, pointerEvents: "none" }}>
                 {hasDue && <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#e06a7a" }} />}
                 {hasDone && <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#9aa7b8" }} />}
               </span>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -264,76 +411,239 @@ const navBtn = {
 // • selected: 그 행만 액션 아이콘 / 외곽선 / 드래그 활성
 // • compact:  중요·예정 트레이용 (드래그 없음)
 // • t.done:   취소선 + 회색
+// • subTasks: 접히는 하위 목록 + 진행도 (n/m) 뱃지
 function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false, onPick }) {
   const [recOpen, setRecOpen] = useState(false);
   const [dueOpen, setDueOpen] = useState(false);
-  const showActions = selected;
-  const showDrag = selected && !compact;
+  // 서브태스크 — 항목이 있으면 기본 펼침, 없으면 접힘. 사용자가 토글하면 그 상태 유지.
+  const [subOpen, setSubOpen] = useState(() => (t.subTasks?.length ?? 0) > 0);
+  const [subInput, setSubInput] = useState("");
+  // 호버 기반 액션 노출 — Notion 패턴 (셀렉트 없이 호버만으로 드래그 핸들/액션 보임).
+  const [hover, setHover] = useState(false);
+  // 제목 인라인 편집 — Things 3 패턴 (클릭하면 그 자리에서 input).
+  const [editingTitle, setEditingTitle] = useState(false);
+  // 외부에서 첫 서브태스크 추가됐을 때(드래그 nest 등) 자동 펼침
+  const hadSubsRef = React.useRef((t.subTasks?.length ?? 0) > 0);
+  React.useEffect(() => {
+    const has = (t.subTasks?.length ?? 0) > 0;
+    if (has && !hadSubsRef.current) setSubOpen(true);
+    hadSubsRef.current = has;
+  }, [t.subTasks?.length]);
+  // 드롭 모드 — null | "before"(위로 이동) | "into"(하위로 넣기)
+  const [dropMode, setDropMode] = useState(null);
+  // 호버 또는 선택 상태면 액션 아이콘 노출. 드래그는 done 아닌 비-compact 행이면 언제든 가능.
+  const showActions = !compact && (hover || selected);
+  const showDrag = !compact && !t.done;
+  const showHandle = !compact && hover && !t.done;
+
+  const subs = t.subTasks || [];
+  const subDone = subs.filter(s => s.done).length;
+  const hasSubs = subs.length > 0;
 
   const stop = (e) => e.stopPropagation();
   const onRowClick = (e) => { e.stopPropagation(); if (onPick) onPick(t.id); };
 
   const onDragStart = (e) => { e.dataTransfer.setData("text/todo-id", t.id); e.dataTransfer.effectAllowed = "move"; };
-  const onDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
+  const onDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (compact) return;
+    // 위쪽 32% = 위로 이동(reorder), 그 외 = 하위로 넣기(nest)
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = (e.clientY - rect.top) / Math.max(1, rect.height);
+    const mode = ratio < 0.32 ? "before" : "into";
+    if (dropMode !== mode) setDropMode(mode);
+  };
+  const onDragLeave = (e) => {
+    // 자식 진입으로 인한 false leave 방지 — geometry 로 실제 row 밖인지 확인
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+      setDropMode(null);
+    }
+  };
   const onDrop = (e) => {
     e.preventDefault(); e.stopPropagation();
     const fromId = e.dataTransfer.getData("text/todo-id");
-    if (fromId && fromId !== t.id) actions.reorderTodoBefore(fromId, t.id);
+    const mode = dropMode;
+    setDropMode(null);
+    if (!fromId || fromId === t.id) return;
+    if (mode === "into") {
+      actions.nestAsSubTask(t.id, fromId);
+    } else {
+      actions.reorderTodoBefore(fromId, t.id);
+    }
+  };
+
+  const addSub = () => {
+    const v = subInput.trim();
+    if (!v) return;
+    actions.addSubTask(t.id, v);
+    setSubInput("");
   };
 
   return (
     <div
       onClick={onRowClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       draggable={showDrag}
-      onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop}
+      onDragStart={onDragStart} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
       className="tape"
       style={{
         ...lightTape(i, t.pinned),
-        padding: compact ? "5px 14px" : "7px 16px",
+        padding: compact ? "5px 14px" : "6px 10px 6px 4px",
         marginBottom: compact ? 5 : 6,
-        outline: selected ? "1.6px solid var(--ink)" : "none",
-        outlineOffset: 2,
+        outline: dropMode === "into" ? "2px solid var(--point)" : "none",
+        outlineOffset: 1,
+        // Things 3 식 — 선택 시 살짝 두꺼운 왼쪽 액센트 (큰 외곽선 대신)
+        boxShadow: dropMode === "before"
+          ? "inset 0 3px 0 var(--ink)"
+          : (selected ? "inset 3px 0 0 var(--ink)" : undefined),
         opacity: t.done ? 0.7 : 1,
-        cursor: "pointer",
+        cursor: "default",
+        position: "relative",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {/* 드래그 핸들 — Notion 패턴: 호버 시에만 왼쪽 가장자리에 ⋮⋮ */}
+        <span
+          title={showHandle ? "드래그로 이동" : ""}
+          style={{
+            flexShrink: 0, width: 12,
+            cursor: showHandle ? "grab" : "default",
+            color: "var(--ink-3)", fontSize: 12, lineHeight: 1,
+            userSelect: "none", textAlign: "center",
+            opacity: showHandle ? 0.5 : 0,
+            transition: "opacity 0.12s",
+          }}
+        >{showHandle ? "⋮⋮" : ""}</span>
         <button
           onClick={(e) => { stop(e); actions.toggleTodo(t.id); }}
           className={"sk-check" + (t.done ? " done" : "")}
           style={{ cursor: "pointer", flexShrink: 0 }}
           title={t.done ? "되돌리기" : "끝냄으로 표시"}
         />
-        <span style={{
-          flex: 1, minWidth: 0, fontFamily: "var(--hand)",
-          fontSize: compact ? 14 : 15,
-          color: t.done ? "var(--ink-3)" : "var(--ink)",
-          textDecoration: t.done ? "line-through" : "none",
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        }}>{t.title}</span>
+        {/* 서브태스크 접힘 토글 — 항목 있거나 호버/선택일 때 노출 */}
+        {(hasSubs || hover || selected) && !compact && (
+          <button
+            onClick={(e) => { stop(e); setSubOpen(o => !o); }}
+            title={subOpen ? "하위 목록 접기" : "하위 목록 펼치기"}
+            style={{
+              all: "unset", cursor: "pointer", flexShrink: 0,
+              width: 14, height: 14, display: "grid", placeItems: "center",
+              fontSize: 10, color: hasSubs ? "var(--ink-2)" : "var(--ink-3)", lineHeight: 1,
+              transform: subOpen ? "rotate(90deg)" : "rotate(0deg)",
+              transition: "transform 0.15s",
+              opacity: hasSubs ? 1 : 0.55,
+            }}
+          >▸</button>
+        )}
+        {/* 제목 — 클릭하면 인라인 편집 (Things 3 패턴) */}
+        {editingTitle ? (
+          <input
+            autoFocus
+            defaultValue={t.title}
+            onClick={stop}
+            onMouseDown={stop}
+            onBlur={(e) => {
+              const v = e.target.value.trim();
+              if (v && v !== t.title) actions.updateTodo(t.id, { title: v });
+              setEditingTitle(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); e.target.blur(); }
+              else if (e.key === "Escape") {
+                e.preventDefault();
+                e.target.value = t.title;
+                setEditingTitle(false);
+              }
+            }}
+            style={{
+              flex: 1, minWidth: 0,
+              border: 0, outline: "none", background: "rgba(255,255,255,0.55)",
+              borderRadius: 4, padding: "1px 4px",
+              fontFamily: "var(--hand)", fontSize: compact ? 14 : 15,
+              color: "var(--ink)",
+            }}
+          />
+        ) : (
+          <span
+            onClick={(e) => { stop(e); if (!t.done) setEditingTitle(true); }}
+            title="클릭해서 편집"
+            style={{
+              flex: 1, minWidth: 0, fontFamily: "var(--hand)",
+              fontSize: compact ? 14 : 15,
+              color: t.done ? "var(--ink-3)" : "var(--ink)",
+              textDecoration: t.done ? "line-through" : "none",
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              cursor: t.done ? "default" : "text",
+              padding: "1px 2px",
+            }}
+          >{t.title}</span>
+        )}
 
         {/* 마감 뱃지 */}
         {t.dueDate && (
           <span title={`마감 ${t.dueDate}`} style={dueBadge}>{fmtMD(t.dueDate)}</span>
         )}
-        {normalizedPeriod(t) && (
-          <span title={`기간 ${normalizedPeriod(t).start} ~ ${normalizedPeriod(t).end}`} style={{ ...dueBadge, background: "#eef7ff" }}>{periodLabel(t)}</span>
-        )}
         {/* 반복 표시 */}
         {recRule && <span title={`반복 — ${recLabel(recRule)}`} style={{ fontSize: 12, color: "var(--ink-2)" }}>↻</span>}
 
-        {/* 선택됐을 때만 액션 아이콘 */}
+        {/* 호버/선택 시 액션 아이콘 */}
         {showActions && (
           <>
             <button onClick={(e) => { stop(e); actions.togglePin(t.id); }} title={t.pinned ? "핀 해제" : "핀(중요·예정으로 이동)"}
               style={{ ...iconBtn, color: t.pinned ? "#7a5a10" : "var(--ink-3)", fontWeight: t.pinned ? 800 : 400 }}>!</button>
             <button onClick={(e) => { stop(e); setDueOpen(o => !o); }} title="마감일" style={iconBtn}>📅</button>
             <button onClick={(e) => { stop(e); setRecOpen(o => !o); }} title="반복" style={{ ...iconBtn, color: recRule ? "var(--ink)" : "var(--ink-3)" }}>↻</button>
-            {!compact && <span title="드래그로 이동" style={{ cursor: "grab", color: "var(--ink-3)", fontSize: 14, padding: "0 2px", userSelect: "none" }}>⋮⋮</span>}
             <DelBtn onClick={(e) => { if (e && e.stopPropagation) e.stopPropagation(); actions.removeTodo(t.id); }} />
           </>
         )}
       </div>
+
+      {/* 서브태스크 펼침 — Notion 식 들여쓰기, 박스 없음 */}
+      {subOpen && !compact && (
+        <div style={{
+          marginTop: 4,
+          paddingLeft: 22,  // 체크박스 + 핸들 위치 정도로 들여쓰기
+          display: "flex", flexDirection: "column", gap: 1,
+        }} onClick={stop}>
+          {subs.map(st => (
+            <SubTaskRow key={st.id} st={st} parentId={t.id} actions={actions} />
+          ))}
+          {/* 새 항목 입력 — 버튼 토글 없이 항상 보임. 클릭해서 바로 타이핑, Enter 로 추가하고 연속 입력. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "1px 0" }}>
+            <span
+              aria-hidden="true"
+              style={{
+                width: 14, flexShrink: 0,
+                color: "var(--ink-3)", fontSize: 11, textAlign: "center",
+                opacity: subInput ? 0.7 : 0.35,
+                transition: "opacity 0.12s",
+              }}
+            >+</span>
+            <input
+              value={subInput}
+              onChange={(e) => setSubInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); addSub(); }
+                else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setSubInput("");
+                  e.target.blur();
+                }
+              }}
+              placeholder="하위 할 일 추가…"
+              style={{
+                flex: 1, minWidth: 0,
+                border: 0, outline: "none", background: "transparent",
+                fontFamily: "var(--hand)", fontSize: 13, color: "var(--ink)",
+                padding: "1px 2px",
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* 마감일 펼침 */}
       {dueOpen && showActions && (
@@ -356,6 +666,80 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
           <RecurrencePanel t={t} recRule={recRule} actions={actions} onClose={() => setRecOpen(false)} />
         </div>
       )}
+    </div>
+  );
+}
+
+// 서브태스크 한 줄 — 호버 시 × 노출, 제목 클릭하면 인라인 편집
+function SubTaskRow({ st, parentId, actions }) {
+  const [hover, setHover] = useState(false);
+  const [editing, setEditing] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: "flex", alignItems: "center", gap: 6,
+        padding: "1px 0",
+      }}
+    >
+      <button
+        onClick={(e) => { e.stopPropagation(); actions.toggleSubTask(parentId, st.id); }}
+        className={"sk-check" + (st.done ? " done" : "")}
+        style={{ cursor: "pointer", flexShrink: 0, transform: "scale(0.82)" }}
+        title={st.done ? "되돌리기" : "끝냄으로 표시"}
+      />
+      {editing ? (
+        <input
+          autoFocus
+          defaultValue={st.title}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onBlur={(e) => {
+            const v = e.target.value.trim();
+            if (v && v !== st.title) actions.renameSubTask(parentId, st.id, v);
+            setEditing(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); e.target.blur(); }
+            else if (e.key === "Escape") {
+              e.preventDefault();
+              e.target.value = st.title;
+              setEditing(false);
+            }
+          }}
+          style={{
+            flex: 1, minWidth: 0,
+            border: 0, outline: "none",
+            background: "rgba(255,255,255,0.55)", borderRadius: 4,
+            padding: "1px 4px",
+            fontFamily: "var(--hand)", fontSize: 13, color: "var(--ink)",
+          }}
+        />
+      ) : (
+        <span
+          onClick={(e) => { e.stopPropagation(); if (!st.done) setEditing(true); }}
+          style={{
+            flex: 1, minWidth: 0, fontFamily: "var(--hand)", fontSize: 13,
+            color: st.done ? "var(--ink-3)" : "var(--ink)",
+            textDecoration: st.done ? "line-through" : "none",
+            wordBreak: "break-word",
+            cursor: st.done ? "default" : "text",
+            padding: "1px 2px",
+          }}
+        >{st.title}</span>
+      )}
+      <button
+        onClick={(e) => { e.stopPropagation(); actions.removeSubTask(parentId, st.id); }}
+        title="삭제"
+        style={{
+          all: "unset", cursor: "pointer", flexShrink: 0,
+          width: 14, height: 14, display: "grid", placeItems: "center",
+          fontSize: 11, color: "var(--ink-3)", borderRadius: 3,
+          opacity: hover ? 0.6 : 0,
+          transition: "opacity 0.12s",
+        }}
+      >×</button>
     </div>
   );
 }
