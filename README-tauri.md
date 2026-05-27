@@ -35,7 +35,7 @@ npm run build
 
 ```
 project/
-├── 바이브 다이어리 - 사이드 도크 v2.html   ← Tauri가 로드하는 메인 HTML
+├── index.html                              ← Tauri가 로드하는 메인 HTML
 ├── styles.css, design-canvas.jsx, ...
 ├── v2/                                       ← React 컴포넌트
 ├── package.json                              ← Tauri CLI

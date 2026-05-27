@@ -12,7 +12,7 @@ const dist = join(root, "dist");
 
 // 메인 HTML 이 로드하는 자산 목록
 const assets = [
-  "바이브 다이어리 - 사이드 도크 v2.html",
+  "index.html",
   "styles.css",
   "tweaks-panel.jsx",
   "v2",

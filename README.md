@@ -69,7 +69,7 @@ Windows · macOS 지원, 자동 업데이트.
 ## 📂 구조
 
 ```
-바이브 다이어리 - 사이드 도크 v2.html   # 진입점 (스크립트 로드 + App)
+index.html                              # 진입점 (스크립트 로드 + App)
 v2/                                    # 화면 모듈 (스토어/뷰/타이머/꾸미기/i18n …)
 styles.css                             # 디자인 토큰 & 공통 스타일
 src-tauri/                             # Tauri (Rust) — 설정·권한·번들
