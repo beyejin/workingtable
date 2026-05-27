@@ -42,13 +42,16 @@ function Timer() {
   );
 }
 
-// ---- 작업 시간 (프로그램 켜둔 활동 시간 누적) — 00 H 00 M ----
-// 점(•)을 클릭하면 "외부 작업 모드" 토글. 켜지면 초록색, 다른 앱에서 일할 때도 카운트.
+// ---- 작업 시간 (프로그램 켜둔 활동 시간 누적) — 00 H 00 M 00 S ----
+// 점(•)을 클릭하면 EXTERNAL 모드 토글. 켜지면 작업 시간 카운트를 멈춘다.
 function WorkTime() {
   const { state } = diary.useDiary();
-  const min = diary.select.workMinutesToday(state);
-  const h = Math.floor(min / 60);
-  const m = min % 60;
+  const totalSec = diary.select.workSecondsToday
+    ? diary.select.workSecondsToday(state)
+    : diary.select.workMinutesToday(state) * 60;
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const sec = totalSec % 60;
   const pad = (n) => String(n).padStart(2, "0");
   const [blink, setBlink] = useState(true);
   const [external, setExternal] = useState(() => !!(window.workTracker && window.workTracker.isExternal()));
@@ -83,6 +86,8 @@ function WorkTime() {
       <span style={{ fontSize: 10, opacity: .6 }}>H</span>
       <span>{pad(m)}</span>
       <span style={{ fontSize: 10, opacity: .6 }}>M</span>
+      <span>{pad(sec)}</span>
+      <span style={{ fontSize: 10, opacity: .6 }}>S</span>
     </span>
   );
 }
@@ -138,7 +143,9 @@ function DDay() {
         onChange={(v) => actions.setDday({ label: v })}
         placeholder={L("dday.label")}
         style={{
-          fontFamily: "var(--hand)", fontSize: 12, color: "var(--ink-2)",
+          fontFamily: "var(--hand)", fontSize: 12, lineHeight: "18px", color: "var(--ink-2)",
+          minHeight: 18, padding: "0 4px",
+          display: "inline-flex", alignItems: "center",
           maxWidth: 76, whiteSpace: "nowrap", overflow: "hidden",
         }}
       />
@@ -296,11 +303,15 @@ function PlaylistBar() {
   return (
     <div style={{ position: "relative" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <button onClick={() => runMusic(() => music.prev())} title="이전" style={pbBtn}>⏮</button>
-        <button onClick={() => runMusic(() => music.toggle())} title={ms.playing ? "일시정지" : "재생"} style={pbBtn}>
-          {ms.playing ? "⏸" : "▶"}
+        <button onClick={() => runMusic(() => music.prev())} title="이전" style={pbBtn}>
+          <MusicBtnIcon type="prev" />
         </button>
-        <button onClick={() => runMusic(() => music.next())} title="다음" style={pbBtn}>⏭</button>
+        <button onClick={() => runMusic(() => music.toggle())} title={ms.playing ? "일시정지" : "재생"} style={pbBtn}>
+          <MusicBtnIcon type={ms.playing ? "pause" : "play"} />
+        </button>
+        <button onClick={() => runMusic(() => music.next())} title="다음" style={pbBtn}>
+          <MusicBtnIcon type="next" />
+        </button>
         <div className="marquee" style={{
           flex: 1, height: 20, lineHeight: "20px",
           borderRadius: 6, padding: "0 4px",
@@ -309,7 +320,9 @@ function PlaylistBar() {
         }}>
           <span className="marquee-inner">{label}　♫　{label}</span>
         </div>
-        <button onClick={() => setOpen(o => !o)} title="플레이리스트" style={pbBtn}>{open ? "▾" : "+"}</button>
+        <button onClick={() => setOpen(o => !o)} title="플레이리스트" style={pbBtn}>
+          <MusicBtnIcon type={open ? "chevronUp" : "plus"} />
+        </button>
       </div>
       {/* 펼침: 곡 추가 + 목록 (위로 팝오버) */}
       {open && (
@@ -407,6 +420,48 @@ const pbBtn = {
   borderRadius: 6, border: "1.1px solid var(--ink)",
   background: "var(--paper)", color: "var(--ink)", fontSize: 11,
 };
+
+function MusicBtnIcon({ type }) {
+  const common = {
+    fill: "currentColor",
+    stroke: "none",
+  };
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true" focusable="false" style={{
+      display: "block",
+      overflow: "visible",
+    }}>
+      {type === "prev" && (
+        <>
+          <rect x="3" y="3" width="1.7" height="10" rx="0.6" {...common}/>
+          <path d="M12.5 3.2v9.6L5.4 8z" {...common}/>
+        </>
+      )}
+      {type === "play" && <path d="M5.2 3.1v9.8L12.4 8z" {...common}/>}
+      {type === "pause" && (
+        <>
+          <rect x="4.2" y="3.1" width="2.6" height="9.8" rx="0.7" {...common}/>
+          <rect x="9.2" y="3.1" width="2.6" height="9.8" rx="0.7" {...common}/>
+        </>
+      )}
+      {type === "next" && (
+        <>
+          <path d="M3.5 3.2v9.6L10.6 8z" {...common}/>
+          <rect x="11.3" y="3" width="1.7" height="10" rx="0.6" {...common}/>
+        </>
+      )}
+      {type === "plus" && (
+        <>
+          <rect x="7.1" y="3.3" width="1.8" height="9.4" rx="0.7" {...common}/>
+          <rect x="3.3" y="7.1" width="9.4" height="1.8" rx="0.7" {...common}/>
+        </>
+      )}
+      {type === "chevronUp" && (
+        <path d="M3.5 10.2 8 5.8l4.5 4.4-1.2 1.1L8 8.1l-3.3 3.2z" {...common}/>
+      )}
+    </svg>
+  );
+}
 
 // ---- 도넛 ----
 function TimerDonut({ remaining, progress, paused, enabled, running, onClick }) {

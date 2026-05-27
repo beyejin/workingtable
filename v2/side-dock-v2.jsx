@@ -54,8 +54,6 @@ function SideDockV2({tweaks, setTweak}) {
     const compactTabs = winH < 640;
 
     React.useEffect(() => {
-        if (active !== "memo") return;
-
         const isEditableTarget = (target) => {
             if (!target || target === document.body) return false;
             const el = target instanceof Element ? target : target.parentElement;
@@ -76,8 +74,8 @@ function SideDockV2({tweaks, setTweak}) {
             window.musicPlayer?.toggle?.();
         };
 
-        window.addEventListener("keydown", onKeyDown);
-        return () => window.removeEventListener("keydown", onKeyDown);
+        document.addEventListener("keydown", onKeyDown, true);
+        return () => document.removeEventListener("keydown", onKeyDown, true);
     }, [active]);
 
     const tabSide = tweaks?.tabSide ?? "right";
@@ -264,6 +262,7 @@ function DiaryTabs({tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSty
     const TAB_W = 32;     // 삐쳐나온 깊이
     const TAB_H = compact ? 40 : 74;   // 짧을 땐 아이콘만(낮은 탭)
     const TAB_GAP = 4;
+    const inactiveCenterShift = stickRight ? 0 : -2;
 
     const renderTab = (t) => {
         const isActive = t.id === active;
@@ -289,8 +288,7 @@ function DiaryTabs({tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSty
                     borderRight: stickRight ? `1.1px solid var(--ink)` : "none",
                     borderRadius: stickRight ? "0 12px 12px 0" : "12px 0 0 12px",
                     boxShadow: stickRight ? "1.5px 1.5px 0 var(--paper-3)" : "-1.5px 1.5px 0 var(--paper-3)",
-                    display: "flex", flexDirection: "column",
-                    alignItems: "center", justifyContent: "center", gap: 3,
+                    position: "relative",
                     fontFamily: "var(--hand)", overflow: "hidden",
                     transition: "width 0.18s, margin 0.18s, background 0.15s",
                     filter: isActive ? "none" : "saturate(0.85)",
@@ -298,14 +296,17 @@ function DiaryTabs({tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSty
                 title={L(t.labelKey)}
             >
                 <span style={{
+                    position: "absolute",
+                    top: 0,
+                    bottom: 0,
+                    [stickRight ? "right" : "left"]: 0,
                     width: TAB_W,
-                    height: "100%",
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
                     justifyContent: "center",
                     gap: showIcon && !compact ? 3 : 0,
-                    transform: isActive ? (stickRight ? "translateX(-2px)" : "translateX(2px)") : "none",
+                    transform: isActive ? "none" : `translateX(${inactiveCenterShift}px)`,
                 }}>
                     {showIcon && (
                         isSpriteIcon

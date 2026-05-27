@@ -145,10 +145,10 @@ mod native_youtube {
     }
 
     pub fn pause(app: tauri::AppHandle) -> Result<(), String> {
-        let webview = app
-            .get_webview(LABEL)
-            .ok_or_else(|| "youtube player is not open".to_string())?;
-        load_with_referer(&webview, "about:blank".to_string(), REFERRER.to_string())
+        eval_player(
+            &app,
+            r#"(function(){var v=document.querySelector("video");if(v){v.pause();}})()"#,
+        )
     }
 
     pub fn resume(app: tauri::AppHandle) -> Result<(), String> {

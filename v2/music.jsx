@@ -102,6 +102,16 @@
     if (it && it.parentNode) it.parentNode.removeChild(it);
   }
 
+  function rawCommand(command) {
+    const iframe = document.getElementById("yt-music-iframe");
+    if (!iframe || !iframe.contentWindow) return false;
+    iframe.contentWindow.postMessage(
+      JSON.stringify({ event: "command", func: command, args: [] }),
+      "https://www.youtube.com"
+    );
+    return true;
+  }
+
   function rawCreateIframe(startIdx) {
     rawRemoveIframe();
     if (!queue.length) return;
@@ -115,6 +125,7 @@
 
     const params = new URLSearchParams({
       autoplay: "1",
+      enablejsapi: "1",
       playsinline: "1",
       controls: "0",
       disablekb: "1",
@@ -313,13 +324,18 @@
     toggle() {
       if (useNativeMode) {
         if (state.playing) {
-          invokeNative("youtube_player_pause").catch(err => fallbackToRaw(err));
+          wantPlay = false;
+          invokeNative("youtube_player_pause").catch(err => setDebug("pause failed - " + (err?.message || err)));
           state.playing = false;
           setDebug("paused");
           emit();
         } else if (queue.length) {
+          wantPlay = true;
           if (state.videoId) {
-            play(index, true);
+            invokeNative("youtube_player_resume").catch(() => play(index, true));
+            state.playing = true;
+            setDebug("resumed");
+            emit();
           } else {
             play(index, true);
           }
@@ -329,12 +345,20 @@
 
       if (useRawMode) {
         if (state.playing) {
-          rawRemoveIframe();
+          wantPlay = false;
+          rawCommand("pauseVideo");
           state.playing = false;
           setDebug("paused");
           emit();
         } else if (queue.length) {
-          play(index, true);
+          wantPlay = true;
+          if (state.videoId && rawCommand("playVideo")) {
+            state.playing = true;
+            setDebug("resumed");
+            emit();
+          } else {
+            play(index, true);
+          }
         }
         return;
       }
@@ -346,8 +370,16 @@
         return;
       }
       const st = player.getPlayerState && player.getPlayerState();
-      if (st === 1) player.pauseVideo();
-      else if (state.videoId) player.playVideo();
+      if (st === 1) {
+        wantPlay = false;
+        state.playing = false;
+        player.pauseVideo();
+        setDebug("paused");
+        emit();
+      } else if (state.videoId) {
+        wantPlay = true;
+        player.playVideo();
+      }
       else if (queue.length) play(index, true);
     },
     next() { if (queue.length) play(index + 1, true); },

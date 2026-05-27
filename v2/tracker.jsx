@@ -3,8 +3,8 @@
 // 작업 시간 자동 트래커 + 회고 자동 모달
 //
 // ActivityTracker  — 보이지 않는 컴포넌트. 한 번만 마운트.
-//   페이지 활성 상태(보임+포커스+비-유휴) 시간을 매 10초 체크해서
-//   1분 단위로 store.workSessions에 누적.
+//   페이지 활성 상태(보임+포커스+비-유휴) 시간을 매초 체크해서
+//   store.workSessions에 초 단위로 누적.
 //
 // RetroModal       — "오늘 작업 마치기" 흐름. 모달로 회고 받고
 //   타이머 정지. 어디서든 window.openRetroModal()으로 열기.
@@ -15,12 +15,11 @@
 const { useState, useEffect, useRef } = React;
 
 const IDLE_MS = 5 * 60 * 1000;   // 5분 무입력 = 유휴
-const TICK_MS = 10 * 1000;       // 체크 간격
+const TICK_MS = 1000;            // 체크 간격
 const TICK_SEC = TICK_MS / 1000;
 
-// ---- 외부 작업 모드 (module-level) ----
-// 사용자가 클튜/포토샵 등 다른 앱에서 일할 때 켜는 모드.
-// 켜져있으면 ActivityTracker가 visible/focused/idle 체크를 무시하고 무조건 카운트.
+// ---- 외부/휴식 모드 (module-level) ----
+// 켜져있으면 ActivityTracker가 작업 시간을 누적하지 않는다.
 // 안전상 새 세션마다 OFF로 시작 (영구 저장 안 함).
 (function () {
   let externalMode = false;
@@ -66,7 +65,7 @@ function ActivityTracker() {
       const external = window.workTracker && window.workTracker.isExternal();
       let active;
       if (external) {
-        active = true; // 외부 작업 모드 — 무조건 카운트
+        active = false;
       } else {
         const now = Date.now();
         const idle = now - lastActivityRef.current > IDLE_MS;
@@ -77,13 +76,7 @@ function ActivityTracker() {
       if (!active) return;
 
       pendingSecRef.current += TICK_SEC;
-
-      // 60초 누적되면 store에 commit
-      if (pendingSecRef.current >= 60) {
-        const m = Math.floor(pendingSecRef.current / 60);
-        pendingSecRef.current = pendingSecRef.current % 60;
-        actions.addWorkMinutes(m);
-      }
+      actions.addWorkSeconds(TICK_SEC);
     }, TICK_MS);
     return () => clearInterval(id);
   }, []);

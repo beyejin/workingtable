@@ -725,19 +725,30 @@ const actions = {
   },
 
   // ----- 작업 시간 트래킹 -----
-  addWorkMinutes(min) {
-    if (min <= 0) return;
+  addWorkSeconds(sec) {
+    if (sec <= 0) return;
     const t = today();
     setState(s => {
       const sessions = s.workSessions.slice();
       const idx = sessions.findIndex(w => w.date === t);
       if (idx >= 0) {
-        sessions[idx] = { ...sessions[idx], minutes: sessions[idx].minutes + min };
+        const current = sessions[idx];
+        const baseSeconds = current.seconds ?? ((current.minutes ?? 0) * 60);
+        const nextSeconds = baseSeconds + sec;
+        sessions[idx] = {
+          ...current,
+          seconds: nextSeconds,
+          minutes: Math.floor(nextSeconds / 60),
+        };
       } else {
-        sessions.push({ date: t, minutes: min });
+        sessions.push({ date: t, minutes: Math.floor(sec / 60), seconds: sec });
       }
       return { ...s, workSessions: sessions };
     });
+  },
+  addWorkMinutes(min) {
+    if (min <= 0) return;
+    actions.addWorkSeconds(min * 60);
   },
 
   // ----- 데이터 백업/복원 -----
@@ -794,6 +805,11 @@ const select = {
     const t = today();
     const sess = s.workSessions.find(w => w.date === t);
     return sess?.minutes ?? 0;
+  },
+  workSecondsToday: (s) => {
+    const t = today();
+    const sess = s.workSessions.find(w => w.date === t);
+    return sess?.seconds ?? ((sess?.minutes ?? 0) * 60);
   },
 };
 
