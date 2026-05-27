@@ -148,112 +148,41 @@ function SideDockV2({ tweaks, setTweak }) {
 }
 
 // ---- 도크 미니화 시 디지털 타이머 위젯 ----
-// 사용자가 끌어서 옮길 수 있는 작은 위젯. 배경은 도크와 같은 테마를 따라감.
-// 클릭하면 도크 복귀, 드래그하면 위치 이동(저장됨).
+// Tauri 창 자체를 위젯 크기로 줄여서 데스크탑 위 어디든 갈 수 있음 (index.html의 dockHidden useEffect 참고).
+// 위젯은 창 전체를 채우고, 외곽(time row)에 data-tauri-drag-region을 걸어 OS 레벨로 창을 끔.
+// 배경은 도크와 같은 테마. 시간 HH:MM:SS 실시간 틱. 음악 prev/play-pause/next 컨트롤.
 function DockRevealEdge({ tweaks, setTweak, onReveal }) {
-  const [hover, setHover] = useState(false);
-  const [dragging, setDragging] = useState(false);
-  const dockSide = tweaks?.dockSide ?? "left";
-  const isLeft = dockSide === "left";
-
-  // 저장된 위치(없으면 도크 측 가장자리 세로 중앙에 붙임)
-  const savedPos = tweaks?.dockMiniPos ?? null;
-  const [pos, setPos] = useState(savedPos);
-  React.useEffect(() => { setPos(savedPos); }, [savedPos]);
-
-  // 작업 시간 구독
+  // 작업 시간 — 분(커밋된 분) + 초(아직 안 커밋된 진행 중 초)를 합쳐서 HH:MM:SS 표시
   const { state } = diary.useDiary();
   const minutes = diary.select.workMinutesToday(state);
+  const [pendingSec, setPendingSec] = useState(
+    () => (window.workActivity && window.workActivity.getPendingSec()) || 0
+  );
+  React.useEffect(() => {
+    if (!window.workActivity) return;
+    return window.workActivity.subscribe(setPendingSec);
+  }, []);
 
-  // 음악 재생 상태 구독
-  const [musicPlaying, setMusicPlaying] = useState(
-    () => !!(window.musicPlayer && window.musicPlayer.getState().playing)
+  const totalSec = minutes * 60 + pendingSec;
+  const hh = Math.floor(totalSec / 3600);
+  const mm = Math.floor((totalSec % 3600) / 60);
+  const ss = totalSec % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  const timeDisplay = `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
+
+  // 음악 상태 구독
+  const [music, setMusic] = useState(
+    () => window.musicPlayer
+      ? { ...window.musicPlayer.getState() }
+      : { playing: false, hasQueue: false }
   );
   React.useEffect(() => {
     if (!window.musicPlayer) return;
-    const sync = () => setMusicPlaying(!!window.musicPlayer.getState().playing);
+    const sync = () => setMusic({ ...window.musicPlayer.getState() });
     sync();
     return window.musicPlayer.subscribe(sync);
   }, []);
 
-  // 시간 표기 — 디지털 시계처럼
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  const display = h > 0
-    ? `${h}:${String(m).padStart(2, "0")}`
-    : `${m}m`;
-
-  const W = hover ? 82 : 74;
-  const H = hover ? 44 : 40;
-  const DRAG_THRESHOLD = 4;
-
-  // 창 크기 바뀌면 위치 안전하게 클램프
-  React.useEffect(() => {
-    if (!pos) return;
-    const onResize = () => {
-      setPos(p => {
-        if (!p) return p;
-        return {
-          x: Math.max(0, Math.min(window.innerWidth - W, p.x)),
-          y: Math.max(0, Math.min(window.innerHeight - H, p.y)),
-        };
-      });
-    };
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [!!pos, W, H]);
-
-  // 마우스 다운 — 드래그 시작. 거의 안 움직이면 클릭으로 간주.
-  const onMouseDown = (e) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    const rect = e.currentTarget.getBoundingClientRect();
-    const startMouseX = e.clientX;
-    const startMouseY = e.clientY;
-    const startElX = rect.left;
-    const startElY = rect.top;
-    let moved = false;
-    let lastPos = { x: startElX, y: startElY };
-    setDragging(true);
-
-    const onMove = (ev) => {
-      const dx = ev.clientX - startMouseX;
-      const dy = ev.clientY - startMouseY;
-      if (!moved && Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD) {
-        moved = true;
-      }
-      if (moved) {
-        const nx = Math.max(0, Math.min(window.innerWidth - W, startElX + dx));
-        const ny = Math.max(0, Math.min(window.innerHeight - H, startElY + dy));
-        lastPos = { x: nx, y: ny };
-        setPos(lastPos);
-      }
-    };
-    const onUp = () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      setDragging(false);
-      if (moved) {
-        if (setTweak) setTweak("dockMiniPos", lastPos);
-      } else if (onReveal) {
-        onReveal();
-      }
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  };
-
-  // 위치 모드: 드래그 한 적 있음 → 떠다님(사방 둥근 모서리). 없음 → 도크 측 가장자리에 붙음.
-  const isFloating = !!pos;
-  const positionStyle = isFloating
-    ? { left: pos.x, top: pos.y, transform: "none" }
-    : { top: "50%", transform: "translateY(-50%)", [isLeft ? "left" : "right"]: 0 };
-  const borderRadius = isFloating
-    ? 10
-    : (isLeft ? "0 10px 10px 0" : "10px 0 0 10px");
-  const borderStyle = "1.1px solid var(--ink)";
-
-  // 도크 본체와 같은 테마 배경 (그라데이션 + 도형)
   const themeBg = buildBackground(
     tweaks?.bgType ?? "linear",
     tweaks?.bgAngle ?? 180,
@@ -261,63 +190,125 @@ function DockRevealEdge({ tweaks, setTweak, onReveal }) {
     tweaks?.bgShape ?? "none"
   );
 
+  const onPrev   = () => { try { window.musicPlayer && window.musicPlayer.prev(); } catch (_) {} };
+  const onToggle = () => { try { window.musicPlayer && window.musicPlayer.toggle(); } catch (_) {} };
+  const onNext   = () => { try { window.musicPlayer && window.musicPlayer.next(); } catch (_) {} };
+
+  // 작은 아이콘 버튼 — 음악 컨트롤 / 도크 열기 공통 스타일
+  const iconBtn = {
+    all: "unset", cursor: "pointer", flexShrink: 0,
+    width: 20, height: 20, borderRadius: 4,
+    display: "grid", placeItems: "center",
+    fontFamily: "var(--mono)", fontSize: 11, lineHeight: 1, color: "var(--ink)",
+    background: "rgba(255,255,255,0.4)",
+    border: "1px solid var(--ink-soft)",
+  };
+  const disabledBtn = { ...iconBtn, cursor: "default", opacity: 0.35 };
+
+  // 위젯 고정 크기 — Tauri 환경에선 창 자체가 이 크기로 줄어들고,
+  // 그 외 환경(브라우저 dev 프리뷰 등)에선 창 좌상단에 떠 있는 작은 위젯이 됨.
+  const WIDGET_W = 140;
+  const WIDGET_H = 78;
+
   return (
-    <button
-      onMouseDown={onMouseDown}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+    <div
       title={L("set.dockMiniTip")}
       style={{
-        all: "unset",
-        cursor: dragging ? "grabbing" : "grab",
         position: "fixed",
-        ...positionStyle,
-        width: W,
-        height: H,
+        top: 0,
+        left: 0,
+        width: WIDGET_W,
+        height: WIDGET_H,
         background: themeBg,
-        // 작은 위젯 안에서도 패턴이 잘 보이도록 약간 줌인
-        backgroundSize: "180% 180%",
+        backgroundSize: "200% 200%",
         backgroundPosition: "center center",
-        border: borderStyle,
-        // 가장자리 붙은 상태면 화면 모서리 쪽만 보더 없앰
-        borderLeft:  (!isFloating && isLeft)  ? "none" : borderStyle,
-        borderRight: (!isFloating && !isLeft) ? "none" : borderStyle,
-        borderRadius,
-        boxShadow: "inset 0 1px 2px rgba(255,255,255,0.35), inset 0 -1px 1px rgba(0,0,0,0.08), 2px 2px 0 var(--paper-3), 3px 3px 12px rgba(138,106,94,0.18)",
+        border: "1.1px solid var(--ink)",
+        borderRadius: 10,
+        boxSizing: "border-box",
+        boxShadow: "inset 0 1px 2px rgba(255,255,255,0.35), inset 0 -1px 1px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.18)",
         display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 5,
-        color: "var(--ink)",
-        fontFamily: "var(--mono)",
-        fontSize: hover ? 17 : 16,
-        fontWeight: 700,
-        letterSpacing: "0.02em",
-        // 글자가 패턴 위에서 잘 보이게 가는 종이 그림자
-        textShadow: "0 1px 0 rgba(255,255,255,0.55)",
-        transition: dragging ? "none" : "width 0.18s, height 0.18s, font-size 0.18s",
-        zIndex: 10,
+        flexDirection: "column",
         userSelect: "none",
         overflow: "hidden",
+        color: "var(--ink)",
+        fontFamily: "var(--mono)",
+        textShadow: "0 1px 0 rgba(255,255,255,0.55)",
+        zIndex: 9999,
       }}
     >
-      <span style={{ fontSize: 11, opacity: 0.7, textShadow: "none" }}>⏱</span>
-      <span style={{ lineHeight: 1 }}>{display}</span>
+      {/* 시간 행 — 시간 텍스트는 pointer-events:none 으로 클릭이 뒤쪽 drag region 으로 빠지고,
+          ⤢ 버튼만 절대 위치로 위에 올려 클릭을 확실히 받음. Tauri 외에선 drag region 무시됨. */}
+      <div style={{
+        flex: 1,
+        position: "relative",
+        minHeight: 0,
+      }}>
+        {/* drag region 베이스 레이어 — 빈 영역 어디 잡아도 창 끌림 */}
+        <div data-tauri-drag-region style={{
+          position: "absolute", inset: 0,
+          cursor: "grab",
+        }} />
 
-      {/* 음악 재생 중 — 모서리 작은 ♪ */}
-      {musicPlaying && (
-        <span style={{
-          position: "absolute",
-          top: 3,
-          right: 5,
-          fontSize: 9,
-          color: "var(--ink-2)",
-          opacity: 0.85,
-          letterSpacing: 0,
-          textShadow: "none",
-        }}>♪</span>
-      )}
-    </button>
+        {/* 시간 표시 (이벤트 통과) */}
+        <div style={{
+          position: "absolute", inset: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          gap: 6,
+          pointerEvents: "none",
+        }}>
+          <span style={{ fontSize: 12, opacity: 0.65, textShadow: "none" }}>⏱</span>
+          <span style={{
+            fontSize: 15, fontWeight: 700, letterSpacing: "0.04em", lineHeight: 1,
+          }}>{timeDisplay}</span>
+        </div>
+
+        {/* 도크 복귀 버튼 — drag region 위에 z-index로 올림 */}
+        <button
+          onClick={onReveal}
+          title={L("set.dockReveal")}
+          aria-label={L("set.dockReveal")}
+          style={{
+            all: "unset", cursor: "pointer",
+            position: "absolute", top: 4, right: 4,
+            width: 22, height: 22, borderRadius: 5,
+            display: "grid", placeItems: "center",
+            fontSize: 13, fontWeight: 700, lineHeight: 1, color: "var(--ink)",
+            background: "rgba(255,255,255,0.55)",
+            border: "1px solid var(--ink-soft)",
+            zIndex: 2,
+          }}
+        >⤢</button>
+      </div>
+
+      {/* 음악 컨트롤 행 — drag region 아님 */}
+      <div style={{
+        flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        gap: 6,
+        padding: "4px 8px 6px",
+        borderTop: "1px solid rgba(0,0,0,0.1)",
+        background: "rgba(255,255,255,0.22)",
+      }}>
+        <button
+          onClick={onPrev}
+          title={L("music.prev")}
+          style={music.hasQueue ? iconBtn : disabledBtn}
+          disabled={!music.hasQueue}
+        >⏮</button>
+        <button
+          onClick={onToggle}
+          title={music.playing ? L("music.pause") : L("music.play")}
+          style={music.hasQueue ? iconBtn : disabledBtn}
+          disabled={!music.hasQueue}
+        >{music.playing ? "⏸" : "▶"}</button>
+        <button
+          onClick={onNext}
+          title={L("music.next")}
+          style={music.hasQueue ? iconBtn : disabledBtn}
+          disabled={!music.hasQueue}
+        >⏭</button>
+      </div>
+    </div>
   );
 }
 

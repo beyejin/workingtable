@@ -15,8 +15,21 @@
 const { useState, useEffect, useRef } = React;
 
 const IDLE_MS = 5 * 60 * 1000;   // 5분 무입력 = 유휴
-const TICK_MS = 10 * 1000;       // 체크 간격
+const TICK_MS = 1000;            // 1초 단위로 체크 — 미니 위젯의 HH:MM:SS 실시간 표시용
 const TICK_SEC = TICK_MS / 1000;
+
+// 모듈 레벨 pendingSec — 미니 위젯 등 외부에서 읽을 수 있게.
+// store의 workMinutesToday(분 단위 커밋분) + 이 pendingSec(아직 안 커밋된 초)를 합치면
+// 진짜 초 단위 작업 시간이 나옴. ActivityTracker가 매 초 갱신.
+let _pendingSec = 0;
+window.workActivity = {
+  getPendingSec() { return _pendingSec; },
+  subscribe(fn) {
+    const h = () => fn(_pendingSec);
+    window.addEventListener("work-tick", h);
+    return () => window.removeEventListener("work-tick", h);
+  },
+};
 
 // ---- 외부 작업 모드 (module-level) ----
 // 사용자가 클튜/포토샵 등 다른 앱에서 일할 때 켜는 모드.
@@ -49,7 +62,7 @@ function ActivityTracker() {
 
   useEffect(() => {
     const bump = () => { lastActivityRef.current = Date.now(); };
-    const onReset = () => { pendingSecRef.current = 0; };
+    const onReset = () => { pendingSecRef.current = 0; _pendingSec = 0; window.dispatchEvent(new CustomEvent("work-tick")); };
     window.addEventListener("mousemove", bump);
     window.addEventListener("keydown", bump);
     window.addEventListener("mousedown", bump);
@@ -80,13 +93,18 @@ function ActivityTracker() {
       if (!active) return;
 
       pendingSecRef.current += TICK_SEC;
+      _pendingSec = pendingSecRef.current;
 
       // 60초 누적되면 store에 commit
       if (pendingSecRef.current >= 60) {
         const m = Math.floor(pendingSecRef.current / 60);
         pendingSecRef.current = pendingSecRef.current % 60;
+        _pendingSec = pendingSecRef.current;
         actions.addWorkMinutes(m);
       }
+
+      // 미니 위젯 등 구독자에게 알림 — 매 초 발사 (active일 때만)
+      window.dispatchEvent(new CustomEvent("work-tick"));
     }, TICK_MS);
     return () => clearInterval(id);
   }, []);

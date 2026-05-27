@@ -199,6 +199,12 @@ function load() {
     }));
     data.timer       ??= { lengthMin: 30, enabled: true, cycleStartedAt: null, paused: false, pausedRemainingMs: null, notificationsGranted: false, lastNotifiedAt: null };
     data.workSessions ??= [];
+    // workSessions 레거시 마이그레이션 — projectId 없던 시절 기록은 null(미분류)로 표기.
+    data.workSessions = data.workSessions.map(w => ({
+      date: w.date,
+      projectId: w.projectId !== undefined ? w.projectId : null,
+      minutes: w.minutes,
+    }));
     // 프로젝트에 버전/저장소 필드 보강 (기존 값 우선)
     data.projects = (data.projects ?? []).map(p => ({
       repoUrl: "", version: "0.1.0", nextVersion: "", ...p,
@@ -711,31 +717,39 @@ const actions = {
     setState(s => ({ ...s, timer: { ...s.timer, notificationsGranted: g } }));
   },
 
-  // ----- 작업 시간 트래킹 -----
-  addWorkMinutes(min) {
+  // ----- 작업 시간 트래킹 (날짜 × 프로젝트) -----
+  // 현재 활성 프로젝트로 분류해서 누적. projectId 명시도 가능.
+  addWorkMinutes(min, projectId) {
     if (min <= 0) return;
     const t = today();
     setState(s => {
+      const pid = projectId !== undefined ? projectId : (s.currentProjectId ?? null);
       const sessions = s.workSessions.slice();
-      const idx = sessions.findIndex(w => w.date === t);
+      const idx = sessions.findIndex(w => w.date === t && w.projectId === pid);
       if (idx >= 0) {
         sessions[idx] = { ...sessions[idx], minutes: sessions[idx].minutes + min };
       } else {
-        sessions.push({ date: t, minutes: min });
+        sessions.push({ date: t, projectId: pid, minutes: min });
       }
       return { ...s, workSessions: sessions };
     });
   },
-  // 특정 날짜(기본: 오늘)의 작업 시간을 0으로 — 해당 항목을 통째로 제거.
-  // ActivityTracker가 누적 중이던 초도 같이 비우라고 이벤트 발사.
-  resetWorkMinutes(date) {
+  // 작업 시간 초기화. ActivityTracker가 누적 중이던 초도 같이 비우라고 이벤트 발사.
+  //   resetWorkMinutes()                       → 오늘 모든 프로젝트
+  //   resetWorkMinutes(date)                   → 그 날짜 모든 프로젝트
+  //   resetWorkMinutes(date, projectId)        → 그 날짜의 특정 프로젝트만
+  resetWorkMinutes(date, projectId) {
     const d = date || today();
     setState(s => ({
       ...s,
-      workSessions: s.workSessions.filter(w => w.date !== d),
+      workSessions: s.workSessions.filter(w => {
+        if (w.date !== d) return true;
+        if (projectId !== undefined) return w.projectId !== projectId;
+        return false;
+      }),
     }));
     if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("work-minutes-reset", { detail: { date: d } }));
+      window.dispatchEvent(new CustomEvent("work-minutes-reset", { detail: { date: d, projectId } }));
     }
   },
 
@@ -769,8 +783,32 @@ const select = {
   stuckForCurrent: (s) => s.stuck[s.currentProjectId] ?? "",
   workMinutesToday: (s) => {
     const t = today();
-    const sess = s.workSessions.find(w => w.date === t);
-    return sess?.minutes ?? 0;
+    return (s.workSessions ?? []).reduce(
+      (sum, w) => w.date === t ? sum + (w.minutes || 0) : sum, 0
+    );
+  },
+  // 특정 날짜의 총 작업시간
+  workMinutesForDate: (s, date) => {
+    return (s.workSessions ?? []).reduce(
+      (sum, w) => w.date === date ? sum + (w.minutes || 0) : sum, 0
+    );
+  },
+  // 특정 날짜의 프로젝트별 작업시간 — [{ projectId, project, minutes }] 분 내림차순
+  workByProjectForDate: (s, date) => {
+    const map = new Map();
+    (s.workSessions ?? []).forEach(w => {
+      if (w.date !== date) return;
+      map.set(w.projectId ?? null, (map.get(w.projectId ?? null) ?? 0) + (w.minutes || 0));
+    });
+    const projects = s.projects ?? [];
+    return [...map.entries()]
+      .map(([pid, mins]) => ({
+        projectId: pid,
+        project: projects.find(p => p.id === pid) ?? null,
+        minutes: mins,
+      }))
+      .filter(x => x.minutes > 0)
+      .sort((a, b) => b.minutes - a.minutes);
   },
 };
 
