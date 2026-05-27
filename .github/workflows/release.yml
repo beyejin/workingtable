@@ -82,7 +82,10 @@ jobs:
       - name: Generate latest.json
         if: matrix.platform == 'macos-latest'
         run: |
-          SIG=$(find src-tauri/target/release/bundle -name "*.sig" | head -n 1 | xargs cat)
+          APP_ARCHIVE=$(find src-tauri/target/release/bundle -name "*.app.tar.gz" | head -n 1)
+          APP_ARCHIVE_NAME=$(basename "$APP_ARCHIVE")
+          SIG=$(cat "$APP_ARCHIVE.sig")
+          APP_URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/${APP_ARCHIVE_NAME}"
 
           cat > latest.json <<EOF
           {
@@ -92,7 +95,11 @@ jobs:
             "platforms": {
               "darwin-aarch64": {
                 "signature": "$SIG",
-                "url": "https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/vibe-diary-yejin.app.tar.gz"
+                "url": "$APP_URL"
+              },
+              "darwin-x86_64": {
+                "signature": "$SIG",
+                "url": "$APP_URL"
               }
             }
           }

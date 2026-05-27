@@ -17,6 +17,25 @@ const TABS = [
     {id: "settings", labelKey: "tab.settings", glyph: "⚙", color: "#e6e6ee", view: () => null, foot: true},
 ];
 
+const TAB_ICONS = {
+    business: {
+        todo: "✓",
+        cal: "17",
+        memo: "▤",
+        mail: "@",
+        deco: "◇",
+        settings: "⚙",
+    },
+    kitsch: {
+        todo: "✓",
+        cal: "☀",
+        memo: "🎀",
+        mail: "♡",
+        deco: "🌈",
+        settings: "✨",
+    },
+};
+
 function SideDockV2({tweaks, setTweak}) {
     const [active, setActive] = useState("todo");
     const current = TABS.find(t => t.id === active);
@@ -61,6 +80,7 @@ function SideDockV2({tweaks, setTweak}) {
     const tabSide = tweaks?.tabSide ?? "right";
     const dockSide = tweaks?.dockSide ?? "left";
     const tabStyle = tweaks?.tabStyle ?? "paper";
+    const tabIconStyle = tweaks?.tabIconStyle ?? "business";
     const desktopMode = tweaks?.desktopMode ?? false;
     // 배경 (그라데이션 / 도형)
     const dockBg = buildBackground(
@@ -157,6 +177,7 @@ function SideDockV2({tweaks, setTweak}) {
                 tabSide={effectiveTabSide}
                 dockWidth={DOCK_W}
                 tabStyle={tabStyle}
+                tabIconStyle={tabIconStyle}
                 chrome={chrome}
                 compact={compactTabs}
             />
@@ -221,7 +242,7 @@ function TabHeader({active}) {
 }
 
 // ---- 다이어리 인덱스 탭 ----
-function DiaryTabs({tabs, active, onSelect, dockSide, tabSide, dockWidth, tabStyle, chrome, compact}) {
+function DiaryTabs({tabs, active, onSelect, dockSide, tabSide, dockWidth, tabStyle, tabIconStyle, chrome, compact}) {
     const cm = (pct) => `color-mix(in srgb, ${chrome || "#a9cdf5"} ${pct}%, white)`;
     // 탭이 도크의 어느 쪽 바깥에 붙는지 → 위치 계산
     const onLeft = tabSide === "left";
@@ -243,6 +264,8 @@ function DiaryTabs({tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSty
 
     const renderTab = (t) => {
         const isActive = t.id === active;
+        const icon = TAB_ICONS[tabIconStyle]?.[t.id] ?? t.glyph;
+        const showIcon = tabIconStyle !== "none";
         return (
             <button
                 key={t.id}
@@ -270,16 +293,41 @@ function DiaryTabs({tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSty
                 }}
                 title={L(t.labelKey)}
             >
-                <span style={{fontSize: compact ? 18 : 15, color: "var(--ink)", flexShrink: 0}}>{t.glyph}</span>
-                {!compact && (
-                    <span style={{
-                        writingMode: "vertical-rl", textOrientation: "mixed",
-                        fontSize: 11, letterSpacing: "0.01em", color: "var(--ink)",
-                        fontWeight: isActive ? 700 : 400,
-                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                        maxHeight: TAB_H - 24,
-                    }}>{L(t.labelKey)}</span>
-                )}
+                <span style={{
+                    width: TAB_W,
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: showIcon && !compact ? 3 : 0,
+                    transform: isActive ? (stickRight ? "translateX(-2px)" : "translateX(2px)") : "none",
+                }}>
+                    {showIcon && (
+                        <span style={{
+                            fontSize: compact ? 17 : 14,
+                            lineHeight: 1,
+                            color: "var(--ink)",
+                            flexShrink: 0,
+                        }}>{icon}</span>
+                    )}
+                    {!compact && (
+                        <span style={{
+                            writingMode: "vertical-rl",
+                            textOrientation: "mixed",
+                            fontSize: 10.5,
+                            letterSpacing: 0,
+                            lineHeight: 1,
+                            textAlign: "center",
+                            color: "var(--ink)",
+                            fontWeight: isActive ? 700 : 400,
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            maxHeight: showIcon ? TAB_H - 24 : TAB_H - 12,
+                        }}>{L(t.labelKey)}</span>
+                    )}
+                </span>
             </button>
         );
     };
@@ -408,6 +456,11 @@ function SettingsView({tweaks, setTweak}) {
             <SetSection label={L("set.dock")}>
                 <SetSeg value={t.dockSide ?? "left"} onChange={v => set("dockSide", v)}
                         options={[["left", L("set.left")], ["right", L("set.right")]]}/>
+            </SetSection>
+
+            <SetSection label="인덱스 아이콘">
+                <SetSeg value={t.tabIconStyle ?? "business"} onChange={v => set("tabIconStyle", v)}
+                        options={[["business", "비즈니스"], ["kitsch", "키치"], ["none", "없음"]]}/>
             </SetSection>
 
             <SetSection label={L("set.alwaysOnTop")}>
