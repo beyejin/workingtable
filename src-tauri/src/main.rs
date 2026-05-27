@@ -154,7 +154,7 @@ mod native_youtube {
     pub fn resume(app: tauri::AppHandle) -> Result<(), String> {
         eval_player(
             &app,
-            r#"(function(){var v=document.querySelector("video");if(v){v.muted=false;v.volume=1;var p=v.play();if(p&&p.catch)p.catch(function(){});}})()"#,
+            r#"(function(){var v=document.querySelector("video");if(v){var p=v.play();if(p&&p.catch)p.catch(function(){});}})()"#,
         )
     }
 

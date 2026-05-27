@@ -364,7 +364,6 @@
       }
 
       ensure();
-      unmuteSoon();
       if (!ready || !player) {
         if (queue.length) play(index, true);
         return;
