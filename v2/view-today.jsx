@@ -9,6 +9,7 @@ const { useState, useEffect, useRef } = React;
 
 function pad2(n) { return String(n).padStart(2, "0"); }
 function dateOnly(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+
 function startOfWeekMonday(date) {
   const d = new Date(date);
   const dow = d.getDay();

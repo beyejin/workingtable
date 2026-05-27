@@ -196,10 +196,22 @@ function migrateState(data) {
     completedAt: t.completedAt ?? (t.doneTs ? new Date(t.doneTs).toISOString() : (t.doneAt ? t.doneAt + "T12:00:00" : null)),
     recurrenceId: t.recurrenceId ?? null,
     trackedSeconds: t.trackedSeconds ?? 0,
+    subTasks: Array.isArray(t.subTasks) ? t.subTasks.map(st => ({
+      id: st.id || uid(),
+      title: String(st.title || "").trim(),
+      done: !!st.done,
+      completedAt: st.completedAt || null,
+    })) : [],
     createdAt: t.createdAt ?? today(),
   }));
   data.timer       ??= { lengthMin: 30, enabled: true, cycleStartedAt: null, paused: false, pausedRemainingMs: null, notificationsGranted: false, lastNotifiedAt: null };
   data.workSessions ??= [];
+  data.workSessions = data.workSessions.map(w => ({
+    date: w.date,
+    projectId: w.projectId !== undefined ? w.projectId : null,
+    minutes: w.minutes ?? Math.floor((w.seconds ?? 0) / 60),
+    seconds: w.seconds ?? ((w.minutes ?? 0) * 60),
+  }));
   // 프로젝트에 버전/저장소 필드 보강 (기존 값 우선)
   data.projects = (data.projects ?? []).map(p => ({
     repoUrl: "", version: "0.1.0", nextVersion: "", ...p,
@@ -298,6 +310,7 @@ const actions = {
           done: false, completedAt: null,
           recurrenceId: opts.recurrenceId ?? null,
           trackedSeconds: 0,
+          subTasks: [],
           createdAt: today(),
         }],
       };
@@ -331,6 +344,99 @@ const actions = {
         endDate: endDate || null,
       } : t),
     }));
+  },
+  // 달력 드롭으로 단일 날짜 이동 — dueDate 만 설정하고 기간은 비움.
+  moveTodoToDate(id, date) {
+    if (!date) return;
+    setState(s => ({
+      ...s,
+      todos: s.todos.map(t => t.id === id ? {
+        ...t,
+        dueDate: date,
+        startDate: null,
+        endDate: null,
+      } : t),
+    }));
+  },
+  // ----- 서브태스크 -----
+  addSubTask(todoId, title) {
+    const text = (title || "").trim();
+    if (!text) return;
+    setState(s => ({
+      ...s,
+      todos: s.todos.map(t => t.id === todoId ? {
+        ...t,
+        subTasks: [...(t.subTasks || []), {
+          id: uid(), title: text, done: false, completedAt: null,
+        }],
+      } : t),
+    }));
+  },
+  toggleSubTask(todoId, subId) {
+    setState(s => ({
+      ...s,
+      todos: s.todos.map(t => t.id === todoId ? {
+        ...t,
+        subTasks: (t.subTasks || []).map(st => st.id === subId ? {
+          ...st,
+          done: !st.done,
+          completedAt: !st.done ? new Date().toISOString() : null,
+        } : st),
+      } : t),
+    }));
+  },
+  renameSubTask(todoId, subId, title) {
+    const text = (title || "").trim();
+    if (!text) return;
+    setState(s => ({
+      ...s,
+      todos: s.todos.map(t => t.id === todoId ? {
+        ...t,
+        subTasks: (t.subTasks || []).map(st => st.id === subId ? { ...st, title: text } : st),
+      } : t),
+    }));
+  },
+  removeSubTask(todoId, subId) {
+    setState(s => ({
+      ...s,
+      todos: s.todos.map(t => t.id === todoId ? {
+        ...t,
+        subTasks: (t.subTasks || []).filter(st => st.id !== subId),
+      } : t),
+    }));
+  },
+  // 끌어서 다른 할 일의 하위로 넣기 — 원본은 top-level 에서 제거.
+  // 한 레벨만 지원하므로, 드래그한 할 일에 서브태스크가 있으면 평탄화해서 흡수.
+  nestAsSubTask(parentId, draggedId) {
+    if (!parentId || !draggedId || parentId === draggedId) return;
+    setState(s => {
+      const dragged = s.todos.find(t => t.id === draggedId);
+      if (!dragged) return s;
+      if (!s.todos.find(t => t.id === parentId)) return s;
+      const newSubs = [
+        {
+          id: uid(),
+          title: dragged.title,
+          done: dragged.done,
+          completedAt: dragged.completedAt || null,
+        },
+        // 드래그한 할 일이 가지고 있던 기존 서브태스크도 같이 흡수
+        ...(dragged.subTasks || []).map(st => ({
+          id: uid(),
+          title: st.title,
+          done: !!st.done,
+          completedAt: st.completedAt || null,
+        })),
+      ];
+      return {
+        ...s,
+        todos: s.todos
+          .map(t => t.id === parentId
+            ? { ...t, subTasks: [...(t.subTasks || []), ...newSubs] }
+            : t)
+          .filter(t => t.id !== draggedId),
+      };
+    });
   },
   updateTodo(id, patch) {
     setState(s => ({ ...s, todos: s.todos.map(t => t.id === id ? { ...t, ...patch } : t) }));
