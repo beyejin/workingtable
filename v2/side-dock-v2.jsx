@@ -100,13 +100,14 @@ function SideDockV2({ tweaks, setTweak }) {
           background: titlebarBg,
           color: "var(--ink)",
           fontFamily: "var(--hand)", fontSize: 13,
-          padding: "5px 10px",
+          padding: "5px 6px 5px 10px",
           display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
           borderBottom: "1.1px solid var(--ink)",
           userSelect: "none",
         }}>
           <ProjectSwitcher />
           <div data-tauri-drag-region style={{ flex: 1, alignSelf: "stretch" }} />
+          <CloseAppButton />
         </div>
 
         {/* sticky — 헤더 (제목/음악/타이머/디데이 각 한 줄) */}
@@ -144,6 +145,43 @@ function SideDockV2({ tweaks, setTweak }) {
         autoHide={tabsHidden}
       />
     </div>
+  );
+}
+
+// ---- 헤더 우측 종료 버튼 ----
+// Tauri 창에 OS 보더가 없어서 작업표시줄 외엔 종료 수단이 없던 문제 해결.
+function CloseAppButton() {
+  const [hover, setHover] = useState(false);
+  const onClose = async () => {
+    try {
+      const T = window.__TAURI__;
+      if (T && T.window && T.window.getCurrentWindow) {
+        await T.window.getCurrentWindow().close();
+      } else if (typeof window.close === "function") {
+        window.close();
+      }
+    } catch (e) {
+      console.warn("close failed:", e);
+    }
+  };
+  return (
+    <button
+      onClick={onClose}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={L("app.close")}
+      aria-label={L("app.close")}
+      style={{
+        all: "unset", cursor: "pointer", flexShrink: 0,
+        width: 20, height: 20, borderRadius: 4,
+        display: "grid", placeItems: "center",
+        fontSize: 13, lineHeight: 1, fontWeight: 700,
+        color: hover ? "#fff" : "var(--ink)",
+        background: hover ? "#e84545" : "transparent",
+        border: hover ? "1px solid #b03030" : "1px solid transparent",
+        transition: "background 0.15s, color 0.15s, border 0.15s",
+      }}
+    >×</button>
   );
 }
 

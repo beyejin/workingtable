@@ -42,27 +42,22 @@ function Timer() {
   );
 }
 
-// ---- 작업 시간 (프로그램 켜둔 활동 시간 누적) — 00 H 00 M ----
-// 점(•)을 클릭하면 "외부 작업 모드" 토글. 켜지면 초록색, 다른 앱에서 일할 때도 카운트.
-// 호버하면 우측에 작은 ⟳ 버튼이 나타남 — 클릭 시 오늘 작업 시간을 0으로 초기화.
+// ---- 작업 시간 — 00 H 00 M ----
+// 앱 실행 = 기본 ON (초록 점, "WORKING"). 점 클릭하면 STOP (검은 점, "STOPPED").
+// 호버하면 우측에 작은 ⟳ 버튼 — 클릭 시 오늘 작업 시간을 0으로 초기화.
 function WorkTime() {
   const { state, actions } = diary.useDiary();
   const min = diary.select.workMinutesToday(state);
   const h = Math.floor(min / 60);
   const m = min % 60;
   const pad = (n) => String(n).padStart(2, "0");
-  const [blink, setBlink] = useState(true);
   const [hover, setHover] = useState(false);
-  const [external, setExternal] = useState(() => !!(window.workTracker && window.workTracker.isExternal()));
-  useEffect(() => {
-    const id = setInterval(() => setBlink(b => !b), 1100);
-    return () => clearInterval(id);
-  }, []);
+  const [running, setRunning] = useState(() => !!(window.workTracker && window.workTracker.isRunning()));
   useEffect(() => {
     if (!window.workTracker) return;
-    return window.workTracker.subscribe(setExternal);
+    return window.workTracker.subscribe(setRunning);
   }, []);
-  const toggleExternal = () => { if (window.workTracker) window.workTracker.toggle(); };
+  const toggleRunning = () => { if (window.workTracker) window.workTracker.toggle(); };
   const resetWork = async () => {
     const msg = L("worktrack.resetConfirm");
     const ok = await (window.dialog
@@ -71,8 +66,8 @@ function WorkTime() {
     if (ok) actions.resetWorkMinutes();
   };
 
-  const dotColor = external ? "#52c759" : "#ff5e5e";
-  const label = external ? L("worktrack.externalOn") : L("worktrack.externalOff");
+  const dotColor = running ? "#ff3b3b" : "#1f1f1f";
+  const label = running ? L("worktrack.runningOn") : L("worktrack.runningOff");
 
   return (
     <span
@@ -80,17 +75,16 @@ function WorkTime() {
       onMouseLeave={() => setHover(false)}
       style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "var(--mono)", fontWeight: 700, fontSize: 15, color: "var(--ink)" }}
     >
-      <button onClick={toggleExternal} title={label} style={{
+      <button onClick={toggleRunning} title={label} style={{
         all: "unset", cursor: "pointer", flexShrink: 0,
-        width: 11, height: 11, borderRadius: "50%",
-        display: "grid", placeItems: "center",
+        width: 7, height: 7, borderRadius: "50%",
         background: dotColor,
-        opacity: external ? 1 : (blink ? 0.95 : 0.6),
-        border: external ? "1px solid rgba(0,0,0,0.2)" : "none",
-        transition: "opacity .5s ease, background .15s",
+        boxShadow: running ? "0 0 4px rgba(255,59,59,0.55)" : "none",
+        animation: running ? "wt-blink 1.1s ease-in-out infinite" : "none",
+        transition: "background .15s",
       }} />
-      <span style={{ fontSize: 9.5, letterSpacing: 1, color: external ? "#2f7d44" : "var(--ink-2)" }}>
-        {external ? "EXTERNAL" : "WORKING"}
+      <span style={{ fontSize: 9.5, letterSpacing: 1, color: running ? "#b03030" : "var(--ink-2)" }}>
+        {running ? "WORKING" : "STOPPED"}
       </span>
       <span>{pad(h)}</span>
       <span style={{ fontSize: 10, opacity: .6 }}>H</span>
@@ -497,3 +491,16 @@ function fireNotification(title, body, granted) {
 }
 
 window.Timer = Timer;
+
+// 워크 트래커 점 깜빡임 — 한 번만 주입
+if (!document.getElementById("wt-blink-css")) {
+  const s = document.createElement("style");
+  s.id = "wt-blink-css";
+  s.textContent = `
+    @keyframes wt-blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.25; }
+    }
+  `;
+  document.head.appendChild(s);
+}
