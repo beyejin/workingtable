@@ -82,8 +82,15 @@ jobs:
       - name: Generate latest.json
         if: matrix.platform == 'macos-latest'
         run: |
-          APP_ARCHIVE=$(find src-tauri/target/release/bundle -name "*.app.tar.gz" | head -n 1)
-          APP_ARCHIVE_NAME=$(basename "$APP_ARCHIVE")
+          APP_ARCHIVE=$(find src-tauri/target -path "*/bundle/macos/*.app.tar.gz" -type f | head -n 1)
+          if [ -z "$APP_ARCHIVE" ]; then
+            echo "Could not find macOS updater archive"
+            find src-tauri/target -type f \( -name "*.app.tar.gz" -o -name "*.sig" \) || true
+            exit 1
+          fi
+
+          APP_ARCHIVE_BASENAME=$(basename "$APP_ARCHIVE")
+          APP_ARCHIVE_NAME="${APP_ARCHIVE_BASENAME/.app.tar.gz/_universal.app.tar.gz}"
           SIG=$(cat "$APP_ARCHIVE.sig")
           APP_URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/${APP_ARCHIVE_NAME}"
 

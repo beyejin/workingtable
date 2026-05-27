@@ -1,6 +1,6 @@
 {
   "name": "vibe-diary",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "description": "바이브코딩 다이어리 — 데스크탑 투명 사이드바",
   "scripts": {
