@@ -32,17 +32,24 @@ function fmtHM(sec) {
   return `${m}m`;
 }
 
-// 멤버의 현재 누적 작업시간(초) — 로컬 계산
-function memberLiveSeconds(m, now) {
-  const acc = m.accumulatedSecondsToday || 0;
-  if (!m.workStartedAt) return acc;
-  return acc + Math.floor((now - m.workStartedAt) / 1000);
-}
-
 // 오프라인 판정 — 마지막 활동 5분 초과
 function isMemberOffline(m, now) {
   if (!m.lastActiveAt) return true;
   return (now - m.lastActiveAt) > 5 * 60 * 1000;
+}
+
+// 멤버의 현재 누적 작업시간(초) — 로컬 계산.
+// 본인 commit 못 한 채로 끊기면 (앱 강제 종료 / 통신 끊김) lastActiveAt 을
+// cutoff 로 사용해서 다른 멤버 화면에서도 시계가 마지막 heartbeat 시점에 멈추도록.
+// paused 상태도 동일 — workStartedAt 이 null 이라 acc 만 보여줌.
+function memberLiveSeconds(m, now) {
+  const acc = m.accumulatedSecondsToday || 0;
+  if (!m.workStartedAt) return acc;
+  // 오프라인(heartbeat 5분 초과)이면 lastActiveAt 까지만 카운트
+  const off = isMemberOffline(m, now);
+  const cutoff = off ? Math.min(m.lastActiveAt || m.workStartedAt, now) : now;
+  if (cutoff <= m.workStartedAt) return acc;
+  return acc + Math.floor((cutoff - m.workStartedAt) / 1000);
 }
 
 // ---- 1초마다 리렌더 트리거 (작업시간 표시용) ----
@@ -935,34 +942,27 @@ function useRoomSync() {
   const recentlyActive = (Date.now() - lastTs) < 3 * 60 * 1000;
   const workingNow = (myStatus === "working") && (ext || recentlyActive);
 
-  // 누적 시간 (서버에 보낼 "오늘까지 누적된 초")
-  // 매분 보내지 않음 — 작업 상태 토글 시 / 토글 끝날 때만 갱신
+  // me (서버 상태) 가 source of truth — ref-less 설계로 앱 재시작 시에도 일관됨.
   const myUid = window.firebaseBridge ? window.firebaseBridge.uid() : null;
   const me = room.state.members.find((m) => m.uid === myUid);
-
-  // 직전 상태 추적
-  const ref = useRefRoom({
-    todoTotal: -1, todoDone: -1, workingNow: null,
-    workStartedAt: null, accumulated: 0, currentTitle: undefined, showTitle: undefined,
-  });
 
   useEffectRoom(() => {
     if (!roomId || !myUid || !window.firebaseBridge) return;
 
     const patch = {};
+    const meWorkStartedAt = me?.workStartedAt || null;
+    const meAcc = me?.accumulatedSecondsToday || 0;
+    const meLastActiveAt = me?.lastActiveAt || null;
+    const meStatus = me?.status || null;
+    const meTodoTotal = me?.todoTotal ?? -1;
+    const meTodoDone = me?.todoDone ?? -1;
+    const meVisibleSig = Array.isArray(me?.visibleTodos) ? me.visibleTodos.join("|") : "";
 
-    // 진행도 변화
-    if (ref.current.todoTotal !== todoTotal) {
-      patch.todoTotal = todoTotal;
-      ref.current.todoTotal = todoTotal;
-    }
-    if (ref.current.todoDone !== todoDone) {
-      patch.todoDone = todoDone;
-      ref.current.todoDone = todoDone;
-    }
+    // 진행도 — me 기준 비교 (서버에 이미 같은 값이면 skip)
+    if (todoTotal !== meTodoTotal) patch.todoTotal = todoTotal;
+    if (todoDone !== meTodoDone) patch.todoDone = todoDone;
 
-    // ★ 공개 표시한 할일의 "제목"만 추출. 비공개 제목은 여기서부터 누락 → 서버에 절대 안 올라감.
-    // 진행도 (todoTotal/todoDone) 는 공개 여부와 무관하게 전체 기준으로 셈.
+    // ★ 공개 표시한 할일의 "제목"만. 비공개 제목은 여기서 누락 → 서버에 절대 안 올라감.
     const visibleTodosToSend = todayTodos
       .filter((t) => t.roomVisible)
       .slice()
@@ -973,54 +973,40 @@ function useRoomSync() {
       })
       .map((t) => t.title);
     const visibleSig = visibleTodosToSend.join("|");
-    const meVisibleSig = Array.isArray(me?.visibleTodos) ? me.visibleTodos.join("|") : "";
     if (visibleSig !== meVisibleSig) {
       patch.visibleTodos = visibleTodosToSend;
     }
 
-    // 작업 시작/중단 토글
-    if (ref.current.workingNow !== workingNow) {
-      if (workingNow) {
-        patch.workStartedAt = Date.now();
-        ref.current.workStartedAt = patch.workStartedAt;
-      } else if (ref.current.workingNow === true) {
-        // 작업을 막 멈춤 — 누적 + workStartedAt null 처리
-        const ranSec = ref.current.workStartedAt
-          ? Math.floor((Date.now() - ref.current.workStartedAt) / 1000)
-          : 0;
-        const acc = (me?.accumulatedSecondsToday || 0) + ranSec;
-        patch.workStartedAt = null;
-        patch.accumulatedSecondsToday = acc;
-        patch.accumulatedDate = today;
-        ref.current.workStartedAt = null;
-        ref.current.accumulated = acc;
-      }
-      ref.current.workingNow = workingNow;
+    // ===== 세션 (workStartedAt / accumulatedSecondsToday) =====
+    // me 기준이라 앱 재시작 시에도 일관 — 죽기 전 session 이 me 에 살아 있으면
+    // 그걸 lastActiveAt 까지 commit 하고 새 세션을 시작.
+    const sessionShouldEnd = !workingNow && meWorkStartedAt;
+    const sessionShouldStart = workingNow && !meWorkStartedAt;
+
+    if (sessionShouldEnd) {
+      // 종료 — cutoff = lastActiveAt (있고 workStartedAt 보다 늦으면) 또는 now
+      const cutoff = (meLastActiveAt && meLastActiveAt > meWorkStartedAt)
+        ? Math.min(meLastActiveAt, Date.now())
+        : Date.now();
+      const ranSec = Math.max(0, Math.floor((cutoff - meWorkStartedAt) / 1000));
+      patch.workStartedAt = null;
+      patch.accumulatedSecondsToday = meAcc + ranSec;
+      patch.accumulatedDate = today;
+    } else if (sessionShouldStart) {
+      patch.workStartedAt = Date.now();
     }
 
-    // 사용자 수동 상태가 바뀌면 반영. away/paused 면 workStartedAt 도 null 로 강제.
-    if (ref.current.myStatus !== myStatus) {
+    // 상태 (manual myStatus → server)
+    if (myStatus !== meStatus) {
       patch.status = myStatus;
-      if (myStatus !== "working") {
-        // 시간 흐르고 있었으면 즉시 commit + workStartedAt null
-        if (ref.current.workStartedAt) {
-          const ranSec = Math.floor((Date.now() - ref.current.workStartedAt) / 1000);
-          const acc = (me?.accumulatedSecondsToday || 0) + ranSec;
-          patch.workStartedAt = null;
-          patch.accumulatedSecondsToday = acc;
-          patch.accumulatedDate = today;
-          ref.current.workStartedAt = null;
-          ref.current.accumulated = acc;
-          ref.current.workingNow = false;
-        }
-      }
-      ref.current.myStatus = myStatus;
     }
 
     if (Object.keys(patch).length > 0) {
       room.patchMyMember(patch);
     }
-  }, [roomId, myUid, todoTotal, todoDone, workingNow, visibleTitlesSig, myStatus]);
+  }, [roomId, myUid, todoTotal, todoDone, workingNow, visibleTitlesSig, myStatus,
+      me?.workStartedAt, me?.accumulatedSecondsToday, me?.status,
+      me?.todoTotal, me?.todoDone]);
 
   // (showTodoTitle 변화 감지는 위 메인 effect 의 deps 에 me?.showTodoTitle 가 들어 있어
   // currentTodoTitle/recentTodos 가 같은 patch 로 묶여 함께 나감 — 별도 effect 필요 없음)
