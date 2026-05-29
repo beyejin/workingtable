@@ -434,6 +434,87 @@ function MemoEditScreen({ memoId, onBack }) {
   const onRedo = () => exec("redo");
   const onClearFormat = () => exec("removeFormat");
 
+  const insertHtml = (html) => {
+    editorRef.current?.focus();
+    try { document.execCommand("insertHTML", false, html); } catch (_) {}
+    queueSave();
+  };
+
+  const insertTodoBlock = () => {
+    insertHtml(`<div data-memo-todo="1"><input type="checkbox" data-memo-check="1" /> <span>할 일</span></div><div><br></div>`);
+  };
+
+  const getCurrentBlock = () => {
+    const editor = editorRef.current;
+    const sel = window.getSelection();
+    if (!editor || !sel || sel.rangeCount === 0) return null;
+    let node = sel.anchorNode;
+    if (!node || !editor.contains(node)) return null;
+    node = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    while (node && node !== editor && !/^(DIV|P|H1|H2|H3|LI|BLOCKQUOTE)$/i.test(node.nodeName)) {
+      node = node.parentElement;
+    }
+    return node && node !== editor ? node : null;
+  };
+
+  const textBeforeCaret = (block) => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || !block) return "";
+    try {
+      const r = sel.getRangeAt(0).cloneRange();
+      r.selectNodeContents(block);
+      r.setEnd(sel.anchorNode, sel.anchorOffset);
+      return r.toString();
+    } catch (_) {
+      return "";
+    }
+  };
+
+  const clearBlockPrefix = (block, prefix) => {
+    const rest = (block.textContent || "").slice(prefix.length);
+    block.textContent = rest;
+    const sel = window.getSelection();
+    if (!sel) return;
+    const r = document.createRange();
+    if (block.firstChild) r.setStart(block.firstChild, 0);
+    else r.setStart(block, 0);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  };
+
+  const applyMarkdownShortcut = () => {
+    const block = getCurrentBlock();
+    const before = textBeforeCaret(block);
+    if (!block) return false;
+    const shortcuts = [
+      ["###", () => onHeading("h3")],
+      ["##", () => onHeading("h2")],
+      ["#", () => onHeading("h1")],
+      [">", () => onQuote()],
+      ["-", () => exec("insertUnorderedList")],
+      ["*", () => exec("insertUnorderedList")],
+      ["1.", () => exec("insertOrderedList")],
+      ["[]", () => insertTodoBlock()],
+    ];
+    const hit = shortcuts.find(([prefix]) => before === prefix);
+    if (!hit) return false;
+    clearBlockPrefix(block, hit[0]);
+    hit[1]();
+    return true;
+  };
+
+  const onEditorKeyDown = (e) => {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      exec(e.shiftKey ? "outdent" : "indent");
+      return;
+    }
+    if (e.key === " " && applyMarkdownShortcut()) {
+      e.preventDefault();
+    }
+  };
+
   const onAddImage = (file) => {
     if (!file) return;
     if (file.size > 600 * 1024) { window.dialog.alert(L("memo.imageTooLarge")); return; }
@@ -535,6 +616,13 @@ function MemoEditScreen({ memoId, onBack }) {
 
   // 링크 클릭 시 외부 열기 (편집기 안에서도)
   const onEditorClick = (e) => {
+    const check = e.target.closest && e.target.closest('input[type="checkbox"][data-memo-check]');
+    if (check && editorRef.current?.contains(check)) {
+      if (check.checked) check.setAttribute("checked", "checked");
+      else check.removeAttribute("checked");
+      queueSave();
+      return;
+    }
     const a = e.target.closest && e.target.closest("a");
     if (a && a.href && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
@@ -578,25 +666,35 @@ function MemoEditScreen({ memoId, onBack }) {
         >🗑</button>
       </div>
 
+      <QuickBlockBar
+        onHeading={() => onHeading("h2")}
+        onTodo={insertTodoBlock}
+        onBullet={() => exec("insertUnorderedList")}
+        onQuote={onQuote}
+        onHr={onHr}
+      />
+
       {/* 본문 (contenteditable) */}
       <div
         ref={editorRef}
         contentEditable
         suppressContentEditableWarning
+        data-placeholder={L("memo.placeholder")}
         onInput={queueSave}
         onBlur={queueSave}
         onClick={onEditorClick}
         onMouseUp={saveSelection}
         onKeyUp={saveSelection}
+        onKeyDown={onEditorKeyDown}
         onDragStart={onEditorDragStart}
         onDragOver={onEditorDragOver}
         onDrop={onEditorDrop}
         className="memo-editor"
         style={{
           flex: 1, minHeight: 0, overflowY: "auto",
-          padding: "12px 14px",
-          background: "#ffffff",
-          fontFamily: "var(--hand)", fontSize: 12, lineHeight: 1.5, color: "#222",
+          padding: "18px 18px 28px",
+          background: "linear-gradient(180deg, #ffffff 0%, #fffdf8 100%)",
+          fontFamily: "var(--hand)", fontSize: 14, lineHeight: 1.65, color: "#222",
           outline: "none",
         }}
       />
@@ -644,6 +742,42 @@ const headerBtn = {
   fontSize: 14, color: "var(--ink)",
   background: "rgba(255,255,255,0.7)", border: "1px solid var(--ink-soft)",
 };
+
+function QuickBlockBar({ onHeading, onTodo, onBullet, onQuote, onHr }) {
+  return (
+    <div style={{
+      flexShrink: 0,
+      display: "flex", alignItems: "center", gap: 4,
+      padding: "6px 10px",
+      background: "#fbfcfe",
+      borderBottom: "1px solid #e4e8ee",
+      overflowX: "auto",
+    }}>
+      <span style={{
+        fontFamily: "var(--mono)", fontSize: 9.5,
+        color: "var(--ink-3)", flexShrink: 0, marginRight: 2,
+      }}>/ blocks</span>
+      <QuickBlockBtn onClick={onHeading}>제목</QuickBlockBtn>
+      <QuickBlockBtn onClick={onTodo}>☐ 할 일</QuickBlockBtn>
+      <QuickBlockBtn onClick={onBullet}>• 목록</QuickBlockBtn>
+      <QuickBlockBtn onClick={onQuote}>인용</QuickBlockBtn>
+      <QuickBlockBtn onClick={onHr}>구분선</QuickBlockBtn>
+    </div>
+  );
+}
+
+function QuickBlockBtn({ onClick, children }) {
+  return (
+    <button onMouseDown={(e) => e.preventDefault()} onClick={onClick} style={{
+      all: "unset", cursor: "pointer", flexShrink: 0,
+      padding: "2px 8px", borderRadius: 6,
+      border: "1px solid #d8dee5",
+      background: "linear-gradient(180deg, #ffffff 0%, #f3f6fa 100%)",
+      fontFamily: "var(--hand)", fontSize: 11.5, color: "var(--ink)",
+      boxShadow: "0 1px 0 rgba(255,255,255,0.75) inset",
+    }}>{children}</button>
+  );
+}
 
 // ---- 네이버 스마트에디터 풍 툴바 ----
 const HEADING_ITEMS = [
@@ -1000,17 +1134,36 @@ if (typeof document !== "undefined" && !document.getElementById("memo-editor-css
   const s = document.createElement("style");
   s.id = "memo-editor-css";
   s.textContent = `
+    .memo-editor:empty::before {
+      content: attr(data-placeholder);
+      color: rgba(40,51,63,0.38);
+      pointer-events: none;
+    }
+    .memo-editor:focus { box-shadow: inset 0 0 0 2px rgba(169,205,245,0.18); }
     .memo-editor img { max-width: 100%; height: auto; cursor: move; }
     .memo-editor a { color: #3a72b7; text-decoration: underline; }
     .memo-editor ul, .memo-editor ol { margin: 4px 0; padding-left: 22px; }
+    .memo-editor li { margin: 2px 0; }
     .memo-editor blockquote {
       margin: 6px 0; padding: 4px 10px;
       border-left: 3px solid #c6d2e0; color: #555;
+      background: rgba(198,210,224,0.16);
+      border-radius: 0 6px 6px 0;
     }
     .memo-editor h1 { font-size: 17px; font-weight: 700; margin: 7px 0 3px; line-height: 1.4; }
     .memo-editor h2 { font-size: 14px; font-weight: 700; margin: 5px 0 3px; line-height: 1.4; }
     .memo-editor h3 { font-size: 12.5px; font-weight: 700; margin: 4px 0 2px; line-height: 1.4; }
-    .memo-editor p, .memo-editor div { margin: 0; }
+    .memo-editor p, .memo-editor div { margin: 0; min-height: 1.5em; }
+    .memo-editor [data-memo-todo] {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      padding: 2px 0;
+    }
+    .memo-editor [data-memo-check] {
+      margin-top: 4px;
+      accent-color: var(--chrome, #a9cdf5);
+    }
   `;
   document.head.appendChild(s);
 }

@@ -39,6 +39,8 @@ window.workActivity = {
   const subs = new Set();
   window.workTracker = {
     isRunning() { return running; },
+    // 방 동기화 코드의 기존 "외부 모드" API와 호환: 현재 단순화된 트래커에서는 running 상태가 곧 외부 작업 상태다.
+    isExternal() { return running; },
     setRunning(on) {
       const next = !!on;
       if (next === running) return;

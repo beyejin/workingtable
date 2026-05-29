@@ -32,6 +32,21 @@ function parseDate(iso) {
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
+function normalizedTodoPeriod(t) {
+  const a = t.startDate || null;
+  const b = t.endDate || null;
+  if (!a && !b) return null;
+  const start = a || b;
+  const end = b || a;
+  return start <= end ? { start, end } : { start: end, end: start };
+}
+function eachIsoDate(start, end, fn) {
+  let d = start;
+  for (let i = 0; i < 370 && d <= end; i += 1) {
+    fn(d);
+    d = dateOnly(addDays(parseDate(d), 1));
+  }
+}
 function fmtSecondsHMS(totalSec) {
   const s = Math.max(0, Math.floor(totalSec || 0));
   const h = Math.floor(s / 3600);
@@ -172,11 +187,24 @@ function WeekPane({ onPickDay }) {
   const doneByDay = {};
   dayStrings.forEach(d => { dueByDay[d] = []; doneByDay[d] = []; });
   todos.forEach(t => {
-    if (t.dueDate && dueByDay[t.dueDate]) dueByDay[t.dueDate].push(t);
-    if (!t.dueDate && t.done && t.completedAt) {
+    if (t.dueDate && dueByDay[t.dueDate]) {
+      dueByDay[t.dueDate].push(t);
+      return;
+    }
+    const period = normalizedTodoPeriod(t);
+    if (period) {
+      eachIsoDate(period.start, period.end, (d) => {
+        if (dueByDay[d]) dueByDay[d].push(t);
+      });
+      return;
+    }
+    if (t.done && t.completedAt) {
       const k = t.completedAt.slice(0, 10);
       if (doneByDay[k]) doneByDay[k].push(t);
+      return;
     }
+    const created = (t.createdAt || "").slice(0, 10);
+    if (dueByDay[created]) dueByDay[created].push(t);
   });
   // 날짜별 — 현재 프로젝트의 작업시간만 표시. 다른 프로젝트나 미분류는 숨김.
   const workByDay = {};
@@ -411,6 +439,8 @@ function TodoMiniLine({ t, onToggle }) {
 function WeekNotesCell({ mondayStr, notes, onChange }) {
   const [local, setLocal] = useState(notes);
   const lastSentRef = useRef(notes);
+  const LH = 22;
+  const rules = `repeating-linear-gradient(to bottom, transparent 0, transparent ${LH - 1}px, rgba(40,51,63,0.22) ${LH - 1}px, rgba(40,51,63,0.22) ${LH}px)`;
   // 주가 바뀌면 새 값으로 동기화
   useEffect(() => { setLocal(notes); lastSentRef.current = notes; }, [mondayStr, notes]);
   // 디바운스 저장
@@ -428,7 +458,8 @@ function WeekNotesCell({ mondayStr, notes, onChange }) {
     <div onClick={(e) => e.stopPropagation()} style={{
       padding: "6px 8px 8px",
       display: "flex", flexDirection: "column", minHeight: 0,
-      background: "color-mix(in srgb, var(--chrome,#a9cdf5) 14%, white)",
+      background: "rgba(255,255,255,0.16)",
+      position: "relative",
     }}>
       <div style={{
         fontFamily: "var(--hand)", fontSize: 12.5, fontWeight: 700,
@@ -443,9 +474,11 @@ function WeekNotesCell({ mondayStr, notes, onChange }) {
         style={{
           flex: 1, minHeight: 0, marginTop: 4,
           border: 0, outline: "none", resize: "none",
-          background: "transparent",
-          fontFamily: "var(--hand)", fontSize: 11.5, lineHeight: 1.4,
-          color: "var(--ink)", padding: 0,
+          background: rules,
+          backgroundAttachment: "local",
+          fontFamily: "var(--hand)", fontSize: 12.5, lineHeight: `${LH}px`,
+          color: "var(--ink)", padding: "2px 4px",
+          borderRadius: 6,
         }}
       />
     </div>

@@ -168,7 +168,7 @@
     }
     const memberPayload = {
       displayName: fields.displayName || "이름없음",
-      avatar: fields.avatar || "🐰",
+      avatar: fields.avatar ?? 22,
       status: "idle",
       workStartedAt: null,
       accumulatedSecondsToday: 0,
@@ -184,7 +184,7 @@
   }
 
   // 나가기 — 원자적: 멤버 삭제 + 카운트 감소.
-  // 마지막 1명이면 방 + 하위 claps 까지 정리해서 유령 방을 남기지 않음.
+  // 마지막 1명이면 방을 삭제해서 유령 방을 남기지 않음.
   async function leaveRoom_remote(roomId, uid) {
     const roomRef = db.collection("rooms").doc(roomId);
     const memberRef = roomRef.collection("members").doc(uid);
@@ -200,18 +200,6 @@
     }
     const count = (roomDoc.data() || {}).memberCount || 0;
     const willBeLast = count <= 1;
-
-    // 마지막 1명이라면: claps 를 먼저 비움 (아직 본인이 멤버 권한 가지고 있을 때)
-    if (willBeLast) {
-      try {
-        const clapsSnap = await roomRef.collection("claps").get();
-        if (!clapsSnap.empty) {
-          const batch = db.batch();
-          clapsSnap.docs.forEach((d) => batch.delete(d.ref));
-          await batch.commit();
-        }
-      } catch (e) { log("claps cleanup 실패 (계속 진행)", e); }
-    }
 
     // 트랜잭션: 멤버 삭제 + (마지막이면 방 삭제, 아니면 카운트 -1)
     await db.runTransaction(async (tx) => {
@@ -234,12 +222,10 @@
   async function updateMyMember_remote(roomId, uid, patch) {
     if (!roomId || !uid) return;
     const memberRef = db.collection("rooms").doc(roomId).collection("members").doc(uid);
-    // workStartedAt 은 Date.now() 또는 null 로 들어옴 → Timestamp 변환
+    // workStartedAt 은 시작 사건이면 서버 시계로 저장하고, 화면 시간은 클라이언트가 로컬 계산한다.
     const out = { ...patch, lastActiveAt: serverNow() };
     if ("workStartedAt" in patch) {
-      out.workStartedAt = patch.workStartedAt
-        ? firebase.firestore.Timestamp.fromMillis(patch.workStartedAt)
-        : null;
+      out.workStartedAt = patch.workStartedAt ? serverNow() : null;
     }
     // 구버전 필드 정리 — visibleTodos 가 들어오는 patch 라면 함께 삭제
     if ("visibleTodos" in patch) {
@@ -249,6 +235,36 @@
       out.recentTodos = del;
     }
     await memberRef.set(out, { merge: true });
+  }
+
+  async function updateMyMemberWithLog_remote(roomId, uid, patch, logEntry) {
+    if (!roomId || !uid) return;
+    const memberRef = db.collection("rooms").doc(roomId).collection("members").doc(uid);
+    const out = { ...patch, lastActiveAt: serverNow() };
+    if ("workStartedAt" in patch) {
+      out.workStartedAt = patch.workStartedAt ? serverNow() : null;
+    }
+    if ("visibleTodos" in patch) {
+      const del = firebase.firestore.FieldValue.delete();
+      out.showTodoTitle = del;
+      out.currentTodoTitle = del;
+      out.recentTodos = del;
+    }
+    await db.runTransaction(async (tx) => {
+      if (logEntry && logEntry.text) {
+        const memberSnap = await tx.get(memberRef);
+        const data = memberSnap.exists ? memberSnap.data() : {};
+        const recent = Array.isArray(data.recentLog) ? data.recentLog : [];
+        out.recentLog = recent.concat([{
+          uid,
+          nickname: logEntry.nickname || "이름없음",
+          text: String(logEntry.text).slice(0, 160),
+          todoPublic: !!logEntry.todoPublic,
+          at: Date.now(),
+        }]).slice(-50);
+      }
+      tx.set(memberRef, out, { merge: true });
+    });
   }
 
   // ---- 멤버 실시간 구독 ----
@@ -271,6 +287,7 @@
             todoDone: data.todoDone || 0,
             // 공개로 표시한 할일 제목들만. 비공개 제목은 절대 서버에 안 올라감.
             visibleTodos: Array.isArray(data.visibleTodos) ? data.visibleTodos : [],
+            recentLog: Array.isArray(data.recentLog) ? data.recentLog : [],
             lastActiveAt: tsToMs(data.lastActiveAt),
             joinedAt: tsToMs(data.joinedAt),
           });
@@ -285,37 +302,33 @@
     return db.collection("rooms").doc(roomId)
       .onSnapshot((d) => {
         if (!d.exists) { cb(null); return; }
-        cb({ id: d.id, ...d.data() });
+        const data = d.data();
+        cb({
+          id: d.id,
+          ...data,
+          recentClaps: Array.isArray(data.recentClaps) ? data.recentClaps : [],
+        });
       });
   }
 
   // ---- 박수 (사건성, 저빈도) ----
   async function sendClap_remote(roomId, fromUid, toUid) {
     if (!roomId || !fromUid || !toUid) return;
-    await db.collection("rooms").doc(roomId).collection("claps").add({
-      fromUid, toUid, createdAt: serverNow(),
+    const roomRef = db.collection("rooms").doc(roomId);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(roomRef);
+      const data = snap.exists ? snap.data() : {};
+      const recent = Array.isArray(data.recentClaps) ? data.recentClaps : [];
+      const next = recent.concat([{ id: Math.random().toString(36).slice(2), fromUid, toUid, ts: Date.now() }]).slice(-20);
+      tx.set(roomRef, { recentClaps: next }, { merge: true });
     });
   }
-  function watchRecentClaps_remote(roomId, sinceMs, cb) {
-    if (!roomId) return () => {};
-    const since = firebase.firestore.Timestamp.fromMillis(sinceMs);
-    return db.collection("rooms").doc(roomId).collection("claps")
-      .where("createdAt", ">", since)
-      .onSnapshot((snap) => {
-        snap.docChanges().forEach((ch) => {
-          if (ch.type !== "added") return;
-          const d = ch.doc.data();
-          cb({ id: ch.doc.id, fromUid: d.fromUid, toUid: d.toUid, ts: tsToMs(d.createdAt) });
-        });
-      }, (err) => log("watchClaps 에러", err));
-  }
-
   // ===========================================================
   // 로컬 모드 — 같은 인터페이스, 메모리/localStorage 백업
   // ===========================================================
   const LOCAL_STORE_KEY = "todoary.room.localStore";
   let localState = null;
-  const localSubs = { members: new Set(), room: new Set(), claps: new Set() };
+  const localSubs = { members: new Set(), room: new Set() };
 
   function loadLocal() {
     if (localState) return;
@@ -345,7 +358,7 @@
     const id = "local-" + Math.random().toString(36).slice(2, 10);
     localState.rooms[id] = {
       id, name: name || "우리 작업방", inviteCode: code, hostUid,
-      memberCount: 0, createdAt: Date.now(), members: {}, claps: [],
+      memberCount: 0, createdAt: Date.now(), members: {}, recentClaps: [], recentLog: [],
     };
     saveLocal();
     return { id, name, inviteCode: code };
@@ -364,7 +377,7 @@
     if (!already && count >= 4) throw new Error("ROOM_FULL");
     room.members[uid] = {
       displayName: fields.displayName || "나",
-      avatar: fields.avatar || "🐰",
+      avatar: fields.avatar ?? 22,
       status: "idle",
       workStartedAt: null,
       accumulatedSecondsToday: 0,
@@ -403,9 +416,31 @@
     loadLocal();
     const room = localState.rooms[roomId];
     if (!room || !room.members[uid]) return;
-    room.members[uid] = { ...room.members[uid], ...patch, lastActiveAt: Date.now() };
+    const out = { ...patch };
+    if ("workStartedAt" in patch) out.workStartedAt = patch.workStartedAt ? Date.now() : null;
+    room.members[uid] = { ...room.members[uid], ...out, lastActiveAt: Date.now() };
     saveLocal();
     fireLocalMembers(roomId);
+  }
+  async function updateMyMemberWithLog_local(roomId, uid, patch, logEntry) {
+    loadLocal();
+    const room = localState.rooms[roomId];
+    if (!room || !room.members[uid]) return;
+    const out = { ...patch };
+    if ("workStartedAt" in patch) out.workStartedAt = patch.workStartedAt ? Date.now() : null;
+    if (logEntry && logEntry.text) {
+      out.recentLog = (room.members[uid].recentLog || []).concat([{
+        uid,
+        nickname: logEntry.nickname || "이름없음",
+        text: String(logEntry.text).slice(0, 160),
+        todoPublic: !!logEntry.todoPublic,
+        at: Date.now(),
+      }]).slice(-50);
+    }
+    room.members[uid] = { ...room.members[uid], ...out, lastActiveAt: Date.now() };
+    saveLocal();
+    fireLocalMembers(roomId);
+    fireLocalRoom(roomId);
   }
   function watchMembers_local(roomId, cb) {
     const handler = (rid, members) => { if (rid === roomId) cb(members); };
@@ -425,17 +460,10 @@
     const room = localState.rooms[roomId];
     if (!room) return;
     const clap = { id: Math.random().toString(36).slice(2), fromUid, toUid, ts: Date.now() };
-    room.claps = (room.claps || []).slice(-50);
-    room.claps.push(clap);
+    room.recentClaps = (room.recentClaps || []).concat([clap]).slice(-20);
     saveLocal();
-    for (const fn of localSubs.claps) { try { fn(roomId, clap); } catch (_) {} }
+    fireLocalRoom(roomId);
   }
-  function watchRecentClaps_local(roomId, sinceMs, cb) {
-    const handler = (rid, clap) => { if (rid === roomId && clap.ts > sinceMs) cb(clap); };
-    localSubs.claps.add(handler);
-    return () => localSubs.claps.delete(handler);
-  }
-
   // ===========================================================
   // 디스패처 — 모드에 따라 라우팅
   // ===========================================================
@@ -471,11 +499,11 @@
     },
     members: {
       updateMine: pick(updateMyMember_remote, updateMyMember_local),
+      updateMineWithLog: pick(updateMyMemberWithLog_remote, updateMyMemberWithLog_local),
       watch: pick(watchMembers_remote, watchMembers_local),
     },
     claps: {
       send: pick(sendClap_remote, sendClap_local),
-      watchRecent: pick(watchRecentClaps_remote, watchRecentClaps_local),
     },
   };
 })();

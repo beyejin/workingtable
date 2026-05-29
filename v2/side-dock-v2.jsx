@@ -20,8 +20,8 @@ const TABS = [
 
 function SideDockV2({ tweaks, setTweak }) {
   const [active, setActive] = useState("todo");
-  // 작업방 탭 표시 여부 (기본 켜짐). 꺼지면 현재 활성 탭이 room 이었으면 todo 로 자동 전환.
-  const showRoomTab = tweaks?.showRoomTab ?? true;
+  // 작업방 탭 표시 여부 (기본 꺼짐). 꺼지면 현재 활성 탭이 room 이었으면 todo 로 자동 전환.
+  const showRoomTab = tweaks?.showRoomTab ?? false;
   const visibleTabs = showRoomTab ? TABS : TABS.filter(t => t.id !== "room");
   React.useEffect(() => {
     if (!showRoomTab && active === "room") setActive("todo");
@@ -606,7 +606,7 @@ function SettingsView({ tweaks, setTweak }) {
       </SetSection>
 
       <SetSection label={L("set.roomTab")}>
-        <SetSeg value={(t.showRoomTab ?? true) ? "on" : "off"} onChange={v => set("showRoomTab", v === "on")}
+        <SetSeg value={(t.showRoomTab ?? false) ? "on" : "off"} onChange={v => set("showRoomTab", v === "on")}
           options={[["on", L("set.on")], ["off", L("set.off")]]} />
         <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.roomTabHint")}</div>
       </SetSection>
