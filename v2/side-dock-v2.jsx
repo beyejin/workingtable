@@ -42,6 +42,15 @@ function SideDockV2({ tweaks, setTweak }) {
   const dockSide = tweaks?.dockSide ?? "left";
   const tabStyle = tweaks?.tabStyle ?? "paper";
   const desktopMode = tweaks?.desktopMode ?? false;
+  const dockHidden = tweaks?.dockHidden ?? false;
+  const tabsHidden = tweaks?.tabsHidden ?? false;
+
+  // 도크 미니화 — 본체/탭/페이크 IDE 전부 가리고 작은 디지털 타이머 위젯만 남김.
+  // 잡고 드래그로 옮길 수 있고, 클릭하면 도크 복귀.
+  if (dockHidden) {
+    return <DockRevealEdge tweaks={tweaks} setTweak={setTweak}
+      onReveal={() => setTweak && setTweak("dockHidden", false)} />;
+  }
   // 배경 (그라데이션 / 도형)
   const dockBg = buildBackground(
     tweaks?.bgType ?? "linear",
@@ -102,6 +111,7 @@ function SideDockV2({ tweaks, setTweak }) {
         }}>
           <ProjectSwitcher />
           <div data-tauri-drag-region style={{ flex: 1, alignSelf: "stretch" }} />
+          <CloseAppButton />
         </div>
 
         {/* sticky — 헤더 (제목/음악/타이머/디데이 각 한 줄) */}
@@ -136,6 +146,7 @@ function SideDockV2({ tweaks, setTweak }) {
         tabStyle={tabStyle}
         chrome={chrome}
         compact={compactTabs}
+        autoHide={tabsHidden}
       />
 
       {/* 창 가장자리 리사이즈 핸들 — macOS decorations:false 에선 OS 가 안 깔아줌 */}
@@ -226,7 +237,7 @@ function TabHeader({ active }) {
 }
 
 // ---- 다이어리 인덱스 탭 ----
-function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabStyle, chrome, compact }) {
+function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabStyle, chrome, compact, autoHide }) {
   const cm = (pct) => `color-mix(in srgb, ${chrome || "#a9cdf5"} ${pct}%, white)`;
   // 탭이 도크의 어느 쪽 바깥에 붙는지 → 위치 계산
   const onLeft = tabSide === "left";
@@ -245,6 +256,40 @@ function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSt
   const TAB_W = 32;     // 삐쳐나온 깊이
   const TAB_H = compact ? 40 : 74;   // 짧을 땐 아이콘만(낮은 탭)
   const TAB_GAP = 4;
+
+  // ---- 자동 숨김 로직 ----
+  // autoHide=true 일 때: 처음엔 숨김. 가장자리에 마우스 ~1.5초 호버 → 슬라이드로 노출.
+  const REVEAL_DELAY = 1500;
+  const HIDE_DELAY = 220;
+  const [revealed, setRevealed] = useState(false);
+  const revealTimerRef = React.useRef(null);
+  const hideTimerRef = React.useRef(null);
+  React.useEffect(() => {
+    setRevealed(false);
+    return () => {
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
+  }, [autoHide]);
+  const onZoneEnter = () => {
+    if (!autoHide) return;
+    if (hideTimerRef.current) { clearTimeout(hideTimerRef.current); hideTimerRef.current = null; }
+    if (revealed) return;
+    if (revealTimerRef.current) return;
+    revealTimerRef.current = setTimeout(() => {
+      setRevealed(true); revealTimerRef.current = null;
+    }, REVEAL_DELAY);
+  };
+  const onZoneLeave = () => {
+    if (!autoHide) return;
+    if (revealTimerRef.current) { clearTimeout(revealTimerRef.current); revealTimerRef.current = null; }
+    if (!revealed) return;
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => {
+      setRevealed(false); hideTimerRef.current = null;
+    }, HIDE_DELAY);
+  };
+  const hidden = autoHide && !revealed;
 
   const renderTab = (t) => {
     const isActive = t.id === active;
@@ -289,16 +334,175 @@ function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSt
     );
   };
 
+  const slideOffset = TAB_W + 8;
+  const hiddenTransform = stickRight ? `translateX(-${slideOffset}px)` : `translateX(${slideOffset}px)`;
+  const HOVER_ZONE_W = autoHide && !revealed ? 36 : (TAB_W + 12);
+
   return (
-    <div style={{
-      position: "absolute",
-      top: 70,
-      ...containerPos,
-      display: "flex", flexDirection: "column", gap: TAB_GAP,
-      alignItems: stickRight ? "flex-start" : "flex-end",
-      zIndex: 1,
+    <div
+      onMouseEnter={onZoneEnter}
+      onMouseLeave={onZoneLeave}
+      style={{
+        position: "absolute",
+        top: 0, bottom: 0,
+        ...containerPos,
+        width: HOVER_ZONE_W,
+        zIndex: 1,
+        pointerEvents: "auto",
+      }}
+    >
+      {hidden && (
+        <div style={{
+          position: "absolute",
+          top: 72,
+          [stickRight ? "left" : "right"]: 0,
+          width: 3, height: 60,
+          background: cm(35),
+          borderRadius: stickRight ? "0 3px 3px 0" : "3px 0 0 3px",
+          opacity: 0.6,
+          pointerEvents: "none",
+        }} />
+      )}
+      <div style={{
+        position: "absolute",
+        top: 70,
+        [stickRight ? "left" : "right"]: 0,
+        display: "flex", flexDirection: "column", gap: TAB_GAP,
+        alignItems: stickRight ? "flex-start" : "flex-end",
+        transform: hidden ? hiddenTransform : "none",
+        transition: "transform 0.32s cubic-bezier(0.4, 0, 0.2, 1)",
+      }}>
+        {tabs.map(renderTab)}
+      </div>
+    </div>
+  );
+}
+
+// ---- 헤더 우측 종료 버튼 ----
+// Tauri 창에 OS 보더가 없어서 작업표시줄 외엔 종료 수단이 없던 문제 해결.
+function CloseAppButton() {
+  const [hover, setHover] = useState(false);
+  const onClose = async () => {
+    try {
+      const T = window.__TAURI__;
+      if (T && T.window && T.window.getCurrentWindow) {
+        await T.window.getCurrentWindow().close();
+      } else if (typeof window.close === "function") {
+        window.close();
+      }
+    } catch (e) { console.warn("close failed:", e); }
+  };
+  return (
+    <button
+      onClick={onClose}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={L("app.close")}
+      aria-label={L("app.close")}
+      style={{
+        all: "unset", cursor: "pointer", flexShrink: 0,
+        width: 20, height: 20, borderRadius: 4,
+        display: "grid", placeItems: "center",
+        fontSize: 13, lineHeight: 1, fontWeight: 700,
+        color: hover ? "#fff" : "var(--ink)",
+        background: hover ? "#e84545" : "transparent",
+        border: hover ? "1px solid #b03030" : "1px solid transparent",
+        transition: "background 0.15s, color 0.15s, border 0.15s",
+      }}
+    >×</button>
+  );
+}
+
+// ---- 도크 미니화 시 디지털 타이머 위젯 ----
+// Tauri 창 자체를 위젯 크기로 줄여서 데스크탑 위 어디든 갈 수 있음.
+// 위젯은 창 전체를 채우고, 외곽(time row)에 data-tauri-drag-region 을 걸어 OS 레벨로 창을 끔.
+function DockRevealEdge({ tweaks, setTweak, onReveal }) {
+  const { state } = diary.useDiary();
+  const minutes = diary.select.workMinutesToday(state);
+  const hh = Math.floor(minutes / 60);
+  const mm = minutes % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  const timeDisplay = `${pad(hh)}:${pad(mm)}`;
+
+  // 음악 상태 구독
+  const [music, setMusic] = useState(
+    () => window.musicPlayer ? { ...window.musicPlayer.getState() } : { playing: false, hasQueue: false }
+  );
+  React.useEffect(() => {
+    if (!window.musicPlayer) return;
+    const sync = () => setMusic({ ...window.musicPlayer.getState() });
+    sync();
+    return window.musicPlayer.subscribe(sync);
+  }, []);
+
+  const themeBg = buildBackground(
+    tweaks?.bgType ?? "linear",
+    tweaks?.bgAngle ?? 180,
+    tweaks?.bgStops ?? [{ c: "#a9cdf5", p: 0 }, { c: "#ffffff", p: 100 }],
+    tweaks?.bgShape ?? "none"
+  );
+  const onPrev   = () => { try { window.musicPlayer && window.musicPlayer.prev(); } catch (_) {} };
+  const onToggle = () => { try { window.musicPlayer && window.musicPlayer.toggle(); } catch (_) {} };
+  const onNext   = () => { try { window.musicPlayer && window.musicPlayer.next(); } catch (_) {} };
+
+  const iconBtn = {
+    all: "unset", cursor: "pointer", flexShrink: 0,
+    width: 20, height: 20, borderRadius: 4,
+    display: "grid", placeItems: "center",
+    fontFamily: "var(--mono)", fontSize: 11, lineHeight: 1, color: "var(--ink)",
+    background: "rgba(255,255,255,0.4)",
+    border: "1px solid var(--ink-soft)",
+  };
+  const disabledBtn = { ...iconBtn, cursor: "default", opacity: 0.35 };
+  const WIDGET_W = 140;
+  const WIDGET_H = 78;
+
+  return (
+    <div title={L("set.dockMiniTip")} style={{
+      position: "fixed", top: 0, left: 0,
+      width: WIDGET_W, height: WIDGET_H,
+      background: themeBg, backgroundSize: "200% 200%", backgroundPosition: "center",
+      border: "1.1px solid var(--ink)", borderRadius: 10, boxSizing: "border-box",
+      boxShadow: "inset 0 1px 2px rgba(255,255,255,0.35), inset 0 -1px 1px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.18)",
+      display: "flex", flexDirection: "column",
+      userSelect: "none", overflow: "hidden",
+      color: "var(--ink)", fontFamily: "var(--mono)",
+      textShadow: "0 1px 0 rgba(255,255,255,0.55)",
+      zIndex: 9999,
     }}>
-      {tabs.map(renderTab)}
+      <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
+        <div data-tauri-drag-region style={{ position: "absolute", inset: 0, cursor: "grab" }} />
+        <div style={{
+          position: "absolute", inset: 0,
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          pointerEvents: "none",
+        }}>
+          <span style={{ fontSize: 12, opacity: 0.65, textShadow: "none" }}>⏱</span>
+          <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: "0.04em", lineHeight: 1 }}>{timeDisplay}</span>
+        </div>
+        <button onClick={onReveal} title={L("set.dockReveal")} aria-label={L("set.dockReveal")}
+          style={{
+            all: "unset", cursor: "pointer",
+            position: "absolute", top: 4, right: 4,
+            width: 22, height: 22, borderRadius: 5,
+            display: "grid", placeItems: "center",
+            fontSize: 13, fontWeight: 700, lineHeight: 1, color: "var(--ink)",
+            background: "rgba(255,255,255,0.55)",
+            border: "1px solid var(--ink-soft)",
+            zIndex: 2,
+          }}>⤢</button>
+      </div>
+      <div style={{
+        flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+        padding: "4px 8px 6px",
+        borderTop: "1px solid rgba(0,0,0,0.1)",
+        background: "rgba(255,255,255,0.22)",
+      }}>
+        <button onClick={onPrev} title={L("music.prev")} style={music.hasQueue ? iconBtn : disabledBtn} disabled={!music.hasQueue}>⏮</button>
+        <button onClick={onToggle} title={music.playing ? L("music.pause") : L("music.play")} style={music.hasQueue ? iconBtn : disabledBtn} disabled={!music.hasQueue}>{music.playing ? "⏸" : "▶"}</button>
+        <button onClick={onNext} title={L("music.next")} style={music.hasQueue ? iconBtn : disabledBtn} disabled={!music.hasQueue}>⏭</button>
+      </div>
     </div>
   );
 }
@@ -403,6 +607,18 @@ function SettingsView({ tweaks, setTweak }) {
         <SetSeg value={(t.showRoomTab ?? true) ? "on" : "off"} onChange={v => set("showRoomTab", v === "on")}
           options={[["on", L("set.on")], ["off", L("set.off")]]} />
         <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.roomTabHint")}</div>
+      </SetSection>
+
+      <SetSection label={L("set.dockHide")}>
+        <SetSeg value={t.dockHidden ? "on" : "off"} onChange={v => set("dockHidden", v === "on")}
+          options={[["on", L("set.on")], ["off", L("set.off")]]} />
+        <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.dockHideHint")}</div>
+      </SetSection>
+
+      <SetSection label={L("set.tabsAutoHide")}>
+        <SetSeg value={t.tabsHidden ? "on" : "off"} onChange={v => set("tabsHidden", v === "on")}
+          options={[["on", L("set.on")], ["off", L("set.off")]]} />
+        <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.tabsAutoHideHint")}</div>
       </SetSection>
 
       <SetSection label={L("set.data")}>
