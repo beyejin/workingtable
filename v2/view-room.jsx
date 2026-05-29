@@ -1,4 +1,4 @@
-/* global React, diary, SpriteIcon */
+/* global React, diary, SpriteIcon, buildBackground */
 // ===========================================================
 // 작업방 (함께 작업방) — 메인 뷰
 //
@@ -66,6 +66,64 @@ function roomAvatarIdx(value) {
 function RoomAvatarIcon({ value, size = 24 }) {
   return <SpriteIcon idx={roomAvatarIdx(value)} size={size} />;
 }
+function visibleTodoTitle(item) {
+  return typeof item === "string" ? item : (item?.title || "");
+}
+function visibleTodoDone(item) {
+  return typeof item === "object" && item ? !!item.done : false;
+}
+function memberRoomStatus(member, now, myUid, myStatus) {
+  if (member.uid === myUid && myStatus === "away") return "away";
+  if (isMemberOffline(member, now)) return "offline";
+  if (member.status === "paused") return "paused";
+  if (member.status === "away") return "away";
+  if (member.workStartedAt) return "working";
+  return "online";
+}
+function roomStatusText(status) {
+  if (status === "away") return "자리비움 모드로 전환했습니다.";
+  if (status === "offline") return "오프라인 상태가 되었습니다.";
+  if (status === "online" || status === "working") return "온라인 상태가 되었습니다.";
+  if (status === "paused") return "공유 쉬기 상태가 되었습니다.";
+  return "";
+}
+function shouldLogRoomStatusChange(uid, myUid, prev, next) {
+  if (!prev || prev === next) return false;
+  // 내 자동 온라인/오프라인은 재접속·pending timestamp 때 흔들릴 수 있어 로그로 쌓지 않는다.
+  if (uid === myUid && (prev === "online" || prev === "working" || prev === "offline") && (next === "online" || next === "working" || next === "offline")) {
+    return false;
+  }
+  return true;
+}
+const STATUS_EVENT_COALESCE_MS = 30000;
+const NOTICE_VISIBLE_MS = 7000;
+function mergeRoomStatusEvents(events, added) {
+  let next = [...events];
+  added.forEach((ev) => {
+    let idx = -1;
+    for (let i = next.length - 1; i >= 0; i--) {
+      const old = next[i];
+      if (old.kind === "status" && old.uid === ev.uid && ev.at - old.at < STATUS_EVENT_COALESCE_MS) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx >= 0) next[idx] = ev;
+    else next.push(ev);
+  });
+  return next.slice(-50);
+}
+function roomThemeBackground(tweaks) {
+  if (typeof buildBackground !== "function") {
+    return "linear-gradient(180deg, var(--paper-2) 0%, var(--paper) 100%)";
+  }
+  return buildBackground(
+    tweaks?.bgType ?? "linear",
+    tweaks?.bgAngle ?? 180,
+    tweaks?.bgStops ?? [{ c: "#a9cdf5", p: 0 }, { c: "#ffffff", p: 100 }],
+    tweaks?.bgShape ?? "none"
+  );
+}
 
 // ---- 1초마다 리렌더 트리거 (작업시간 표시용) ----
 function useNowTick() {
@@ -80,7 +138,7 @@ function useNowTick() {
 // ===========================================================
 // 최상위 RoomView
 // ===========================================================
-function RoomView() {
+function RoomView({ tweaks } = {}) {
   const room = window.roomStore.useRoom();
   useI18n();
 
@@ -111,7 +169,7 @@ function RoomView() {
   if (!room.state.currentRoomId) {
     return <EmptyRoomView />;
   }
-  return <RoomMainView />;
+  return <RoomMainView tweaks={tweaks} />;
 }
 
 // ===========================================================
@@ -326,17 +384,62 @@ function SelfPreview({ synthMember, myTodos, now }) {
 // ===========================================================
 // 메인 뷰 — 방 안에 있을 때 (4분할 그리드)
 // ===========================================================
-function RoomMainView() {
+function RoomMainView({ tweaks } = {}) {
   const room = window.roomStore.useRoom();
   const { state: ds } = diary.useDiary();
   const now = useNowTick();
   const { roomMeta, members } = room.state;
   const recentClaps = roomMeta?.recentClaps || [];
-  const roomLog = members
-    .flatMap((m) => Array.isArray(m.recentLog) ? m.recentLog : [])
+  const themeBg = roomThemeBackground(tweaks);
+  const myUid = window.firebaseBridge.uid();
+  const nameByUid = new Map(members.map((m) => [m.uid, m.displayName || "친구"]));
+  const [statusEvents, setStatusEvents] = useStateRoom([]);
+  const prevStatusesRef = useRefRoom(new Map());
+  const statusSig = members
+    .map((m) => `${m.uid}:${memberRoomStatus(m, now, myUid, room.state.myStatus)}`)
+    .join("|");
+  useEffectRoom(() => {
+    if (!members.length) return;
+    const prevMap = prevStatusesRef.current;
+    const nextMap = new Map();
+    const added = [];
+    members.forEach((m) => {
+      const status = memberRoomStatus(m, now, myUid, room.state.myStatus);
+      nextMap.set(m.uid, status);
+      const prev = prevMap.get(m.uid);
+      if (!shouldLogRoomStatusChange(m.uid, myUid, prev, status)) return;
+      const text = roomStatusText(status);
+      if (!text) return;
+      added.push({
+        id: `status-${m.uid}-${now}`,
+        kind: "status",
+        uid: m.uid,
+        nickname: m.displayName || (m.uid === myUid ? "나" : "친구"),
+        text,
+        at: now,
+      });
+    });
+    prevStatusesRef.current = nextMap;
+    if (added.length) setStatusEvents((events) => mergeRoomStatusEvents(events, added));
+  }, [statusSig]);
+  const completionLog = members
+    .flatMap((m) => Array.isArray(m.recentLog) ? m.recentLog : []);
+  const clapLog = recentClaps.map((c) => ({
+    id: c.id || `clap-${c.fromUid}-${c.toUid}-${c.ts}`,
+    kind: "clap",
+    uid: c.fromUid,
+    nickname: nameByUid.get(c.fromUid) || "친구",
+    text: `${nameByUid.get(c.toUid) || "친구"}님에게 박수를 보냈습니다.`,
+    at: c.ts,
+  }));
+  const roomLog = [...completionLog, ...clapLog, ...statusEvents]
     .sort((a, b) => (a.at || 0) - (b.at || 0))
     .slice(-50);
-  const myUid = window.firebaseBridge.uid();
+  const noticeByUid = new Map();
+  roomLog.forEach((ev) => {
+    if (!ev?.uid || !ev?.text || now - (ev.at || 0) > NOTICE_VISIBLE_MS) return;
+    noticeByUid.set(ev.uid, ev);
+  });
   const isLocal = room.state.bridgeStatus === "local";
 
   // 본인 todo 리스트 — diary 직접 (자기 카드에서만 보임)
@@ -390,24 +493,37 @@ function RoomMainView() {
     <div style={{
       height: "100%", display: "flex", flexDirection: "column", minHeight: 0,
       padding: 8, boxSizing: "border-box",
-      background: "linear-gradient(180deg, #f8fbff 0%, #fff7fb 100%)",
+      background: themeBg,
+      backgroundSize: "200% 200%",
+      backgroundPosition: "center",
     }}>
       <div style={{
         flexShrink: 0,
         display: "flex", alignItems: "center", gap: 6,
         padding: "5px 8px",
-        border: "1.1px solid #9db8dd",
+        border: "1.1px solid var(--ink)",
         borderRadius: "9px 9px 0 0",
-        background: "linear-gradient(180deg, #ffffff 0%, #eaf3ff 100%)",
-        boxShadow: "0 1px 0 rgba(255,255,255,0.9) inset",
+        background: "linear-gradient(180deg, var(--paper) 0%, var(--blue-soft) 100%)",
+        boxShadow: "0 1px 0 rgba(255,255,255,0.45) inset",
       }}>
-        <span style={{ fontSize: 13, color: "#6e8fc1" }}>♡</span>
+        <span style={{ fontSize: 13, color: "var(--ink-2)" }}>♡</span>
         <span style={{
           flex: 1, minWidth: 0,
           fontFamily: "var(--hand)", fontSize: 14, fontWeight: 700,
           color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
         }}>{roomMeta?.name || L("room.title")}</span>
         <button onClick={copyCode} title="초대 코드 복사" style={roomChromeBtn}>↗</button>
+        <button
+          onClick={() => room.setMyStatus(room.state.myStatus === "away" ? "working" : "away")}
+          title={room.state.myStatus === "away" ? "자리비움 해제" : "자리비움"}
+          style={{
+            ...roomChromeBtn,
+            width: "auto",
+            padding: "0 7px",
+            background: room.state.myStatus === "away" ? "var(--cream-soft)" : roomChromeBtn.background,
+            color: room.state.myStatus === "away" ? "var(--ink)" : roomChromeBtn.color,
+          }}
+        >{room.state.myStatus === "away" ? "복귀" : "자리비움"}</button>
         <button onClick={onLeave} title={L("room.leave")} style={roomChromeBtn}>×</button>
       </div>
 
@@ -417,9 +533,9 @@ function RoomMainView() {
         flex: 1, minHeight: 0,
         display: "grid", gridTemplateColumns: "1fr 82px", gap: 8,
         padding: "8px 8px 6px",
-        borderLeft: "1.1px solid #9db8dd",
-        borderRight: "1.1px solid #9db8dd",
-        background: "rgba(255,255,255,0.72)",
+        borderLeft: "1.1px solid var(--ink)",
+        borderRight: "1.1px solid var(--ink)",
+        background: "color-mix(in srgb, var(--paper) 78%, transparent)",
       }}>
         <RoomChatLog
           members={sorted}
@@ -428,6 +544,7 @@ function RoomMainView() {
           roomLog={roomLog}
           now={now}
           totalSeconds={totalSeconds}
+          themeBg={themeBg}
           onToggleTodo={(id) => diary.actions.toggleTodo(id)}
         />
         <div style={{ display: "grid", gridTemplateRows: "repeat(4, 1fr)", gap: 6, minHeight: 0 }}>
@@ -440,6 +557,8 @@ function RoomMainView() {
                 isMe={m.uid === myUid}
                 now={now}
                 claps={clapsByMember[m.uid] || []}
+                displayStatus={memberRoomStatus(m, now, myUid, room.state.myStatus)}
+                notice={noticeByUid.get(m.uid)}
                 onClick={m.uid === myUid ? () => window.dispatchEvent(new CustomEvent("room-edit-profile")) : () => room.sendClap(m.uid)}
               />
             ) : <RoomEmptySlot key={i} />;
@@ -450,9 +569,9 @@ function RoomMainView() {
       <div style={{
         flexShrink: 0,
         padding: "7px 8px 8px",
-        border: "1.1px solid #9db8dd",
+        border: "1.1px solid var(--ink)",
         borderRadius: "0 0 9px 9px",
-        background: "linear-gradient(180deg, #ffffff 0%, #edf5ff 100%)",
+        background: "linear-gradient(180deg, var(--paper) 0%, var(--blue-soft) 100%)",
       }}>
         <RoomTodoRegisterPanel todos={myTodos} />
       </div>
@@ -463,24 +582,31 @@ function RoomMainView() {
   );
 }
 
-function RoomChatLog({ members, myUid, myTodos, roomLog, now, totalSeconds, onToggleTodo }) {
+function RoomChatLog({ members, myUid, myTodos, roomLog, now, totalSeconds, themeBg, onToggleTodo }) {
   return (
     <div style={{
       minHeight: 0,
       display: "flex", flexDirection: "column",
       overflow: "hidden",
-      border: "1.1px solid #9db8dd",
+      border: "1.1px solid var(--ink)",
       borderRadius: 8,
-      background: "linear-gradient(180deg, #ffffff 0%, #fbfdff 100%)",
-      boxShadow: "0 1px 0 rgba(255,255,255,0.9) inset",
+      background: "color-mix(in srgb, var(--paper) 80%, transparent)",
+      backgroundSize: "200% 200%",
+      backgroundPosition: "center",
+      boxShadow: "0 1px 0 rgba(255,255,255,0.45) inset",
     }}>
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", padding: "10px 10px 8px" }}>
+      <div style={{
+        flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden",
+        padding: "10px 10px 8px",
+        background: "color-mix(in srgb, var(--paper) 80%, transparent)",
+      }}>
         {members.map((m) => {
           const isMe = m.uid === myUid;
           const todos = isMe
             ? myTodos.filter(t => t.roomVisible).map(t => ({ id: t.id, title: t.title, done: t.done }))
             : Array.isArray(m.visibleTodos)
-              ? m.visibleTodos.map((title, i) => ({ id: `${m.uid}-${i}`, title, done: false }))
+              ? m.visibleTodos.map((item, i) => ({ id: `${m.uid}-${i}`, title: visibleTodoTitle(item), done: visibleTodoDone(item) }))
+                  .filter((t) => t.title)
               : [];
           const label = isMe ? "나" : (m.displayName || "친구");
           const offline = isMemberOffline(m, now);
@@ -488,9 +614,21 @@ function RoomChatLog({ members, myUid, myTodos, roomLog, now, totalSeconds, onTo
           return (
             <div key={m.uid} style={{ marginBottom: 12, opacity: offline ? 0.55 : 1 }}>
               <div style={{
+                display: "flex", alignItems: "center", gap: 5,
                 fontFamily: "var(--hand)", fontSize: 12, fontWeight: 700,
-                color: isMe ? "#6b7ec8" : "#7b8aa0", marginBottom: 4,
-              }}>{label} says:</div>
+                color: isMe ? "var(--point)" : "var(--ink-2)", marginBottom: 4,
+              }}>
+                <span style={{
+                  width: 18, height: 18, borderRadius: 5,
+                  display: "grid", placeItems: "center",
+                  border: "1px solid var(--ink)",
+                  background: "var(--paper)",
+                  flexShrink: 0,
+                }}>
+                  <RoomAvatarIcon value={m.avatar} size={14} />
+                </span>
+                <span>{label} says:</span>
+              </div>
               {todos.length > 0 ? todos.map((t) => (
                 <div key={t.id} style={{
                   display: "flex", alignItems: "flex-start", gap: 6,
@@ -504,8 +642,8 @@ function RoomChatLog({ members, myUid, myTodos, roomLog, now, totalSeconds, onTo
                     style={{
                       all: "unset", cursor: isMe ? "pointer" : "default",
                       width: 10, height: 10, marginTop: 3, flexShrink: 0,
-                      border: "1px solid #8aa6cd", borderRadius: 2,
-                      background: t.done ? "#69d28b" : "#ffffff",
+                      border: "1px solid var(--ink)", borderRadius: 2,
+                      background: t.done ? "var(--mint)" : "var(--paper)",
                       display: "grid", placeItems: "center",
                       fontSize: 8, color: "#fff",
                     }}
@@ -520,15 +658,15 @@ function RoomChatLog({ members, myUid, myTodos, roomLog, now, totalSeconds, onTo
                   {isMe ? L("room.noTodo") : "공개된 제목이 없어요"}
                 </div>
               )}
-              {events.map((ev) => (
-                <div key={ev.id} style={{
+              {events.map((ev, i) => (
+                <div key={ev.id || `${ev.uid}-${ev.at || 0}-${i}`} style={{
                   padding: "3px 0 2px 10px",
                   fontFamily: "var(--hand)", fontSize: 12.5, lineHeight: 1.35,
                   color: "var(--ink)",
                 }}>
-                  <span style={{ color: isMe ? "#6b7ec8" : "#7b8aa0", fontWeight: 700 }}>{ev.nickname || label} say :</span>{" "}
+                <span style={{ color: isMe ? "var(--point)" : "var(--ink-2)", fontWeight: 700 }}>{ev.nickname || label} say :</span>{" "}
                   <span>{ev.text}</span>{" "}
-                  <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: "#7d8da5" }}>{fmtRoomClock(ev.at)}</span>
+                  <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--ink-3)" }}>{fmtRoomClock(ev.at)}</span>
                 </div>
               ))}
             </div>
@@ -539,9 +677,9 @@ function RoomChatLog({ members, myUid, myTodos, roomLog, now, totalSeconds, onTo
         flexShrink: 0,
         display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
         padding: "6px 10px",
-        borderTop: "1px dashed #b9cae2",
-        background: "linear-gradient(180deg, rgba(244,248,255,0.9), rgba(255,247,251,0.92))",
-        fontFamily: "var(--hand)", fontSize: 11.5, color: "#60728f",
+        borderTop: "1px dashed var(--ink)",
+        background: "color-mix(in srgb, var(--paper) 80%, transparent)",
+        fontFamily: "var(--hand)", fontSize: 11.5, color: "var(--ink-2)",
       }}>
         <span>방 전체 작업 시간</span>
         <span style={{ fontFamily: "var(--mono)", fontSize: 11, fontWeight: 700, color: "var(--ink)" }}>{fmtHMS(totalSeconds || 0)}</span>
@@ -550,31 +688,42 @@ function RoomChatLog({ members, myUid, myTodos, roomLog, now, totalSeconds, onTo
   );
 }
 
-function RoomProfileSlot({ member, isMe, now, claps, onClick }) {
-  const offline = isMemberOffline(member, now);
+function RoomProfileSlot({ member, isMe, now, claps, displayStatus, notice, onClick }) {
+  const offline = displayStatus === "offline";
   const seconds = memberLiveSeconds(member, now);
-  const working = !offline && !!member.workStartedAt && member.status !== "paused" && member.status !== "away";
+  const working = displayStatus === "working";
+  const away = displayStatus === "away";
   const latestClap = claps.length > 0 ? claps[claps.length - 1] : null;
   const clapShow = latestClap && (now - latestClap.ts < 3000);
+  const total = member.todoTotal || 0;
+  const done = member.todoDone || 0;
+  const progress = total > 0 ? Math.min(1, done / total) : 0;
+  const iconHops = displayStatus === "online" || displayStatus === "working";
   return (
     <button onClick={onClick} title={isMe ? "프로필 변경" : L("room.clapHint")} style={{
       all: "unset", cursor: "pointer",
       position: "relative",
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       gap: 3, minHeight: 0,
-      border: "1.1px solid #9db8dd", borderRadius: 8,
-      background: isMe ? "linear-gradient(180deg, #fff3f8, #ffffff)" : "linear-gradient(180deg, #f4f8ff, #ffffff)",
-      boxShadow: "0 1px 0 rgba(255,255,255,0.9) inset",
+      border: "1.1px solid var(--ink)", borderRadius: 8,
+      background: away ? "linear-gradient(180deg, var(--cream-soft), var(--paper))" : (isMe ? "linear-gradient(180deg, var(--pink-soft), var(--paper))" : "linear-gradient(180deg, var(--blue-soft), var(--paper))"),
+      boxShadow: "0 1px 0 rgba(255,255,255,0.45) inset",
       opacity: offline ? 0.62 : 1,
       filter: offline ? "grayscale(0.7)" : "none",
     }}>
       {clapShow && <ClapBurst />}
+      {notice && <RoomNoticeBubble text={notice.text} />}
       <span style={{
         width: 40, height: 40, borderRadius: 8,
-        border: "1px solid #8aa6cd",
-        background: "#fff", display: "grid", placeItems: "center",
+        border: "1px solid var(--ink)",
+        background: "var(--paper)", display: "grid", placeItems: "center",
       }}>
-        <RoomAvatarIcon value={member.avatar} size={28} />
+        <span style={{
+          display: "grid", placeItems: "center",
+          animation: iconHops ? "room-avatar-hop 1.1s steps(1, end) infinite" : "none",
+        }}>
+          <RoomAvatarIcon value={member.avatar} size={28} />
+        </span>
       </span>
       <span style={{
         maxWidth: "90%",
@@ -584,14 +733,72 @@ function RoomProfileSlot({ member, isMe, now, claps, onClick }) {
       <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
         <span style={{
           width: 6, height: 6, borderRadius: "50%",
-          background: working ? "#35c45a" : (offline ? "#9aa8bb" : "#f0c14d"),
+          background: working ? "#35c45a" : (away ? "#f59e0b" : (offline ? "#9aa8bb" : "#f0c14d")),
         }} />
-        <span style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#60728f" }}>
-          {offline ? "오프라인" : (working ? "작업 중" : "온라인")}
+        <span style={{ fontFamily: "var(--mono)", fontSize: 9, color: "var(--ink-2)" }}>
+          {offline ? "오프라인" : (away ? "자리비움" : (working ? "작업 중" : "온라인"))}
         </span>
       </span>
-      <span style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#60728f" }}>{fmtHMS(seconds)}</span>
+      <span style={{ fontFamily: "var(--mono)", fontSize: 9, color: "var(--ink-2)" }}>{fmtHMS(seconds)}</span>
+      <span title={`경험치 ${done}/${total}`} style={{
+        width: 48, height: 5, borderRadius: 99,
+        border: "1px solid var(--ink)",
+        background: "var(--paper)", overflow: "hidden",
+      }}>
+        <span style={{
+          display: "block", width: `${progress * 100}%`, height: "100%",
+          background: "linear-gradient(90deg, var(--point), var(--hi))",
+          transition: "width 0.35s",
+        }} />
+      </span>
     </button>
+  );
+}
+
+function RoomNoticeBubble({ text }) {
+  return (
+    <div style={{
+      position: "absolute",
+      right: 56,
+      top: 8,
+      zIndex: 20,
+      width: 142,
+      boxSizing: "border-box",
+      padding: "6px 8px",
+      border: "2px solid var(--ink)",
+      borderRadius: 2,
+      background: "var(--paper)",
+      color: "var(--ink)",
+      fontFamily: "var(--hand)",
+      fontSize: 11.5,
+      lineHeight: 1.25,
+      textAlign: "left",
+      boxShadow: "3px 3px 0 color-mix(in srgb, var(--ink-soft) 60%, transparent)",
+      pointerEvents: "none",
+      imageRendering: "pixelated",
+    }}>
+      <span style={{
+        position: "absolute",
+        right: -8,
+        top: 22,
+        width: 12,
+        height: 12,
+        background: "var(--paper)",
+        borderRight: "2px solid var(--ink)",
+        borderBottom: "2px solid var(--ink)",
+        transform: "rotate(-45deg)",
+      }} />
+      <span style={{
+        position: "absolute",
+        left: -9,
+        top: -14,
+        fontSize: 20,
+        lineHeight: 1,
+        color: "var(--hi)",
+        textShadow: "1px 0 var(--ink), -1px 0 var(--ink), 0 1px var(--ink), 0 -1px var(--ink)",
+      }}>✦</span>
+      <span style={{ position: "relative", zIndex: 1 }}>{text}</span>
+    </div>
   );
 }
 
@@ -628,7 +835,7 @@ function RoomTodoRegisterPanel({ todos }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{
         display: "flex", alignItems: "center", gap: 6,
-        fontFamily: "var(--hand)", fontSize: 11.5, color: "#60728f",
+        fontFamily: "var(--hand)", fontSize: 11.5, color: "var(--ink-2)",
       }}>
         <span style={{ fontWeight: 700, color: "var(--ink)" }}>오늘 공유할 할 일</span>
         <span style={{ flex: 1 }} />
@@ -647,15 +854,15 @@ function RoomTodoRegisterPanel({ todos }) {
               all: "unset", cursor: "pointer",
               display: "flex", alignItems: "center", gap: 6,
               padding: "3px 7px",
-              border: "1px solid " + (on ? "#8aa6cd" : "#d2dbea"),
+              border: "1px solid var(--ink)",
               borderRadius: 6,
-              background: on ? "#f4f8ff" : "rgba(255,255,255,0.62)",
+              background: on ? "color-mix(in srgb, var(--paper) 80%, var(--blue-soft))" : "color-mix(in srgb, var(--paper) 80%, transparent)",
               fontFamily: "var(--hand)", fontSize: 12, color: t.done ? "var(--ink-3)" : "var(--ink)",
             }}>
               <span style={{
                 width: 11, height: 11, borderRadius: 2,
-                border: "1px solid #8aa6cd",
-                background: on ? "#69d28b" : "#ffffff",
+                border: "1px solid var(--ink)",
+                background: on ? "var(--mint)" : "var(--paper)",
                 display: "grid", placeItems: "center",
                 fontSize: 8, color: "#fff", flexShrink: 0,
               }}>{on ? "✓" : ""}</span>
@@ -674,10 +881,10 @@ function RoomTodoRegisterPanel({ todos }) {
         all: "unset", cursor: "pointer",
         display: "grid", placeItems: "center",
         minHeight: 24,
-        border: "1.1px solid #9db8dd", borderRadius: 6,
-        background: "linear-gradient(180deg, #ffffff 0%, #edf5ff 100%)",
+        border: "1.1px solid var(--ink)", borderRadius: 6,
+        background: "color-mix(in srgb, var(--paper) 78%, var(--blue-soft))",
         fontFamily: "var(--hand)", fontSize: 12, fontWeight: 700, color: "var(--ink)",
-        boxShadow: "0 1px 0 rgba(255,255,255,0.9) inset",
+        boxShadow: "0 1px 0 rgba(255,255,255,0.45) inset",
       }}>등록</button>
     </div>
   );
@@ -748,7 +955,9 @@ function MemberCard({ member, isMe, now, onClap, claps, selfTodos, onEditProfile
       id: t.id, title: t.title, done: t.done, roomVisible: !!t.roomVisible,
     }));
   } else if (!isMe && Array.isArray(member.visibleTodos) && member.visibleTodos.length > 0) {
-    visibleTodos = member.visibleTodos.map((title, i) => ({ id: "v" + i, title, done: false }));
+    visibleTodos = member.visibleTodos
+      .map((item, i) => ({ id: "v" + i, title: visibleTodoTitle(item), done: visibleTodoDone(item) }))
+      .filter((t) => t.title);
   }
 
   const tone = isMe ? "var(--pink-soft)" : "var(--blue-soft)";
@@ -1196,9 +1405,15 @@ function useRoomSync() {
     const meStatus = me?.status || null;
     const meTodoTotal = me?.todoTotal ?? -1;
     const meTodoDone = me?.todoDone ?? -1;
-    const meVisibleSig = Array.isArray(me?.visibleTodos) ? me.visibleTodos.join("|") : "";
+    const meVisibleSig = Array.isArray(me?.visibleTodos)
+      ? me.visibleTodos.map((item) => `${visibleTodoDone(item) ? 1 : 0}:${visibleTodoTitle(item)}`).join("|")
+      : "";
     let logEntry = null;
     const doneMap = new Map(todayTodos.map((t) => [t.id, { done: !!t.done, title: t.title, visible: !!t.roomVisible }]));
+    if (myStatus === "away") {
+      prevDoneRef.current = doneMap;
+      return;
+    }
     if (!prevDoneRef.current) {
       prevDoneRef.current = doneMap;
     } else {
@@ -1231,8 +1446,8 @@ function useRoomSync() {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
         return (a.order ?? 0) - (b.order ?? 0);
       })
-      .map((t) => t.title);
-    const visibleSig = visibleTodosToSend.join("|");
+      .map((t) => ({ title: t.title, done: !!t.done }));
+    const visibleSig = visibleTodosToSend.map((t) => `${t.done ? 1 : 0}:${t.title}`).join("|");
     if (visibleSig !== meVisibleSig) {
       patch.visibleTodos = visibleTodosToSend;
     }
@@ -1256,7 +1471,7 @@ function useRoomSync() {
       patch.workStartedAt = true;
     }
 
-    // 상태 (manual myStatus → server)
+    // 자리비움은 로컬 전용 모드라 서버 상태/heartbeat 를 쓰지 않는다.
     if (myStatus !== meStatus) {
       patch.status = myStatus;
     }
@@ -1271,11 +1486,10 @@ function useRoomSync() {
   // (showTodoTitle 변화 감지는 위 메인 effect 의 deps 에 me?.showTodoTitle 가 들어 있어
   // currentTodoTitle/recentTodos 가 같은 patch 로 묶여 함께 나감 — 별도 effect 필요 없음)
 
-  // Heartbeat — 2분 마다. 단, paused 면 멈춤 ("커튼 치기" — 비용 0).
-  // away 는 heartbeat 계속 (방에 붙어있음 표시).
+  // Heartbeat — 2분 마다. paused/away 는 비용 0 모드라 멈춤.
   useEffectRoom(() => {
     if (!roomId || !myUid) return;
-    if (myStatus === "paused") return;  // ★ paused 동안 heartbeat 안 함
+    if (myStatus === "paused" || myStatus === "away") return;
     const id = setInterval(() => {
       room.patchMyMember({}); // 빈 patch 라도 updateMyMember 가 lastActiveAt 만 갱신함
     }, 2 * 60 * 1000);
@@ -1326,8 +1540,8 @@ const roomChromeBtn = {
   all: "unset", cursor: "pointer",
   width: 22, height: 20, borderRadius: 5,
   display: "grid", placeItems: "center",
-  border: "1px solid #9db8dd",
-  background: "linear-gradient(180deg, #ffffff 0%, #edf5ff 100%)",
+  border: "1px solid var(--ink)",
+  background: "color-mix(in srgb, var(--paper) 78%, var(--blue-soft))",
   fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink)",
 };
 const bigBtn = {
@@ -1403,6 +1617,11 @@ if (!document.getElementById("room-anim-css")) {
       15%  { opacity: 1; transform: translateX(-50%) translateY(0); }
       85%  { opacity: 1; transform: translateX(-50%) translateY(0); }
       100% { opacity: 0; transform: translateX(-50%) translateY(4px); }
+    }
+    @keyframes room-avatar-hop {
+      0%, 36%, 100% { transform: translateY(0); }
+      37%, 62%      { transform: translateY(-3px); }
+      63%, 72%      { transform: translateY(-1px); }
     }
   `;
   document.head.appendChild(s);

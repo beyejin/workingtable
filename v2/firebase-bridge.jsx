@@ -274,7 +274,7 @@
       .onSnapshot((snap) => {
         const arr = [];
         snap.forEach((d) => {
-          const data = d.data();
+          const data = d.data({ serverTimestamps: "estimate" });
           arr.push({
             uid: d.id,
             displayName: data.displayName,

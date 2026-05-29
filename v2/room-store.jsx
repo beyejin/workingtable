@@ -196,13 +196,24 @@
   function setMyStatus(next) {
     if (!VALID_STATUSES.includes(next)) return;
     if (state.myStatus === next) return;
+    const now = Date.now();
+    if (now - (lastStatusSetAt || 0) < STATUS_COOLDOWN_MS) return;
+    lastStatusSetAt = now;
     saveMyStatus(next);
     setS({ myStatus: next });
   }
 
+  const STATUS_COOLDOWN_MS = 3000;
+  let lastStatusSetAt = 0;
+  const CLAP_COOLDOWN_MS = 5000;
+  const lastClapSentAt = new Map();
   function sendClap(toUid) {
     const fb = window.firebaseBridge;
     if (!fb || !state.currentRoomId || !fb.uid() || !toUid) return;
+    const key = `${state.currentRoomId}:${toUid}`;
+    const now = Date.now();
+    if (now - (lastClapSentAt.get(key) || 0) < CLAP_COOLDOWN_MS) return;
+    lastClapSentAt.set(key, now);
     fb.claps.send(state.currentRoomId, fb.uid(), toUid).catch(() => {});
   }
 

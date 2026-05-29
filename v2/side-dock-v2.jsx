@@ -13,7 +13,7 @@ const TABS = [
   { id: "cal",   labelKey: "tab.week",     sprite: 6,  color: "#d4e6fa", view: () => <CalendarView /> },
   { id: "memo",  labelKey: "tab.memo",     sprite: 22, color: "#fff0c0", view: () => <MemoView /> },
   { id: "mail",  labelKey: "tab.mail",     sprite: 0,  color: "#ffe0d2", view: () => <MailView /> },
-  { id: "room",  labelKey: "tab.room",     sprite: 14, color: "#ecdcf5", view: () => <RoomView /> },
+  { id: "room",  labelKey: "tab.room",     sprite: 14, color: "#ecdcf5", view: (ctx) => <RoomView tweaks={ctx?.tweaks} /> },
   { id: "deco",  labelKey: "tab.deco",     sprite: 9,  color: "#ffe6f0", view: () => null, foot: true },
   { id: "settings", labelKey: "tab.settings", sprite: 1, color: "#e6e6ee", view: () => null, foot: true },
 ];
@@ -130,7 +130,7 @@ function SideDockV2({ tweaks, setTweak }) {
             ? <SettingsView tweaks={tweaks} setTweak={setTweak} />
             : active === "deco"
               ? <DecorateView tweaks={tweaks} setTweak={setTweak} />
-              : current.view()}
+              : current.view({ tweaks, setTweak })}
         </div>
 
       </div>
