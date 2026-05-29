@@ -1,4 +1,4 @@
-/* global React, diary, SplitPane */
+/* global React, diary, SplitPane, SpriteIcon */
 // ===========================================================
 // 메모 — 작은 노션 + 버디버디 UI
 //   화면1: 친구목록(버디버디 흰 창) + 메모 관리(검색/정렬/일괄)
@@ -34,10 +34,11 @@ function MemoListScreen({ onOpen }) {
     onOpen(id);
   };
 
-  const cleanEmpty = () => {
+  const cleanEmpty = async () => {
     const empty = allMemos.filter(m => isEmptyMemo(m));
-    if (!empty.length) { alert(L("memo.noEmpty")); return; }
-    if (!confirm(L("memo.cleanConfirm", { n: empty.length }))) return;
+    if (!empty.length) { await window.dialog.alert(L("memo.noEmpty")); return; }
+    const ok = await window.dialog.confirm(L("memo.cleanConfirm", { n: empty.length }));
+    if (!ok) return;
     empty.forEach(m => actions.removeMemo(m.id));
   };
 
@@ -51,7 +52,10 @@ function MemoListScreen({ onOpen }) {
           pickerOpenId={pickerOpenId}
           setPickerOpenId={setPickerOpenId}
           onPickIcon={(id, icon) => { actions.updateMemo(id, { icon }); setPickerOpenId(null); }}
-          onDelete={(m) => { if (confirm(L("memo.delConfirm", { x: m.title || L("memo.untitled") }))) actions.removeMemo(m.id); }}
+          onDelete={async (m) => {
+            const ok = await window.dialog.confirm(L("memo.delConfirm", { x: m.title || L("memo.untitled") }));
+            if (ok) actions.removeMemo(m.id);
+          }}
           onCreate={createNew}
         />
       }
@@ -170,9 +174,11 @@ function BuddyRow({ memo, pickerOpen, onClick, onTogglePicker, onPickIcon, onDel
           style={{
             all: "unset", cursor: "pointer", flexShrink: 0,
             width: 22, height: 22, borderRadius: 4,
-            display: "grid", placeItems: "center", fontSize: 17, lineHeight: 1,
+            display: "grid", placeItems: "center", lineHeight: 1,
             background: pickerOpen ? "var(--hi)" : "transparent",
-          }}>{memo.icon || "📝"}</button>
+          }}>
+          <SpriteIcon idx={typeof memo.icon === "number" ? memo.icon : 22} size={16} />
+        </button>
         <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 6 }}>
           <span style={{
             fontFamily: "var(--hand)", fontSize: 13, fontWeight: 700, color: "#2b2f36",
@@ -211,10 +217,12 @@ function BuddyRow({ memo, pickerOpen, onClick, onTogglePicker, onPickIcon, onDel
               style={{
                 all: "unset", cursor: "pointer",
                 width: 22, height: 22, borderRadius: 4,
-                display: "grid", placeItems: "center", fontSize: 15, lineHeight: 1,
+                display: "grid", placeItems: "center", lineHeight: 1,
                 background: memo.icon === icon ? "var(--hi)" : "transparent",
                 border: memo.icon === icon ? "1px solid var(--ink)" : "1px solid transparent",
-              }}>{icon}</button>
+              }}>
+              <SpriteIcon idx={icon} size={16} />
+            </button>
           ))}
         </div>
       )}
@@ -282,6 +290,8 @@ function MemoEditScreen({ memoId, onBack }) {
   const memo = state.memos.find(m => m.id === memoId);
   const editorRef = useRef(null);
   const saveTimerRef = useRef(null);
+  const savedRangeRef = useRef(null);
+  const dragImageRef = useRef(null);
   // 현재 selection의 서식 상태 (B/I/U/S, 리스트, 정렬, 헤딩, 폰트, 크기)
   const [active, setActive] = useState({ heading: "p", font: "", size: "" });
 
@@ -348,6 +358,26 @@ function MemoEditScreen({ memoId, onBack }) {
     };
   }, [memoId]);
 
+  const saveSelection = () => {
+    const editor = editorRef.current;
+    const sel = window.getSelection();
+    if (!editor || !sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    if (!editor.contains(range.commonAncestorContainer)) return;
+    savedRangeRef.current = range.cloneRange();
+  };
+
+  const restoreSelection = () => {
+    const editor = editorRef.current;
+    if (!editor) return false;
+    editor.focus();
+    const sel = window.getSelection();
+    if (!sel || !savedRangeRef.current) return false;
+    sel.removeAllRanges();
+    sel.addRange(savedRangeRef.current);
+    return true;
+  };
+
   const exec = (cmd, val) => {
     editorRef.current?.focus();
     try { document.execCommand("styleWithCSS", false, true); } catch (_) {}
@@ -406,31 +436,100 @@ function MemoEditScreen({ memoId, onBack }) {
 
   const onAddImage = (file) => {
     if (!file) return;
-    if (file.size > 600 * 1024) { alert(L("memo.imageTooLarge")); return; }
+    if (file.size > 600 * 1024) { window.dialog.alert(L("memo.imageTooLarge")); return; }
     const reader = new FileReader();
     reader.onload = (e) => {
       const url = e.target.result;
       editorRef.current?.focus();
-      const html = `<img src="${url}" style="max-width:100%; display:block; margin: 6px 0; border-radius: 6px;" />`;
+      const html = `<img src="${url}" draggable="true" data-memo-image="1" style="max-width:100%; display:block; margin: 6px 0; border-radius: 6px;" />`;
       try { document.execCommand("insertHTML", false, html); } catch (_) {}
       queueSave();
     };
     reader.readAsDataURL(file);
   };
 
-  const onAddLink = () => {
-    let url = prompt(L("memo.linkUrl"));
-    if (!url?.trim()) return;
+  const onAddLink = async () => {
+    saveSelection();
+    let url = await window.dialog.prompt(L("memo.linkUrl"));
+    if (!url || !url.trim()) return;
     url = url.trim();
     if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-    editorRef.current?.focus();
+    restoreSelection();
     const sel = window.getSelection();
-    if (sel && sel.toString().length > 0) {
-      try { document.execCommand("createLink", false, url); } catch (_) {}
+    if (sel && sel.rangeCount > 0 && sel.toString().length > 0) {
+      const range = sel.getRangeAt(0);
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noreferrer";
+      try {
+        a.appendChild(range.extractContents());
+        range.insertNode(a);
+        sel.removeAllRanges();
+        const next = document.createRange();
+        next.setStartAfter(a);
+        next.collapse(true);
+        sel.addRange(next);
+      } catch (_) {
+        try { document.execCommand("createLink", false, url); } catch (_) {}
+      }
     } else {
-      const label = prompt(L("memo.linkLabel"), url) || url;
-      try { document.execCommand("insertHTML", false, `<a href="${url}" target="_blank">${escapeAttr(label)}</a>`); } catch (_) {}
+      const label = (await window.dialog.prompt(L("memo.linkLabel"), url)) || url;
+      restoreSelection();
+      try { document.execCommand("insertHTML", false, `<a href="${escapeAttr(url)}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a>`); } catch (_) {}
     }
+    queueSave();
+  };
+
+  const caretRangeFromPoint = (x, y) => {
+    if (document.caretRangeFromPoint) return document.caretRangeFromPoint(x, y);
+    if (document.caretPositionFromPoint) {
+      const pos = document.caretPositionFromPoint(x, y);
+      if (!pos) return null;
+      const range = document.createRange();
+      range.setStart(pos.offsetNode, pos.offset);
+      range.collapse(true);
+      return range;
+    }
+    return null;
+  };
+
+  const onEditorDragStart = (e) => {
+    const img = e.target.closest && e.target.closest("img");
+    if (!img || !editorRef.current?.contains(img)) return;
+    img.draggable = true;
+    dragImageRef.current = img;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/x-memo-image", "move");
+  };
+
+  const onEditorDragOver = (e) => {
+    if (!dragImageRef.current) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const onEditorDrop = (e) => {
+    const img = dragImageRef.current;
+    const editor = editorRef.current;
+    if (!img || !editor) return;
+    e.preventDefault();
+    const range = caretRangeFromPoint(e.clientX, e.clientY);
+    if (!range || !editor.contains(range.commonAncestorContainer)) {
+      dragImageRef.current = null;
+      return;
+    }
+    img.remove();
+    range.insertNode(img);
+    const after = document.createRange();
+    after.setStartAfter(img);
+    after.collapse(true);
+    const sel = window.getSelection();
+    if (sel) {
+      sel.removeAllRanges();
+      sel.addRange(after);
+    }
+    dragImageRef.current = null;
     queueSave();
   };
 
@@ -456,15 +555,24 @@ function MemoEditScreen({ memoId, onBack }) {
         borderBottom: "1.1px solid var(--ink)",
       }}>
         <button onClick={onBack} title={L("memo.back")} style={headerBtn}>←</button>
-        <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>{memo.icon || "📝"}</span>
+        <SpriteIcon idx={typeof memo.icon === "number" ? memo.icon : 22} size={18} style={{ flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontFamily: "var(--hand)", fontSize: 14, fontWeight: 700, color: "var(--ink)",
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-          }}>{(memo.title || "").trim() || L("memo.newDraft")}</div>
+          <input
+            value={memo.title || ""}
+            onChange={(e) => actions.updateMemo(memoId, { title: e.target.value })}
+            placeholder={L("memo.newDraft")}
+            style={{
+              width: "100%", boxSizing: "border-box",
+              border: 0, outline: "none", background: "transparent",
+              fontFamily: "var(--hand)", fontSize: 14, fontWeight: 700, color: "var(--ink)",
+            }}
+          />
         </div>
         <button
-          onClick={() => { if (confirm(L("memo.delConfirm", { x: memo.title || L("memo.untitled") }))) { actions.removeMemo(memoId); onBack(); } }}
+          onClick={async () => {
+            const ok = await window.dialog.confirm(L("memo.delConfirm", { x: memo.title || L("memo.untitled") }));
+            if (ok) { actions.removeMemo(memoId); onBack(); }
+          }}
           title={L("memo.delete")}
           style={headerBtn}
         >🗑</button>
@@ -478,6 +586,11 @@ function MemoEditScreen({ memoId, onBack }) {
         onInput={queueSave}
         onBlur={queueSave}
         onClick={onEditorClick}
+        onMouseUp={saveSelection}
+        onKeyUp={saveSelection}
+        onDragStart={onEditorDragStart}
+        onDragOver={onEditorDragOver}
+        onDrop={onEditorDrop}
         className="memo-editor"
         style={{
           flex: 1, minHeight: 0, overflowY: "auto",
@@ -519,6 +632,9 @@ function safeState(cmd) {
 
 function escapeAttr(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function escapeHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 const headerBtn = {
@@ -884,7 +1000,7 @@ if (typeof document !== "undefined" && !document.getElementById("memo-editor-css
   const s = document.createElement("style");
   s.id = "memo-editor-css";
   s.textContent = `
-    .memo-editor img { max-width: 100%; height: auto; }
+    .memo-editor img { max-width: 100%; height: auto; cursor: move; }
     .memo-editor a { color: #3a72b7; text-decoration: underline; }
     .memo-editor ul, .memo-editor ol { margin: 4px 0; padding-left: 22px; }
     .memo-editor blockquote {

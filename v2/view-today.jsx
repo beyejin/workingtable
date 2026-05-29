@@ -178,8 +178,14 @@ function WeekPane({ onPickDay }) {
       if (doneByDay[k]) doneByDay[k].push(t);
     }
   });
+  // 날짜별 — 현재 프로젝트의 작업시간만 표시. 다른 프로젝트나 미분류는 숨김.
   const workByDay = {};
-  (state.workSessions ?? []).forEach(w => { if (dayStrings.includes(w.date)) workByDay[w.date] = w.minutes; });
+  const curPid = state.currentProjectId;
+  (state.workSessions ?? []).forEach(w => {
+    if (w.projectId !== curPid) return;
+    if (!dayStrings.includes(w.date)) return;
+    workByDay[w.date] = (workByDay[w.date] || 0) + (w.minutes || 0);
+  });
   const retroByDay = {};
   (state.retros ?? []).forEach(r => { if (dayStrings.includes(r.date)) retroByDay[r.date] = r; });
 
@@ -351,6 +357,7 @@ function DayCell({ date, labelKey, due, doneFloat, workMin, hasRetro, mood,
       </div>
 
       {/* 좌하단 — 작업시간 */}
+      {/* 작업시간 푸터 — 현재 프로젝트만 (다른 프로젝트나 미분류는 숨김) */}
       {!!workMin && (
         <div style={{
           position: "absolute", left: 8, bottom: 4,

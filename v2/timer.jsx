@@ -42,47 +42,70 @@ function Timer() {
   );
 }
 
-// ---- 작업 시간 (프로그램 켜둔 활동 시간 누적) — 00 H 00 M ----
-// 점(•)을 클릭하면 "외부 작업 모드" 토글. 켜지면 초록색, 다른 앱에서 일할 때도 카운트.
+// ---- 작업 시간 — 00 H 00 M ----
+// 앱 실행 = 기본 ON (초록 점, "WORKING"). 점 클릭하면 STOP (검은 점, "STOPPED").
+// 호버하면 우측에 작은 ⟳ 버튼 — 클릭 시 오늘 작업 시간을 0으로 초기화.
 function WorkTime() {
-  const { state } = diary.useDiary();
+  const { state, actions } = diary.useDiary();
   const min = diary.select.workMinutesToday(state);
   const h = Math.floor(min / 60);
   const m = min % 60;
   const pad = (n) => String(n).padStart(2, "0");
-  const [blink, setBlink] = useState(true);
-  const [external, setExternal] = useState(() => !!(window.workTracker && window.workTracker.isExternal()));
-  useEffect(() => {
-    const id = setInterval(() => setBlink(b => !b), 1100);
-    return () => clearInterval(id);
-  }, []);
+  const [hover, setHover] = useState(false);
+  const [running, setRunning] = useState(() => !!(window.workTracker && window.workTracker.isRunning()));
   useEffect(() => {
     if (!window.workTracker) return;
-    return window.workTracker.subscribe(setExternal);
+    return window.workTracker.subscribe(setRunning);
   }, []);
-  const toggleExternal = () => { if (window.workTracker) window.workTracker.toggle(); };
+  const toggleRunning = () => { if (window.workTracker) window.workTracker.toggle(); };
+  const resetWork = async () => {
+    const msg = L("worktrack.resetConfirm");
+    const ok = await (window.dialog
+      ? window.dialog.confirm(msg)
+      : Promise.resolve(window.confirm(msg)));
+    if (ok) actions.resetWorkMinutes();
+  };
 
-  const dotColor = external ? "#52c759" : "#ff5e5e";
-  const label = external ? L("worktrack.externalOn") : L("worktrack.externalOff");
+  const dotColor = running ? "#ff3b3b" : "#1f1f1f";
+  const label = running ? L("worktrack.runningOn") : L("worktrack.runningOff");
 
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "var(--mono)", fontWeight: 700, fontSize: 15, color: "var(--ink)" }}>
-      <button onClick={toggleExternal} title={label} style={{
+    <span
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "var(--mono)", fontWeight: 700, fontSize: 15, color: "var(--ink)" }}
+    >
+      <button onClick={toggleRunning} title={label} style={{
         all: "unset", cursor: "pointer", flexShrink: 0,
-        width: 11, height: 11, borderRadius: "50%",
-        display: "grid", placeItems: "center",
+        width: 7, height: 7, borderRadius: "50%",
         background: dotColor,
-        opacity: external ? 1 : (blink ? 0.95 : 0.6),
-        border: external ? "1px solid rgba(0,0,0,0.2)" : "none",
-        transition: "opacity .5s ease, background .15s",
+        boxShadow: running ? "0 0 4px rgba(255,59,59,0.55)" : "none",
+        animation: running ? "wt-blink 1.1s ease-in-out infinite" : "none",
+        transition: "background .15s",
       }} />
-      <span style={{ fontSize: 9.5, letterSpacing: 1, color: external ? "#2f7d44" : "var(--ink-2)" }}>
-        {external ? "EXTERNAL" : "WORKING"}
+      <span style={{ fontSize: 9.5, letterSpacing: 1, color: running ? "#b03030" : "var(--ink-2)" }}>
+        {running ? "WORKING" : "STOPPED"}
       </span>
       <span>{pad(h)}</span>
       <span style={{ fontSize: 10, opacity: .6 }}>H</span>
       <span>{pad(m)}</span>
       <span style={{ fontSize: 10, opacity: .6 }}>M</span>
+      <button
+        onClick={resetWork}
+        title={L("worktrack.resetTip")}
+        aria-label={L("worktrack.resetTip")}
+        style={{
+          all: "unset", cursor: "pointer", flexShrink: 0,
+          marginLeft: 2,
+          width: 16, height: 16, borderRadius: "50%",
+          display: "grid", placeItems: "center",
+          fontSize: 11, fontWeight: 700, lineHeight: 1,
+          color: "var(--ink-2)",
+          opacity: hover ? 0.85 : 0,
+          pointerEvents: hover ? "auto" : "none",
+          transition: "opacity 0.15s",
+        }}
+      >⟳</button>
     </span>
   );
 }
@@ -214,7 +237,9 @@ function PlaylistBar() {
   const tracks = state.playlist ?? [];
   const music = useMusic();
   const [open, setOpen] = useState(false);
+  const [playerOpen, setPlayerOpen] = useState(false);
   const [err, setErr] = useState("");
+  const playerSlotRef = useRef(null);
 
   // 플레이리스트 변경 시 전역 큐 동기화 (저장 곡 자동 재생)
   useEffect(() => { window.musicPlayer.setQueue(tracks); }, [tracks]);
@@ -234,14 +259,58 @@ function PlaylistBar() {
   const ms = music.getState();
   const label = ms.hasQueue ? (ms.title || L("music.loading")) : L("music.add");
 
+  const syncNativePlayer = () => {
+    if (!ms.nativeMode || !music.setNativeViewport) return;
+    const visible = open && playerOpen;
+    const el = playerSlotRef.current;
+    if (!visible || !el) {
+      music.setNativeViewport({ x: 0, y: 0, width: 1, height: 1, visible: false });
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    music.setNativeViewport({
+      x: Math.round(r.left),
+      y: Math.round(r.top),
+      width: Math.max(1, Math.round(r.width)),
+      height: Math.max(1, Math.round(r.height)),
+      visible: true,
+    });
+  };
+
+  useEffect(() => {
+    if (!ms.nativeMode || !music.setNativeViewport) return;
+    let raf = requestAnimationFrame(syncNativePlayer);
+    const on = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(syncNativePlayer);
+    };
+    window.addEventListener("resize", on);
+    window.addEventListener("scroll", on, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", on);
+      window.removeEventListener("scroll", on, true);
+    };
+  }, [ms.nativeMode, ms.videoId, ms.playing, open, playerOpen]);
+
+  const runMusic = (fn) => {
+    if (ms.nativeMode && tracks.length && !playerOpen) {
+      setOpen(true);
+      setPlayerOpen(true);
+      setTimeout(fn, 80);
+    } else {
+      fn();
+    }
+  };
+
   return (
     <div style={{ position: "relative" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <button onClick={() => music.prev()} title="이전" style={pbBtn}>⏮</button>
-        <button onClick={() => music.toggle()} title={ms.playing ? "일시정지" : "재생"} style={pbBtn}>
+        <button onClick={() => runMusic(() => music.prev())} title="이전" style={pbBtn}>⏮</button>
+        <button onClick={() => runMusic(() => music.toggle())} title={ms.playing ? "일시정지" : "재생"} style={pbBtn}>
           {ms.playing ? "⏸" : "▶"}
         </button>
-        <button onClick={() => music.next()} title="다음" style={pbBtn}>⏭</button>
+        <button onClick={() => runMusic(() => music.next())} title="다음" style={pbBtn}>⏭</button>
         <div className="marquee" style={{
           flex: 1, height: 20, lineHeight: "20px",
           borderRadius: 6, padding: "0 4px",
@@ -252,7 +321,6 @@ function PlaylistBar() {
         </div>
         <button onClick={() => setOpen(o => !o)} title="플레이리스트" style={pbBtn}>{open ? "▾" : "+"}</button>
       </div>
-
       {/* 펼침: 곡 추가 + 목록 (위로 팝오버) */}
       {open && (
         <div className="sk-box" style={{
@@ -262,6 +330,39 @@ function PlaylistBar() {
         }}>
           <div className="sk-label" style={{ marginBottom: 6 }}>{L("music.playlist")}</div>
           <InlineAdd placeholder={L("music.paste")} onAdd={add} />
+          {ms.nativeMode && (
+            <div style={{ marginTop: 8 }}>
+              <button
+                onClick={() => setPlayerOpen(v => !v)}
+                title="YouTube"
+                style={{
+                  all: "unset", cursor: "pointer", width: "100%",
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  boxSizing: "border-box", padding: "4px 6px",
+                  border: "1.1px solid var(--ink)", borderRadius: 6,
+                  background: "var(--paper-2)", color: "var(--ink)",
+                  fontFamily: "var(--mono)", fontSize: 11,
+                }}
+              >
+                <span>YouTube</span>
+                <span>{playerOpen ? "▾" : "▸"}</span>
+              </button>
+              {playerOpen && (
+                <div
+                  ref={playerSlotRef}
+                  style={{
+                    marginTop: 6,
+                    width: "100%",
+                    height: 200,
+                    overflow: "hidden",
+                    border: "1.1px solid var(--ink)",
+                    borderRadius: 6,
+                    background: "#111",
+                  }}
+                />
+              )}
+            </div>
+          )}
           {err && <div className="sk-cap" style={{ color: "var(--bad)", marginTop: 4 }}>{err}</div>}
           {tracks.length > 0 ? (
             <div style={{ marginTop: 6, maxHeight: 160, overflowY: "auto", overflowX: "hidden" }}>
@@ -273,7 +374,7 @@ function PlaylistBar() {
                     padding: "3px 5px", borderRadius: 6,
                     background: isCur ? "var(--hi-soft)" : "transparent",
                   }}>
-                    <button onClick={() => music.play(t.videoId)} title="재생" style={{
+                    <button onClick={() => runMusic(() => music.play(t.videoId))} title="재생" style={{
                       all: "unset", cursor: "pointer", width: 16, textAlign: "center",
                       color: "var(--ink)", fontSize: 12,
                     }}>{isCur && ms.playing ? "♪" : "▶"}</button>
@@ -390,3 +491,16 @@ function fireNotification(title, body, granted) {
 }
 
 window.Timer = Timer;
+
+// 워크 트래커 점 깜빡임 — 한 번만 주입
+if (!document.getElementById("wt-blink-css")) {
+  const s = document.createElement("style");
+  s.id = "wt-blink-css";
+  s.textContent = `
+    @keyframes wt-blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.25; }
+    }
+  `;
+  document.head.appendChild(s);
+}
