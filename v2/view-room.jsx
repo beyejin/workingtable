@@ -446,8 +446,22 @@ function RoomMainView() {
 //   └──────────────────────────────────┘
 // ===========================================================
 function MemberCard({ member, isMe, now, onClap, claps, selfTodos, onEditProfile }) {
-  const offline = isMemberOffline(member, now);
-  const working = !offline && !!member.workStartedAt;
+  // 상태 결정 — 우선순위: offline (자동) > paused (수동) > away (수동) > working
+  const offlineByTimeout = isMemberOffline(member, now);
+  const manualStatus = member.status; // 'working' | 'away' | 'paused' | (옛 'idle' / undefined)
+  let displayStatus;
+  if (offlineByTimeout) displayStatus = "offline";
+  else if (manualStatus === "paused") displayStatus = "paused";
+  else if (manualStatus === "away") displayStatus = "away";
+  else if (member.workStartedAt) displayStatus = "working";
+  else displayStatus = "idle";  // working 으로 표시되지만 시간 안 흐름 (트래커가 아직 활성 안 봄)
+
+  const isWorking = displayStatus === "working";
+  const isOffline = displayStatus === "offline";
+  const isPaused = displayStatus === "paused";
+  const isAway = displayStatus === "away";
+  // 카드를 흐리게 처리할지 — paused/offline 둘 다 회색이지만 paused 는 살짝 더 선명
+  const dim = isOffline || isPaused;
   const seconds = memberLiveSeconds(member, now);
 
   // 완료 이벤트 디텍션
@@ -469,7 +483,15 @@ function MemberCard({ member, isMe, now, onClap, claps, selfTodos, onEditProfile
   const total = member.todoTotal || 0;
   const done = member.todoDone || 0;
   const progress = total > 0 ? Math.min(1, done / total) : 0;
-  const statusDotColor = offline ? "#cbd5e0" : (working ? "#60c47a" : "#f0c14d");
+  const statusDotColor =
+    isWorking ? "#60c47a"   // 초록
+    : isAway  ? "#f0c14d"   // 노랑
+    : "#cbd5e0";            // 회색 (paused / offline / idle)
+  const statusLabel =
+    isPaused  ? "공유 쉬는 중"
+    : isOffline ? "오프라인"
+    : isAway   ? "자리비움"
+    : "";  // working / idle 은 라벨 없음
 
   // todo 리스트 결정
   // - 본인(isMe): diary 의 모든 오늘 할일 + 각 항목에 roomVisible 표시
@@ -489,13 +511,13 @@ function MemberCard({ member, isMe, now, onClap, claps, selfTodos, onEditProfile
   return (
     <div style={{
       position: "relative",
-      background: offline ? "var(--paper-2)" : "var(--paper)",
-      border: "1.1px solid " + (offline ? "var(--ink-soft)" : "var(--ink)"),
+      background: dim ? "var(--paper-2)" : "var(--paper)",
+      border: "1.1px solid " + (dim ? "var(--ink-soft)" : "var(--ink)"),
       borderRadius: 12,
       overflow: "hidden",
-      opacity: offline ? 0.7 : 1,
-      filter: offline ? "grayscale(0.55)" : "none",
-      boxShadow: offline ? "none" : "0 2px 0 var(--paper-3)",
+      opacity: isOffline ? 0.65 : (isPaused ? 0.85 : 1),
+      filter: isOffline ? "grayscale(0.7)" : (isPaused ? "grayscale(0.4)" : "none"),
+      boxShadow: dim ? "none" : "0 2px 0 var(--paper-3)",
       outline: sparkle ? "1.8px solid var(--hi)" : "none",
       outlineOffset: 1,
       display: "flex", flexDirection: "column",
@@ -508,15 +530,16 @@ function MemberCard({ member, isMe, now, onClap, claps, selfTodos, onEditProfile
       <div style={{
         flexShrink: 0,
         height: 18,
-        background: offline ? "var(--paper-3)" : `linear-gradient(180deg, ${headerTone} 0%, ${tone} 100%)`,
-        borderBottom: "1px solid " + (offline ? "var(--ink-soft)" : "var(--ink)"),
+        background: dim ? "var(--paper-3)" : `linear-gradient(180deg, ${headerTone} 0%, ${tone} 100%)`,
+        borderBottom: "1px solid " + (dim ? "var(--ink-soft)" : "var(--ink)"),
         padding: "0 8px",
         display: "flex", alignItems: "center", gap: 5,
         fontSize: 9, color: "var(--ink)",
         letterSpacing: "0.04em",
       }}>
         <span style={{ flex: 1 }} />
-        {!isMe && !offline && (
+        {isMe && <StatusToggle currentStatus={member.status} />}
+        {!isMe && !isOffline && !isPaused && (
           <button onClick={onClap} title={L("room.clapHint")} style={miniHeaderBtn}>👏</button>
         )}
       </div>
@@ -598,8 +621,8 @@ function MemberCard({ member, isMe, now, onClap, claps, selfTodos, onEditProfile
               all: "unset",
               cursor: isMe ? "pointer" : "default",
               width: 48, height: 48, borderRadius: 10,
-              border: "1.1px solid " + (offline ? "var(--ink-soft)" : "var(--ink)"),
-              background: working ? "var(--hi-soft)" : "var(--paper-2)",
+              border: "1.1px solid " + (dim ? "var(--ink-soft)" : "var(--ink)"),
+              background: isWorking ? "var(--hi-soft)" : "var(--paper-2)",
               display: "grid", placeItems: "center",
               fontSize: 28, flexShrink: 0,
               boxShadow: "0 1.5px 0 var(--paper-3)",
@@ -617,8 +640,14 @@ function MemberCard({ member, isMe, now, onClap, claps, selfTodos, onEditProfile
           <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: statusDotColor }} />
             <span className="sk-mono" style={{ fontSize: 9, color: "var(--ink-2)" }}>
-              {working ? fmtHMS(seconds) : (seconds > 0 ? fmtHMS(seconds) : "--:--")}
+              {isWorking ? fmtHMS(seconds) : (seconds > 0 ? fmtHMS(seconds) : "--:--")}
             </span>
+            {statusLabel && (
+              <div style={{
+                fontFamily: "var(--hand)", fontSize: 9, color: "var(--ink-3)",
+                marginTop: 1, letterSpacing: "0.02em",
+              }}>{statusLabel}</div>
+            )}
           </div>
         </div>
       </div>
@@ -640,7 +669,7 @@ function MemberCard({ member, isMe, now, onClap, claps, selfTodos, onEditProfile
             width: `${progress * 100}%`, height: "100%",
             background: progress >= 1
               ? "linear-gradient(90deg, var(--mint), var(--green))"
-              : (working ? "linear-gradient(90deg, var(--pink), var(--hi))" : "var(--ink-soft)"),
+              : (isWorking ? "linear-gradient(90deg, var(--pink), var(--hi))" : "var(--ink-soft)"),
             transition: "width 0.4s",
           }} />
         </div>
@@ -652,6 +681,78 @@ function MemberCard({ member, isMe, now, onClap, claps, selfTodos, onEditProfile
         </span>
       </div>
     </div>
+  );
+}
+
+// 내 카드 헤더의 작은 상태 토글 (working / away / paused). 클릭 시 메뉴.
+// offline 은 자동만 (앱 종료/heartbeat 타임아웃) — 메뉴에 없음.
+function StatusToggle({ currentStatus }) {
+  const room = window.roomStore.useRoom();
+  const [open, setOpen] = useStateRoom(false);
+  // 메뉴 바깥 클릭 시 닫기
+  useEffectRoom(() => {
+    if (!open) return;
+    const h = () => setOpen(false);
+    setTimeout(() => window.addEventListener("click", h, { once: true }), 0);
+    return () => window.removeEventListener("click", h);
+  }, [open]);
+  const my = room.state.myStatus || "working";
+  const cur = currentStatus === "paused" ? "paused"
+            : currentStatus === "away" ? "away"
+            : my;  // 서버 상태 우선이되, paused/away 가 아니면 로컬 my 사용
+  const dot = cur === "working" ? "#60c47a" : cur === "away" ? "#f0c14d" : "#cbd5e0";
+  const choose = (next) => (e) => {
+    e.stopPropagation();
+    room.setMyStatus(next);
+    setOpen(false);
+  };
+  return (
+    <span style={{ position: "relative", display: "inline-flex" }}>
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        title="내 상태 바꾸기"
+        style={{
+          ...miniHeaderBtn,
+          background: "transparent",
+          border: "1px solid var(--ink)",
+          padding: 0,
+          width: 16, height: 14,
+          display: "grid", placeItems: "center",
+        }}>
+        <span style={{
+          width: 6, height: 6, borderRadius: "50%", background: dot,
+        }} />
+      </button>
+      {open && (
+        <div onClick={(e) => e.stopPropagation()} style={{
+          position: "absolute", top: 18, right: 0, zIndex: 30,
+          background: "var(--paper)",
+          border: "1.1px solid var(--ink)",
+          borderRadius: 8,
+          boxShadow: "0 4px 12px rgba(40,51,63,0.18)",
+          padding: 4, minWidth: 110,
+        }}>
+          {[
+            { v: "working", color: "#60c47a", label: "작업 중" },
+            { v: "away",    color: "#f0c14d", label: "자리비움" },
+            { v: "paused",  color: "#cbd5e0", label: "공유 쉬기" },
+          ].map((opt) => (
+            <button key={opt.v} onClick={choose(opt.v)} style={{
+              all: "unset", cursor: "pointer",
+              display: "flex", alignItems: "center", gap: 6,
+              width: "100%", boxSizing: "border-box",
+              padding: "4px 8px", borderRadius: 5,
+              fontFamily: "var(--hand)", fontSize: 12, color: "var(--ink)",
+              background: cur === opt.v ? "var(--hi-soft)" : "transparent",
+            }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: opt.color }} />
+              <span>{opt.label}</span>
+              {cur === opt.v && <span style={{ marginLeft: "auto", fontSize: 9 }}>✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
   );
 }
 
@@ -826,11 +927,13 @@ function useRoomSync() {
 
   // 작업 중 여부 — 외부모드 ON 이거나, 트래커가 "활성"으로 보는 상황 ≈ workSessions가 방금 갱신됨
   // 단순화: 외부모드 ON 이면 무조건 작업중. 그 외엔 lastTs 기준 최근 3분 이내면 작업중.
+  // 단, 사용자 수동 상태가 away/paused 면 트래커 무시하고 시간 흐름 멈춤.
+  const myStatus = room.state.myStatus || "working";
   const ext = !!(window.workTracker && window.workTracker.isExternal());
   const todaySession = (ds.workSessions || []).find((w) => w.date === today);
   const lastTs = todaySession?.lastTs || 0;
   const recentlyActive = (Date.now() - lastTs) < 3 * 60 * 1000;
-  const workingNow = ext || recentlyActive;
+  const workingNow = (myStatus === "working") && (ext || recentlyActive);
 
   // 누적 시간 (서버에 보낼 "오늘까지 누적된 초")
   // 매분 보내지 않음 — 작업 상태 토글 시 / 토글 끝날 때만 갱신
@@ -879,7 +982,6 @@ function useRoomSync() {
     if (ref.current.workingNow !== workingNow) {
       if (workingNow) {
         patch.workStartedAt = Date.now();
-        patch.status = "working";
         ref.current.workStartedAt = patch.workStartedAt;
       } else if (ref.current.workingNow === true) {
         // 작업을 막 멈춤 — 누적 + workStartedAt null 처리
@@ -890,29 +992,49 @@ function useRoomSync() {
         patch.workStartedAt = null;
         patch.accumulatedSecondsToday = acc;
         patch.accumulatedDate = today;
-        patch.status = "idle";
         ref.current.workStartedAt = null;
         ref.current.accumulated = acc;
       }
       ref.current.workingNow = workingNow;
     }
 
+    // 사용자 수동 상태가 바뀌면 반영. away/paused 면 workStartedAt 도 null 로 강제.
+    if (ref.current.myStatus !== myStatus) {
+      patch.status = myStatus;
+      if (myStatus !== "working") {
+        // 시간 흐르고 있었으면 즉시 commit + workStartedAt null
+        if (ref.current.workStartedAt) {
+          const ranSec = Math.floor((Date.now() - ref.current.workStartedAt) / 1000);
+          const acc = (me?.accumulatedSecondsToday || 0) + ranSec;
+          patch.workStartedAt = null;
+          patch.accumulatedSecondsToday = acc;
+          patch.accumulatedDate = today;
+          ref.current.workStartedAt = null;
+          ref.current.accumulated = acc;
+          ref.current.workingNow = false;
+        }
+      }
+      ref.current.myStatus = myStatus;
+    }
+
     if (Object.keys(patch).length > 0) {
       room.patchMyMember(patch);
     }
-  }, [roomId, myUid, todoTotal, todoDone, workingNow, visibleTitlesSig]);
+  }, [roomId, myUid, todoTotal, todoDone, workingNow, visibleTitlesSig, myStatus]);
 
   // (showTodoTitle 변화 감지는 위 메인 effect 의 deps 에 me?.showTodoTitle 가 들어 있어
   // currentTodoTitle/recentTodos 가 같은 patch 로 묶여 함께 나감 — 별도 effect 필요 없음)
 
-  // Heartbeat — 2분 마다 (작업중일 때만 의미 있음, 그래도 lastActiveAt 갱신 목적)
+  // Heartbeat — 2분 마다. 단, paused 면 멈춤 ("커튼 치기" — 비용 0).
+  // away 는 heartbeat 계속 (방에 붙어있음 표시).
   useEffectRoom(() => {
     if (!roomId || !myUid) return;
+    if (myStatus === "paused") return;  // ★ paused 동안 heartbeat 안 함
     const id = setInterval(() => {
       room.patchMyMember({}); // 빈 patch 라도 updateMyMember 가 lastActiveAt 만 갱신함
     }, 2 * 60 * 1000);
     return () => clearInterval(id);
-  }, [roomId, myUid]);
+  }, [roomId, myUid, myStatus]);
 
   // accumulated 날짜 자정 넘어가면 리셋 — 다음 사건성 patch 때 0 으로 세팅
   useEffectRoom(() => {

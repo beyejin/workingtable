@@ -48,11 +48,26 @@
     } catch (_) {}
   }
 
+  // ---- 내 수동 상태 (working / away / paused) — localStorage 영속 ----
+  // offline 은 자동만 (앱 종료 / heartbeat 끊김). 사용자가 직접 고를 수 없음.
+  const MY_STATUS_KEY = "todoary.room.myStatus";
+  const VALID_STATUSES = ["working", "away", "paused"];
+  function loadMyStatus() {
+    try {
+      const v = localStorage.getItem(MY_STATUS_KEY);
+      return VALID_STATUSES.includes(v) ? v : "working";
+    } catch (_) { return "working"; }
+  }
+  function saveMyStatus(s) {
+    try { localStorage.setItem(MY_STATUS_KEY, s); } catch (_) {}
+  }
+
   // ---- 글로벌 상태 (pub/sub) ----
   let state = {
     bridgeStatus: "idle",        // 'idle' | 'loading' | 'ready' | 'local' | 'error'
     bridgeError: null,
     profile: loadProfile(),
+    myStatus: loadMyStatus(),    // 'working' | 'away' | 'paused' — 수동 사용자 설정
     currentRoomId: loadCurrentRoomId(),
     roomMeta: null,              // { id, name, inviteCode, ... }
     members: [],                 // [{ uid, displayName, avatar, status, workStartedAt, ... }]
@@ -191,6 +206,16 @@
     }
   }
 
+  // 내 상태 수동 전환 — UI 가 호출. 로컬 즉시 반영 (시각 반응 즉시).
+  // 서버 쓰기는 useRoomSync effect 가 처리 (status + workStartedAt 정리를 한 patch 로
+  // 묶어 500ms 디바운스 → 토글 1번 = 서버 쓰기 1번)
+  function setMyStatus(next) {
+    if (!VALID_STATUSES.includes(next)) return;
+    if (state.myStatus === next) return;
+    saveMyStatus(next);
+    setS({ myStatus: next });
+  }
+
   function sendClap(toUid) {
     const fb = window.firebaseBridge;
     if (!fb || !state.currentRoomId || !fb.uid() || !toUid) return;
@@ -235,6 +260,7 @@
       joinByCode,
       leaveRoom,
       setProfile,
+      setMyStatus,
       sendClap,
       patchMyMember,
       avatars: AVATARS,
@@ -244,7 +270,7 @@
 
   window.roomStore = {
     useRoom, subscribe, getS,
-    bootstrap, createRoom, joinByCode, leaveRoom, setProfile, sendClap, patchMyMember,
+    bootstrap, createRoom, joinByCode, leaveRoom, setProfile, setMyStatus, sendClap, patchMyMember,
     attachToRoom, detachAll,
     AVATARS, randomAvatar, makeInviteCode,
   };
