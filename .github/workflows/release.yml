@@ -55,7 +55,9 @@ jobs:
           # 태그가 이미 push 된 상태면 그 태그로 릴리스 생성/갱신
           tagName: ${{ github.ref_name }}
           releaseName: "todoary ${{ github.ref_name }}"
-          releaseDraft: false
+          # draft: true 면 GitHub 에 자산은 업로드되지만 latest 로 노출 안 됨.
+          # Mac 빌드 검증 후 GitHub UI 에서 수동 publish.
+          releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
           releaseBody: |

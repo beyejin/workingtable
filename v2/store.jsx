@@ -7,6 +7,31 @@
 // ===========================================================
 
 const STORAGE_KEY = "todoary.v1";
+
+// ---- 마이그레이션 진단 스냅샷 (첫 실행 1회만) ----
+// 데이터 손실 신고 시 F12 콘솔에서 localStorage.getItem("todoary.migration.diag")
+// 한 줄이면 "처음 켰을 때 무엇이 있었는지" 가 나옴. 사후 진단 용도.
+try {
+  const DIAG_KEY = "todoary.migration.diag";
+  if (typeof localStorage !== "undefined" && !localStorage.getItem(DIAG_KEY)) {
+    const keys = Object.keys(localStorage).filter(k =>
+      k.startsWith("vibe-diary") || k.startsWith("todoary")
+    );
+    const snapshot = {
+      ts: new Date().toISOString(),
+      keys,
+      hadTodoaryV1: !!localStorage.getItem("todoary.v1"),
+      hadLegacyV1: !!localStorage.getItem("vibe-diary.v1"),
+      hadTodoaryLang: !!localStorage.getItem("todoary.lang"),
+      hadLegacyLang: !!localStorage.getItem("vibe-diary.lang"),
+      hadTodoaryTweaks: !!localStorage.getItem("todoary.tweaks"),
+      hadLegacyTweaks: !!localStorage.getItem("vibe-diary.tweaks"),
+      ua: typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 80) : "",
+    };
+    localStorage.setItem(DIAG_KEY, JSON.stringify(snapshot));
+  }
+} catch (_) {}
+
 // 앱 이름 변경(vibe-diary → todoary) 전 데이터를 한 번만 이관.
 try {
   const LEGACY = "vibe-diary.v1";
