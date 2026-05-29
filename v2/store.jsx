@@ -33,13 +33,27 @@ try {
 } catch (_) {}
 
 // 앱 이름 변경(vibe-diary → todoary) 전 데이터를 한 번만 이관.
+// 플래그 기반: vibe-diary.v1 가 있고 아직 이관 안 했으면 → 이관 (기존 todoary.v1 은 backup).
+// 한 번 이관 후엔 플래그가 set 돼 다시는 자동 이관 안 함 — 의도치 않은 덮어쓰기 방지.
 try {
   const LEGACY = "vibe-diary.v1";
+  const MIGRATED_FLAG = "todoary.migrated_from_vibe.v1";
   if (typeof localStorage !== "undefined"
-      && !localStorage.getItem(STORAGE_KEY)
-      && localStorage.getItem(LEGACY)) {
+      && localStorage.getItem(LEGACY)
+      && !localStorage.getItem(MIGRATED_FLAG)) {
+    // 기존 todoary.v1 가 있으면 백업 (시각 도장 키로 보존)
+    const existing = localStorage.getItem(STORAGE_KEY);
+    if (existing) {
+      try {
+        const backupKey = "todoary.v1.backup." + Date.now();
+        localStorage.setItem(backupKey, existing);
+      } catch (_) {}
+    }
+    // 이관
     localStorage.setItem(STORAGE_KEY, localStorage.getItem(LEGACY));
     localStorage.removeItem(LEGACY);
+    // 한 번 이관 했음을 마크 (이후 vibe-diary.v1 다시 생겨도 다시 안 함)
+    localStorage.setItem(MIGRATED_FLAG, new Date().toISOString());
   }
 } catch (_) { /* private mode / no storage */ }
 
