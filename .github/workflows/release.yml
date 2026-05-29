@@ -54,7 +54,7 @@ jobs:
         with:
           # 태그가 이미 push 된 상태면 그 태그로 릴리스 생성/갱신
           tagName: ${{ github.ref_name }}
-          releaseName: "vibe diary ${{ github.ref_name }}"
+          releaseName: "todoary ${{ github.ref_name }}"
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
@@ -68,8 +68,8 @@ jobs:
 
             | OS | 파일 / File / ファイル |
             |----|------|
-            | 🪟 **Windows** | `vibe-diary_*_x64-setup.exe` |
-            | 🍎 **macOS** (Apple Silicon + Intel) | `vibe-diary_*_universal.dmg` |
+            | 🪟 **Windows** | `todoary_*_x64-setup.exe` |
+            | 🍎 **macOS** (Apple Silicon + Intel) | `todoary_*_universal.dmg` |
 
             ### ▶️ 실행 / Run / 起動
             - **Windows** — 파란 SmartScreen 경고에서 **추가 정보 → 실행**
@@ -86,6 +86,6 @@ jobs:
             <details><summary>macOS에서 "손상되어 열 수 없습니다" 가 뜰 때</summary>
 
             ```bash
-            xattr -dr com.apple.quarantine "/Applications/vibe-diary.app"
+            xattr -dr com.apple.quarantine "/Applications/todoary.app"
             ```
             </details>

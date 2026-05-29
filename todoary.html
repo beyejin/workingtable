@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <title>바이브 다이어리 — 사이드 도크 v2</title>
+  <title>todoary</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <!-- 진단용: 로드/실행 에러를 화면에 직접 표시 (에러가 없으면 아무것도 안 보임) -->
@@ -74,6 +74,21 @@
   <script type="text/babel" src="v2/tracker.jsx"></script>
   <script type="text/babel" src="v2/photocard.jsx"></script>
   <script type="text/babel" src="v2/side-dock-v2.jsx"></script>
+
+  <!-- Dev cache-buster: when served from localhost, append ?_=<ts> to every
+       JSX src so the browser never serves a stale transpilation. No-op in
+       Tauri / file:// or any non-localhost host. Runs synchronously during
+       HTML parsing — before Babel's DOMContentLoaded handler fires. -->
+  <script>
+    (function () {
+      var h = location.hostname;
+      if (h !== 'localhost' && h !== '127.0.0.1') return;
+      var ts = Date.now();
+      document.querySelectorAll('script[type="text/babel"][src]').forEach(function (s) {
+        s.src = s.src + (s.src.indexOf('?') >= 0 ? '&' : '?') + '_=' + ts;
+      });
+    })();
+  </script>
 </head>
 <body>
   <div id="root"></div>

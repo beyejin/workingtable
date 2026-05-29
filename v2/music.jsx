@@ -101,6 +101,12 @@
     wantPlay = true;
     emit();
     ensure();
+    // 재생 카운트 — 곡 시작 시점에 한 번
+    try {
+      if (window.diary && window.diary.actions && window.diary.actions.recordPlay) {
+        window.diary.actions.recordPlay({ videoId: tr.videoId, title: tr.title });
+      }
+    } catch (_) {}
     if (ready && player) {
       try { player.loadVideoById(tr.videoId); } catch (_) {}
       if (gesture) {

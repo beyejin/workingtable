@@ -130,7 +130,38 @@ function SideDockV2({ tweaks, setTweak }) {
         chrome={chrome}
         compact={compactTabs}
       />
+
+      {/* 창 가장자리 리사이즈 핸들 — macOS decorations:false 에선 OS 가 안 깔아줌 */}
+      <EdgeResizers />
     </div>
+  );
+}
+
+// 가장자리 8방향 리사이즈 핸들 (보이지 않는 hit-area)
+function EdgeResizers() {
+  const start = (direction) => (e) => {
+    if (e.button !== 0) return;
+    try {
+      const T = window.__TAURI__;
+      if (!T || !T.window || !T.window.getCurrentWindow) return;
+      e.preventDefault();
+      T.window.getCurrentWindow().startResizeDragging(direction);
+    } catch (_) {}
+  };
+  const EDGE = 5;   // 가장자리 두께
+  const CRN = 10;   // 모서리 크기
+  const base = { position: "absolute", zIndex: 100 };
+  return (
+    <>
+      <div onMouseDown={start("North")}     style={{ ...base, top: 0,    left: CRN,  right: CRN,  height: EDGE, cursor: "ns-resize" }} />
+      <div onMouseDown={start("South")}     style={{ ...base, bottom: 0, left: CRN,  right: CRN,  height: EDGE, cursor: "ns-resize" }} />
+      <div onMouseDown={start("West")}      style={{ ...base, top: CRN,  bottom: CRN, left: 0,    width: EDGE,  cursor: "ew-resize" }} />
+      <div onMouseDown={start("East")}      style={{ ...base, top: CRN,  bottom: CRN, right: 0,   width: EDGE,  cursor: "ew-resize" }} />
+      <div onMouseDown={start("NorthWest")} style={{ ...base, top: 0,    left: 0,    width: CRN, height: CRN,  cursor: "nwse-resize" }} />
+      <div onMouseDown={start("NorthEast")} style={{ ...base, top: 0,    right: 0,   width: CRN, height: CRN,  cursor: "nesw-resize" }} />
+      <div onMouseDown={start("SouthWest")} style={{ ...base, bottom: 0, left: 0,    width: CRN, height: CRN,  cursor: "nesw-resize" }} />
+      <div onMouseDown={start("SouthEast")} style={{ ...base, bottom: 0, right: 0,   width: CRN, height: CRN,  cursor: "nwse-resize" }} />
+    </>
   );
 }
 
@@ -281,7 +312,7 @@ function FakeIde({ dockSide, dockWidth }) {
     <>
       <div className="fake-ide" style={ideStyle}>
         <div style={{ color: "var(--ink-3)", marginBottom: 16, fontFamily: "var(--hand-2)", fontSize: 15 }}>✿ 이건 참고용 페이크 IDE — 다이어리가 실제로 어디 도킹되는지 보여주려고</div>
-        <div style={{ color: "var(--ink)" }}>vibe-diary / src / components / Timer.tsx</div>
+        <div style={{ color: "var(--ink)" }}>todoary / src / components / Timer.tsx</div>
         <pre style={{ color: "var(--ink-2)", lineHeight: 1.65, marginTop: 14 }}>
 {`export function Timer({ minutes = 25 }) {
   const [left, setLeft] = useState(minutes * 60);

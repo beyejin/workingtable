@@ -1,4 +1,4 @@
-# vibe diary 설치 가이드 / Install Guide
+# todoary 설치 가이드 / Install Guide
 
 작업용 사이드 다이어리 데스크탑 앱입니다. Windows / macOS 모두 지원합니다.
 
@@ -8,8 +8,8 @@
 
 | OS | 파일 | 비고 |
 |----|------|------|
-| Windows | `vibe-diary_x.y.z_x64-setup.exe` (또는 `_x64_en-US.msi`) | 설치형 |
-| macOS (Apple Silicon + Intel) | `vibe-diary_x.y.z_universal.dmg` | 통합 바이너리 |
+| Windows | `todoary_x.y.z_x64-setup.exe` (또는 `_x64_en-US.msi`) | 설치형 |
+| macOS (Apple Silicon + Intel) | `todoary_x.y.z_universal.dmg` | 통합 바이너리 |
 
 설치 후에는 새 버전이 나오면 **자동 업데이트**로 받아집니다.
 
@@ -37,7 +37,7 @@
 > 참고: macOS에서 `"손상되었기 때문에 열 수 없습니다"`가 뜨는 경우(격리 속성 때문),
 > 터미널에서 다음을 실행하면 해제됩니다:
 > ```bash
-> xattr -dr com.apple.quarantine "/Applications/vibe-diary.app"
+> xattr -dr com.apple.quarantine "/Applications/todoary.app"
 > ```
 
 ---
@@ -49,4 +49,4 @@ so your OS may show an "unknown developer" warning on first launch. It is **not 
 
 - **Windows**: On the SmartScreen prompt, click **More info → Run anyway**.
 - **macOS**: Right-click the app in Applications → **Open → Open**, or allow it in **System Settings → Privacy & Security**.
-  If it says the app is "damaged", run: `xattr -dr com.apple.quarantine "/Applications/vibe-diary.app"`.
+  If it says the app is "damaged", run: `xattr -dr com.apple.quarantine "/Applications/todoary.app"`.

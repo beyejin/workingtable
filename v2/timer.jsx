@@ -378,7 +378,7 @@ function fireNotification(title, body, granted) {
       const n = new Notification(title, {
         body,
         icon: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='28' fill='%23ffc7d4' stroke='%238a6a5e' stroke-width='2'/><text x='32' y='42' text-anchor='middle' font-size='32' fill='%238a6a5e'>♡</text></svg>",
-        tag: "vibe-diary-stretch",
+        tag: "todoary-stretch",
         silent: false,
       });
       n.onclick = () => { window.focus(); n.close(); };

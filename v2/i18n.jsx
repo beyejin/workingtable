@@ -380,7 +380,15 @@
   };
   const MON_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-  const KEY = "vibe-diary.lang";
+  const KEY = "todoary.lang";
+  // 앱 이름 변경 전 키에서 한 번만 이관.
+  try {
+    const LEGACY = "vibe-diary.lang";
+    if (!localStorage.getItem(KEY) && localStorage.getItem(LEGACY)) {
+      localStorage.setItem(KEY, localStorage.getItem(LEGACY));
+      localStorage.removeItem(LEGACY);
+    }
+  } catch (_) {}
   function detect() {
     const l = (navigator.language || navigator.userLanguage || "en").toLowerCase();
     if (l.startsWith("ko")) return "ko";

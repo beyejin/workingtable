@@ -159,7 +159,17 @@ const __TWEAKS_STYLE = `
 // ── useTweaks ───────────────────────────────────────────────────────────────
 // Single source of truth for tweak values. setTweak persists via the host
 // (__edit_mode_set_keys → host rewrites the EDITMODE block on disk).
-const __TWEAKS_LS_KEY = 'vibe-diary.tweaks';
+const __TWEAKS_LS_KEY = 'todoary.tweaks';
+// 앱 이름 변경 전 키에서 한 번만 이관.
+try {
+  const __TWEAKS_LS_KEY_LEGACY = 'vibe-diary.tweaks';
+  if (typeof localStorage !== 'undefined'
+      && !localStorage.getItem(__TWEAKS_LS_KEY)
+      && localStorage.getItem(__TWEAKS_LS_KEY_LEGACY)) {
+    localStorage.setItem(__TWEAKS_LS_KEY, localStorage.getItem(__TWEAKS_LS_KEY_LEGACY));
+    localStorage.removeItem(__TWEAKS_LS_KEY_LEGACY);
+  }
+} catch (_) {}
 function useTweaks(defaults) {
   // 저장된 값을 기본값 위에 병합 (앱 종료 후에도 유지)
   const [values, setValues] = React.useState(() => {

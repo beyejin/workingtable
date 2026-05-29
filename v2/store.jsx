@@ -1,12 +1,22 @@
 /* global React */
 // ===========================================================
-// 바이브 다이어리 — 데이터 레이어
+// todoary — 데이터 레이어
 // localStorage 한 키에 전체 상태를 JSON으로 저장.
 // useDiary() 훅 하나로 모든 컴포넌트가 동일한 상태를 공유.
 // Electron/Tauri로 래핑해도 그대로 동작 (저장 경로만 바꾸면 됨).
 // ===========================================================
 
-const STORAGE_KEY = "vibe-diary.v1";
+const STORAGE_KEY = "todoary.v1";
+// 앱 이름 변경(vibe-diary → todoary) 전 데이터를 한 번만 이관.
+try {
+  const LEGACY = "vibe-diary.v1";
+  if (typeof localStorage !== "undefined"
+      && !localStorage.getItem(STORAGE_KEY)
+      && localStorage.getItem(LEGACY)) {
+    localStorage.setItem(STORAGE_KEY, localStorage.getItem(LEGACY));
+    localStorage.removeItem(LEGACY);
+  }
+} catch (_) { /* private mode / no storage */ }
 
 // ---- 유틸 ----
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -135,6 +145,7 @@ function seed() {
       lastNotifiedAt: null,        // 알림 중복 발송 방지
     },
     workSessions: [],
+    songPlays: {},
   };
 }
 
@@ -154,6 +165,8 @@ function load() {
     data.emails      ??= [];
     data.aiBookmarks ??= [];
     data.retros      ??= [];
+    // mood 필드 보강 (기존 회고 데이터 보존)
+    data.retros = data.retros.map(r => ({ mood: null, ...r }));
     data.playlist    ??= [];
     data.dday        ??= { date: "", label: "디데이" };
     data.mailUrl     ??= "";
@@ -197,6 +210,8 @@ function load() {
     }));
     data.timer       ??= { lengthMin: 30, enabled: true, cycleStartedAt: null, paused: false, pausedRemainingMs: null, notificationsGranted: false, lastNotifiedAt: null };
     data.workSessions ??= [];
+    data.workSessions = data.workSessions.map(w => ({ lastTs: null, ...w }));
+    data.songPlays   ??= {};
     // 프로젝트에 버전/저장소 필드 보강 (기존 값 우선)
     data.projects = (data.projects ?? []).map(p => ({
       repoUrl: "", version: "0.1.0", nextVersion: "", ...p,
@@ -559,18 +574,37 @@ const actions = {
   },
 
   // ----- 회고 (날짜별 1개) -----
-  saveRetro({ date = today(), text = "", good = "", bad = "" }) {
+  saveRetro({ date = today(), text = "", good = "", bad = "", mood = null }) {
     setState(s => {
       const others = s.retros.filter(r => r.date !== date);
       // 모두 비었으면 삭제
-      if (!text.trim() && !good.trim() && !bad.trim()) {
+      if (!text.trim() && !good.trim() && !bad.trim() && !mood) {
         return { ...s, retros: others };
       }
       return {
         ...s,
-        retros: [...others, { id: uid(), date, text, good, bad }]
+        retros: [...others, { id: uid(), date, text, good, bad, mood }]
                  .sort((a, b) => b.date.localeCompare(a.date)),
       };
+    });
+  },
+  // 기분만 빠르게 설정 (다른 필드는 기존 값 유지)
+  setMood(date, mood) {
+    setState(s => {
+      const prev = s.retros.find(r => r.date === date);
+      const others = s.retros.filter(r => r.date !== date);
+      if (!mood && !prev?.text?.trim() && !prev?.good?.trim() && !prev?.bad?.trim()) {
+        return { ...s, retros: others };
+      }
+      const next = {
+        id: prev?.id ?? uid(),
+        date,
+        text: prev?.text ?? "",
+        good: prev?.good ?? "",
+        bad:  prev?.bad  ?? "",
+        mood,
+      };
+      return { ...s, retros: [...others, next].sort((a, b) => b.date.localeCompare(a.date)) };
     });
   },
 
@@ -700,15 +734,30 @@ const actions = {
   addWorkMinutes(min) {
     if (min <= 0) return;
     const t = today();
+    const now = Date.now();
     setState(s => {
       const sessions = s.workSessions.slice();
       const idx = sessions.findIndex(w => w.date === t);
       if (idx >= 0) {
-        sessions[idx] = { ...sessions[idx], minutes: sessions[idx].minutes + min };
+        sessions[idx] = { ...sessions[idx], minutes: sessions[idx].minutes + min, lastTs: now };
       } else {
-        sessions.push({ date: t, minutes: min });
+        sessions.push({ date: t, minutes: min, lastTs: now });
       }
       return { ...s, workSessions: sessions };
+    });
+  },
+
+  // ----- 곡 재생 카운트 (날짜·videoId 별) -----
+  recordPlay({ videoId, title = "" } = {}) {
+    if (!videoId) return;
+    const t = today();
+    setState(s => {
+      const plays = { ...(s.songPlays ?? {}) };
+      const day = { ...(plays[t] ?? {}) };
+      const prev = day[videoId] || { title: "", count: 0 };
+      day[videoId] = { title: title || prev.title || "", count: (prev.count || 0) + 1 };
+      plays[t] = day;
+      return { ...s, songPlays: plays };
     });
   },
 
@@ -743,6 +792,35 @@ const select = {
     const t = today();
     const sess = s.workSessions.find(w => w.date === t);
     return sess?.minutes ?? 0;
+  },
+  // 하루 단위 통합 — 그 날의 할 일(마감 + 그 날 완료) / 작업분 / 회고 / 톱 곡
+  dayBundle: (s, date) => {
+    const pid = s.currentProjectId;
+    const todos = (s.todos ?? []).filter(t => t.projectId === pid);
+    const due = todos.filter(t => t.dueDate === date);
+    const doneFloat = todos.filter(t => !t.dueDate && t.done && (t.completedAt || "").slice(0, 10) === date);
+    const items = [...due, ...doneFloat];
+    const totalSec = items.reduce((sum, t) => sum + (t.trackedSeconds || 0), 0);
+    const sess = (s.workSessions ?? []).find(w => w.date === date);
+    // 그 날 가장 많이 들은 곡
+    const plays = (s.songPlays ?? {})[date] ?? {};
+    let topSong = null;
+    for (const [vid, info] of Object.entries(plays)) {
+      if (!topSong || (info.count || 0) > (topSong.count || 0)) {
+        topSong = { videoId: vid, title: info.title || "", count: info.count || 0 };
+      }
+    }
+    return {
+      date,
+      items,
+      doneCount: items.filter(t => t.done).length,
+      totalCount: items.length,
+      itemSeconds: totalSec,
+      workMinutes: sess?.minutes ?? 0,
+      workEndTs: sess?.lastTs ?? null,
+      retro: s.retros.find(r => r.date === date) ?? null,
+      topSong,
+    };
   },
 };
 

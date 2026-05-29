@@ -36,15 +36,39 @@ function TodoView() {
   const todayStr = diary.today();
   // 현재 보고 있는 날짜. null = 오늘.
   const [selectedDate, setSelectedDate] = useState(todayStr);
+  // 필터 모드 — 'date': selectedDate 기반 (기존), 'all': 이번달 전체
+  const [filterMode, setFilterMode] = useState("date");
   useEffect(() => { actions.generateRecurrences(); }, []);
 
   const items = diary.select.todosForCurrent(state);
   const isToday = selectedDate === todayStr;
 
-  // 날짜별 필터:
-  //  - 오늘: 마감 없는 일 + 오늘 마감 + 과거에 마감이었으나 미완료 (놓친 일 보호)
-  //  - 다른 날짜: 그 날짜에 마감인 일만
+  // 이번달 범위 — '전체' 모드에서 사용
+  const monthPrefix = todayStr.slice(0, 8); // "YYYY-MM-"
+  const inThisMonth = (d) => typeof d === "string" && d.startsWith(monthPrefix);
+  // todo 가 이번달 범위에 걸리는지 (생성/마감/완료 중 하나라도)
+  const inMonthRange = (t) => (
+    inThisMonth(t.createdAt) ||
+    (t.dueDate && inThisMonth(t.dueDate)) ||
+    (t.completedAt && inThisMonth(t.completedAt.slice(0, 10)))
+  );
+
+  // 모드별 미완료 카운트 — 토글 뱃지에 표시
+  const dateModeIncomplete = items.filter(t => {
+    if (t.done) return false;
+    if (isToday) {
+      if (!t.dueDate) return true;
+      if (t.dueDate === todayStr) return true;
+      if (t.dueDate < todayStr) return true;
+      return false;
+    }
+    return t.dueDate === selectedDate;
+  }).length;
+  const allModeIncomplete = items.filter(t => !t.done && inMonthRange(t)).length;
+
+  // 필터 — 모드에 따라
   const list = items.filter(t => {
+    if (filterMode === "all") return inMonthRange(t);
     if (isToday) {
       if (!t.dueDate) return true;
       if (t.dueDate === todayStr) return true;
@@ -77,17 +101,41 @@ function TodoView() {
   const clear = () => setSel(null);
 
   const onAdd = (text) => {
-    if (isToday) actions.addTodo(text);
+    // '전체' 모드에서 추가 — 오늘에 붙임 (마감 없음)
+    if (filterMode === "all" || isToday) actions.addTodo(text);
     else actions.addTodo(text, { dueDate: selectedDate });
   };
 
   const dateLabel = isToday ? L("todo.today") : (window.i18n && window.i18n.fmtDate ? window.i18n.fmtDate(selectedDate) : selectedDate);
-  const placeholder = isToday ? L("todo.addPh") : `${fmtMD(selectedDate)} ${L("todo.addPhDate")}`;
+  const dateLabelShort = isToday ? L("todo.today") : fmtMD(selectedDate);
+  const placeholder = filterMode === "all"
+    ? L("todo.addPh")
+    : (isToday ? L("todo.addPh") : `${fmtMD(selectedDate)} ${L("todo.addPhDate")}`);
+
+  // 헤더 — 두 칸 세그먼트 토글 ([날짜] [전체])
+  const headerToggle = (
+    <div style={{ display: "flex", gap: 4, flex: 1, minWidth: 0 }}>
+      <SegPill
+        active={filterMode === "date"}
+        onClick={() => setFilterMode("date")}
+        icon="📅"
+        label={dateLabelShort}
+        count={dateModeIncomplete}
+      />
+      <SegPill
+        active={filterMode === "all"}
+        onClick={() => setFilterMode("all")}
+        icon="📋"
+        label="전체"
+        count={allModeIncomplete}
+      />
+    </div>
+  );
 
   return (
     <SplitPane
-      topLabel={`📅 ${dateLabel} · ${list.filter(t => !t.done).length}`}
-      topRight={!isToday && (
+      topLabel={headerToggle}
+      topRight={filterMode === "date" && !isToday && (
         <button onClick={() => setSelectedDate(todayStr)} style={{
           all: "unset", cursor: "pointer",
           padding: "2px 9px", borderRadius: 99,
@@ -106,7 +154,9 @@ function TodoView() {
           ))}
           {list.length === 0 && (
             <div className="sk-cap" style={{ padding: "4px 2px" }}>
-              {isToday ? L("todo.emptyToday") : L("todo.emptyDate", { d: fmtMD(selectedDate) })}
+              {filterMode === "all"
+                ? "이번달 할 일이 없어요"
+                : (isToday ? L("todo.emptyToday") : L("todo.emptyDate", { d: fmtMD(selectedDate) }))}
             </div>
           )}
         </div>
@@ -116,11 +166,43 @@ function TodoView() {
         <TodoMonthCalendar
           dueDates={dueDates}
           doneDates={doneDates}
-          selectedDate={selectedDate}
-          onPick={(d) => setSelectedDate(d)}
+          selectedDate={filterMode === "date" ? selectedDate : null}
+          onPick={(d) => { setSelectedDate(d); setFilterMode("date"); }}
         />
       }
     />
+  );
+}
+
+// 헤더 세그먼트 알약 — sk-label 의 uppercase / 라벨 폰트를 셀프 리셋
+function SegPill({ active, onClick, icon, label, count }) {
+  return (
+    <button onClick={onClick} style={{
+      all: "unset", cursor: "pointer",
+      display: "inline-flex", alignItems: "center", gap: 5,
+      padding: "2px 9px", borderRadius: 99,
+      border: active ? "1.2px solid var(--ink)" : "1px solid var(--ink-soft)",
+      background: active ? "var(--paper)" : "transparent",
+      boxShadow: active ? "0 1.5px 0 var(--paper-3)" : "none",
+      fontFamily: "var(--hand)", fontSize: 12,
+      textTransform: "none", letterSpacing: "normal",
+      color: active ? "var(--ink)" : "var(--ink-3)",
+      minWidth: 0, flexShrink: 1,
+    }}>
+      <span style={{ fontSize: 11, flexShrink: 0 }}>{icon}</span>
+      <span style={{
+        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        minWidth: 0,
+      }}>{label}</span>
+      <span style={{
+        fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700,
+        color: active ? "var(--ink)" : "var(--ink-3)",
+        background: active ? "rgba(255,255,255,0.7)" : "transparent",
+        padding: active ? "0 5px" : "0 2px", borderRadius: 99,
+        border: active ? "1px solid rgba(40,51,63,0.2)" : "none",
+        flexShrink: 0,
+      }}>{count}</span>
+    </button>
   );
 }
 
