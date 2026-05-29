@@ -57,6 +57,9 @@
   <script src="vendor/react-dom.production.min.js"></script>
   <script src="vendor/babel.min.js"></script>
 
+  <!-- 작업방 (Firebase) — config 없으면 자동 로컬 모드 -->
+  <script src="vendor/firebase-config.js"></script>
+
   <script type="text/babel" src="tweaks-panel.jsx"></script>
   <script type="text/babel" src="v2/i18n.jsx"></script>
   <script type="text/babel" src="v2/store.jsx"></script>
@@ -70,6 +73,9 @@
   <script type="text/babel" src="v2/view-prompt.jsx"></script>
   <script type="text/babel" src="v2/view-ai.jsx"></script>
   <script type="text/babel" src="v2/view-retro.jsx"></script>
+  <script type="text/babel" src="v2/firebase-bridge.jsx"></script>
+  <script type="text/babel" src="v2/room-store.jsx"></script>
+  <script type="text/babel" src="v2/view-room.jsx"></script>
   <script type="text/babel" src="v2/timer.jsx"></script>
   <script type="text/babel" src="v2/tracker.jsx"></script>
   <script type="text/babel" src="v2/photocard.jsx"></script>
@@ -179,6 +185,7 @@
         <>
           <SideDockV2 tweaks={t} setTweak={setTweak} />
           <ActivityTracker />
+          <RoomSyncBridge />
           <RetroModal />
           <TweaksPanel title="Tweaks">
             <TweakSection label="레이아웃">

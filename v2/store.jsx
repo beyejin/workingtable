@@ -207,6 +207,8 @@ function load() {
       recurrenceId: t.recurrenceId ?? null,
       trackedSeconds: t.trackedSeconds ?? 0,
       createdAt: t.createdAt ?? today(),
+      // 작업방 공개 여부 — 기본 false (비공개). 사용자가 켠 항목만 방 멤버에게 제목 노출.
+      roomVisible: !!t.roomVisible,
     }));
     data.timer       ??= { lengthMin: 30, enabled: true, cycleStartedAt: null, paused: false, pausedRemainingMs: null, notificationsGranted: false, lastNotifiedAt: null };
     data.workSessions ??= [];
@@ -297,6 +299,7 @@ const actions = {
           recurrenceId: opts.recurrenceId ?? null,
           trackedSeconds: 0,
           createdAt: today(),
+          roomVisible: false,
         }],
       };
     });
@@ -315,6 +318,13 @@ const actions = {
       todos: s.todos.map(t => t.id === id
         ? { ...t, pinned: !t.pinned, pinnedAt: !t.pinned ? Date.now() : null }
         : t),
+    }));
+  },
+  // 작업방에 이 할 일 제목을 공개할지 토글 — 기본 false
+  toggleTodoVisible(id) {
+    setState(s => ({
+      ...s,
+      todos: s.todos.map(t => t.id === id ? { ...t, roomVisible: !t.roomVisible } : t),
     }));
   },
   setTodoDue(id, date) {

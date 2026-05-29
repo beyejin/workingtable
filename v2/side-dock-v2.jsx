@@ -1,4 +1,4 @@
-/* global React, TodayView, TodoView, MemoView, MailView, PromptView, AIView, RetroView */
+/* global React, TodayView, TodoView, MemoView, MailView, PromptView, AIView, RetroView, RoomView */
 // ===========================================================
 // 사이드 도크 v2 — 다이어리 인덱스 탭 + 뷰 전환
 // 도크 본체 + 옆에 삐죽 나오는 종이 탭들.
@@ -13,13 +13,20 @@ const TABS = [
   { id: "cal",   labelKey: "tab.week",     glyph: "📅", color: "#d4e6fa", view: () => <CalendarView /> },
   { id: "memo",  labelKey: "tab.memo",     glyph: "📝", color: "#fff0c0", view: () => <MemoView /> },
   { id: "mail",  labelKey: "tab.mail",     glyph: "✉", color: "#ffe0d2", view: () => <MailView /> },
+  { id: "room",  labelKey: "tab.room",     glyph: "👥", color: "#ecdcf5", view: () => <RoomView /> },
   { id: "deco",  labelKey: "tab.deco",     glyph: "🎨", color: "#ffe6f0", view: () => null, foot: true },
   { id: "settings", labelKey: "tab.settings", glyph: "⚙", color: "#e6e6ee", view: () => null, foot: true },
 ];
 
 function SideDockV2({ tweaks, setTweak }) {
   const [active, setActive] = useState("todo");
-  const current = TABS.find(t => t.id === active);
+  // 작업방 탭 표시 여부 (기본 켜짐). 꺼지면 현재 활성 탭이 room 이었으면 todo 로 자동 전환.
+  const showRoomTab = tweaks?.showRoomTab ?? true;
+  const visibleTabs = showRoomTab ? TABS : TABS.filter(t => t.id !== "room");
+  React.useEffect(() => {
+    if (!showRoomTab && active === "room") setActive("todo");
+  }, [showRoomTab, active]);
+  const current = visibleTabs.find(t => t.id === active) || visibleTabs[0];
   const isPhoto = active === "photo";
 
   // 실제 창 높이 추적 → 짧아지면 탭을 아이콘만(짧게)으로
@@ -120,7 +127,7 @@ function SideDockV2({ tweaks, setTweak }) {
 
       {/* 다이어리 인덱스 탭들 — 도크 본체 옆에 삐죽 */}
       <DiaryTabs
-        tabs={TABS}
+        tabs={visibleTabs}
         active={active}
         onSelect={setActive}
         dockSide={dockSide}
@@ -390,6 +397,12 @@ function SettingsView({ tweaks, setTweak }) {
         <SetSeg value={t.alwaysOnTop ? "on" : "off"} onChange={v => set("alwaysOnTop", v === "on")}
           options={[["on", L("set.on")], ["off", L("set.off")]]} />
         <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.alwaysOnTopHint")}</div>
+      </SetSection>
+
+      <SetSection label={L("set.roomTab")}>
+        <SetSeg value={(t.showRoomTab ?? true) ? "on" : "off"} onChange={v => set("showRoomTab", v === "on")}
+          options={[["on", L("set.on")], ["off", L("set.off")]]} />
+        <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.roomTabHint")}</div>
       </SetSection>
 
       <SetSection label={L("set.data")}>
