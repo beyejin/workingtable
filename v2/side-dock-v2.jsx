@@ -574,19 +574,51 @@ function SettingsView({ tweaks, setTweak }) {
   const t = tweaks || {};
   const set = setTweak || (() => {});
   const i18 = useI18n();
+  const [langOpen, setLangOpen] = useState(false);
+  const currentLang = i18.list().find(([code]) => code === i18.get()) || i18.list()[0];
   return (
     <div style={{ height: "100%", overflowY: "auto", overflowX: "hidden", padding: "14px 16px" }}>
       <SetSection label={L("set.lang")}>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {i18.list().map(([code, name]) => (
-            <button key={code} onClick={() => i18.set(code)} style={{
-              all: "unset", cursor: "pointer", padding: "5px 12px", borderRadius: 99,
-              border: "1.1px solid var(--ink)",
-              background: i18.get() === code ? "var(--hi)" : "var(--paper)",
-              fontFamily: "var(--hand)", fontSize: 13, color: "var(--ink)",
-            }}>{name}</button>
-          ))}
-        </div>
+        <button onClick={() => setLangOpen(o => !o)} style={{
+          all: "unset", cursor: "pointer", boxSizing: "border-box", width: "100%",
+          padding: "7px 9px", borderRadius: 10,
+          border: "1.1px solid var(--ink)",
+          background: "rgba(255,255,255,0.68)", color: "var(--ink)",
+          display: "flex", alignItems: "center", gap: 7,
+        }}>
+          <span style={{ fontFamily: "var(--mono)", fontSize: 10, fontWeight: 800 }}>{currentLang?.[2] || i18.get().toUpperCase()}</span>
+          <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--hand)", fontSize: 13 }}>{currentLang?.[1] || i18.get()}</span>
+          <span style={{ fontFamily: "var(--mono)", fontSize: 10 }}>{langOpen ? "▴" : "▾"}</span>
+        </button>
+        {langOpen && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6, marginTop: 7 }}>
+            {i18.list().map(([code, name, short]) => {
+              const active = i18.get() === code;
+              return (
+                <button key={code} onClick={() => { i18.set(code); setLangOpen(false); }} style={{
+                  all: "unset", cursor: "pointer", boxSizing: "border-box",
+                  minWidth: 0, padding: "6px 8px", borderRadius: 10,
+                  border: active ? "1.2px solid var(--ink)" : "1px solid var(--ink-soft)",
+                  background: active ? "var(--hi)" : "rgba(255,255,255,0.62)",
+                  color: "var(--ink)",
+                  display: "flex", alignItems: "center", gap: 6,
+                }}>
+                  <span style={{
+                    flexShrink: 0, minWidth: 24, textAlign: "center",
+                    fontFamily: "var(--mono)", fontSize: 10, fontWeight: 800,
+                    padding: "1px 4px", borderRadius: 99,
+                    background: active ? "rgba(255,255,255,0.72)" : "var(--paper)",
+                    border: "1px solid rgba(40,51,63,0.18)",
+                  }}>{short || code.toUpperCase()}</span>
+                  <span style={{
+                    minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    fontFamily: "var(--hand)", fontSize: 12.5,
+                  }}>{name}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </SetSection>
 
       <SetSection label={L("set.size")}>
@@ -696,7 +728,7 @@ function DecorateView({ tweaks, setTweak }) {
         <div style={{ padding: mine ? "3px 16px 3px 6px" : "3px 6px", textAlign: mine ? "left" : "center", fontFamily: "var(--hand)", fontSize: 12, color: "var(--ink)", background: "var(--paper)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{mine ? th.name : L(th.nameKey)}</div>
       </button>
       {mine && (
-        <button onClick={() => delMyTheme(i)} title="삭제" style={{
+        <button onClick={() => delMyTheme(i)} title={L("common.delete")} style={{
           all: "unset", cursor: "pointer", position: "absolute", top: 2, right: 2,
           width: 16, height: 16, borderRadius: "50%", display: "grid", placeItems: "center",
           background: "rgba(255,255,255,0.85)", border: "1px solid var(--ink)", fontSize: 9, color: "var(--ink)",
@@ -852,7 +884,7 @@ function StopRow({ stop, palette, onColor, onPos, onRemove, canRemove }) {
         <input type="range" min="0" max="100" value={stop.p} onChange={e => onPos(Number(e.target.value))}
           style={{ flex: 1, accentColor: "var(--ink)" }} />
         <span style={{ fontFamily: "var(--mono)", fontSize: 11, width: 34, textAlign: "right", color: "var(--ink-2)" }}>{stop.p}%</span>
-        {canRemove && <button onClick={onRemove} title="삭제" style={{ all: "unset", cursor: "pointer", color: "var(--ink-3)", fontSize: 13, padding: "0 2px" }}>✕</button>}
+        {canRemove && <button onClick={onRemove} title={L("common.delete")} style={{ all: "unset", cursor: "pointer", color: "var(--ink-3)", fontSize: 13, padding: "0 2px" }}>✕</button>}
       </div>
       {open && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6, padding: 6, border: "1px solid var(--ink-soft)", borderRadius: 8, background: "var(--paper)", alignItems: "center" }}>

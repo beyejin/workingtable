@@ -125,6 +125,14 @@
     if (typeof t.seconds === "number") return t.seconds * 1000;
     return null;
   }
+  function normalizeVisibleTodos(items) {
+    if (!Array.isArray(items)) return [];
+    return items.map((item) => {
+      if (typeof item === "string") return { title: item, done: false };
+      if (item && typeof item.title === "string") return { title: item.title, done: !!item.done };
+      return null;
+    }).filter((item) => item && item.title);
+  }
 
   // ===========================================================
   // 방 CRUD (READY 모드)
@@ -286,7 +294,7 @@
             todoTotal: data.todoTotal || 0,
             todoDone: data.todoDone || 0,
             // 공개로 표시한 할일 제목들만. 비공개 제목은 절대 서버에 안 올라감.
-            visibleTodos: Array.isArray(data.visibleTodos) ? data.visibleTodos : [],
+            visibleTodos: normalizeVisibleTodos(data.visibleTodos),
             recentLog: Array.isArray(data.recentLog) ? data.recentLog : [],
             lastActiveAt: tsToMs(data.lastActiveAt),
             joinedAt: tsToMs(data.joinedAt),

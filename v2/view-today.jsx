@@ -15,7 +15,7 @@ function fmtClock(ts) {
   const d = new Date(ts);
   const h = d.getHours();
   const m = pad2(d.getMinutes());
-  const ampm = h < 12 ? "오전" : "오후";
+  const ampm = h < 12 ? L("time.am") : L("time.pm");
   const h12 = ((h + 11) % 12) + 1;
   return `${ampm} ${h12}:${m}`;
 }
@@ -273,7 +273,7 @@ function WeekPane({ onPickDay }) {
             hasRetro={!!retroByDay[dayStrings[i]]}
             mood={retroByDay[dayStrings[i]]?.mood || null}
             ddayLabel={dday.date === dayStrings[i] ? dDayLabel(dday.date, today) : null}
-            ddayName={dday.date === dayStrings[i] ? (dday.label || "디데이") : null}
+            ddayName={dday.date === dayStrings[i] ? (dday.label || L("dday.label")) : null}
             isToday={dayStrings[i] === todayStr}
             isFuture={dayStrings[i] > todayStr}
             onClick={() => onPickDay(dayStrings[i])}
@@ -350,17 +350,17 @@ function DayCell({ date, labelKey, due, doneFloat, workMin, hasRetro, mood,
             fontFamily: "var(--mono)", fontSize: 8.5, color: "var(--ink)",
             background: "var(--point)", padding: "0 5px", borderRadius: 99,
             border: "1px solid var(--ink)",
-          }}>오늘</span>
+          }}>{L("planner.today")}</span>
         )}
         {ddayLabel && (
-          <span title={ddayName} style={{
+          <span title={ddayName === "디데이" ? L("dday.label") : ddayName} style={{
             fontFamily: "var(--mono)", fontSize: 8.5, color: "var(--ink)",
             background: "#ffd0d8", padding: "0 5px", borderRadius: 99,
             border: "1px solid var(--ink)",
           }}>★{ddayLabel}</span>
         )}
         {hasRetro && (
-          <span title="일기 있음" style={{
+          <span title={L("planner.diaryExists")} style={{
             marginLeft: "auto",
             width: 6, height: 6, borderRadius: "50%",
             background: "var(--pink)", border: "1px solid var(--ink)",
@@ -497,9 +497,9 @@ function WeekStatsFooter({ weekTotalMin, weekDoneCnt, streak }) {
       background: "linear-gradient(180deg, color-mix(in srgb, var(--chrome,#a9cdf5) 40%, white) 0%, color-mix(in srgb, var(--chrome,#a9cdf5) 14%, white) 100%)",
       display: "flex", alignItems: "center", gap: 5,
     }}>
-      <StatChip label="작업" value={totalLabel} accent="#9ef0c4" />
-      <StatChip label="완료" value={`${weekDoneCnt}`} accent="#a9cdf5" />
-      <StatChip label="연속" value={`${streak}일`} accent="#ffc7d4" />
+      <StatChip label={L("planner.work")} value={totalLabel} accent="#9ef0c4" />
+      <StatChip label={L("planner.doneShort")} value={`${weekDoneCnt}`} accent="#a9cdf5" />
+      <StatChip label={L("planner.streak")} value={L("planner.days", { n: streak })} accent="#ffc7d4" />
     </div>
   );
 }
@@ -536,7 +536,7 @@ function DayPane({ date, onBack, onJump }) {
   const bundle = diary.select.dayBundle(state, date);
   const isToday = date === diary.today();
   const dDateObj = parseDate(date);
-  const dow = ["일","월","화","수","목","금","토"][dDateObj.getDay()];
+  const dow = ((window.i18n && window.i18n.weekdays && window.i18n.weekdays()) || ["일","월","화","수","목","금","토"])[dDateObj.getDay()];
 
   // 일기 본문 — 자동 저장 (디바운스)
   const [text, setText] = useState(bundle.retro?.text ?? "");
@@ -582,25 +582,25 @@ function DayPane({ date, onBack, onJump }) {
         background: "linear-gradient(180deg, color-mix(in srgb, var(--chrome,#a9cdf5) 42%, white) 0%, color-mix(in srgb, var(--chrome,#a9cdf5) 12%, white) 100%)",
         borderBottom: "1.1px solid var(--ink)",
       }}>
-        <button onClick={onBack} title="주간으로" style={{
+        <button onClick={onBack} title={L("planner.backWeek")} style={{
           ...gradNavBtn, width: "auto", padding: "0 9px", fontSize: 11,
           fontFamily: "var(--hand)", fontWeight: 700,
-        }}>‹ 주간</button>
+        }}>‹ {L("tab.week")}</button>
         <span style={{ flex: 1 }} />
-        <button onClick={goPrevDay} title="이전 날" style={gradNavBtn}>‹</button>
+        <button onClick={goPrevDay} title={L("planner.prevDay")} style={gradNavBtn}>‹</button>
         <div style={{
           padding: "0 8px",
           fontFamily: "var(--hand)", fontSize: 14, fontWeight: 700, color: "var(--ink)",
           whiteSpace: "nowrap",
         }}>
-          {dDateObj.getMonth() + 1}월 {dDateObj.getDate()}일 ({dow})
+          {window.i18n && window.i18n.fmtDate ? window.i18n.fmtDate(date) : `${dDateObj.getMonth() + 1}/${dDateObj.getDate()} (${dow})`}
           {isToday && <span style={{
             marginLeft: 5, fontFamily: "var(--mono)", fontSize: 9, color: "var(--ink)",
             background: "var(--point)", padding: "0 5px", borderRadius: 99,
             border: "1px solid var(--ink)", verticalAlign: "middle",
-          }}>오늘</span>}
+          }}>{L("planner.today")}</span>}
         </div>
-        <button onClick={goNextDay} title="다음 날" style={gradNavBtn}>›</button>
+        <button onClick={goNextDay} title={L("planner.nextDay")} style={gradNavBtn}>›</button>
         <span style={{ flex: 1 }} />
       </div>
 
@@ -733,7 +733,9 @@ function TimerCard({ totalSec, workMinutes, topSong, isToday }) {
 function Notebook({ date, dateObj, dow, endClock, mood, onMoodChange, text, onTextChange, isToday }) {
   const LH = 28;             // 줄 간격
   const MARGIN_L = 32;       // 좌측 빨간 마진선
-  const ko = `${dateObj.getMonth() + 1}월 ${dateObj.getDate()}일 (${dow})`;
+  const dateLabel = window.i18n && window.i18n.fmtDate
+    ? window.i18n.fmtDate(date)
+    : `${dateObj.getMonth() + 1}/${dateObj.getDate()} (${dow})`;
 
   // 줄 패턴 — 가로 라인 (밝은 청회색)
   const rules = `repeating-linear-gradient(to bottom, transparent 0, transparent ${LH - 1}px, #b8d0e8 ${LH - 1}px, #b8d0e8 ${LH}px)`;
@@ -773,7 +775,7 @@ function Notebook({ date, dateObj, dow, endClock, mood, onMoodChange, text, onTe
           fontFamily: "var(--hand)", fontSize: 14, fontWeight: 700, color: "#5a4a30",
         }}>
           <span style={{ fontSize: 11, color: "#9b8453", marginRight: 4 }}>DATE</span>
-          {ko}
+          {dateLabel}
         </div>
         <MoodRow value={mood} onChange={onMoodChange} />
       </div>
@@ -796,7 +798,7 @@ function Notebook({ date, dateObj, dow, endClock, mood, onMoodChange, text, onTe
         <textarea
           value={text}
           onChange={onTextChange}
-          placeholder="오늘의 일기..."
+          placeholder={L("planner.diaryPh")}
           rows={7}
           style={{
             display: "block", width: "100%", boxSizing: "border-box",

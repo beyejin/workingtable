@@ -441,7 +441,7 @@ function MemoEditScreen({ memoId, onBack }) {
   };
 
   const insertTodoBlock = () => {
-    insertHtml(`<div data-memo-todo="1"><input type="checkbox" data-memo-check="1" /> <span>할 일</span></div><div><br></div>`);
+    insertHtml(`<div data-memo-todo="1"><input type="checkbox" data-memo-check="1" /> <span>${escapeHtml(L("memo.todoText"))}</span></div><div><br></div>`);
   };
 
   const getCurrentBlock = () => {
@@ -756,12 +756,12 @@ function QuickBlockBar({ onHeading, onTodo, onBullet, onQuote, onHr }) {
       <span style={{
         fontFamily: "var(--mono)", fontSize: 9.5,
         color: "var(--ink-3)", flexShrink: 0, marginRight: 2,
-      }}>/ blocks</span>
-      <QuickBlockBtn onClick={onHeading}>제목</QuickBlockBtn>
-      <QuickBlockBtn onClick={onTodo}>☐ 할 일</QuickBlockBtn>
-      <QuickBlockBtn onClick={onBullet}>• 목록</QuickBlockBtn>
-      <QuickBlockBtn onClick={onQuote}>인용</QuickBlockBtn>
-      <QuickBlockBtn onClick={onHr}>구분선</QuickBlockBtn>
+      }}>{L("memo.blocks")}</span>
+      <QuickBlockBtn onClick={onHeading}>{L("memo.quickTitle")}</QuickBlockBtn>
+      <QuickBlockBtn onClick={onTodo}>{L("memo.quickTodo")}</QuickBlockBtn>
+      <QuickBlockBtn onClick={onBullet}>{L("memo.quickList")}</QuickBlockBtn>
+      <QuickBlockBtn onClick={onQuote}>{L("memo.quickQuote")}</QuickBlockBtn>
+      <QuickBlockBtn onClick={onHr}>{L("memo.quickDivider")}</QuickBlockBtn>
     </div>
   );
 }

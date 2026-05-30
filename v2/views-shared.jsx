@@ -1,4 +1,4 @@
-/* global React, diary */
+/* global React, diary, L, useI18n */
 // ===========================================================
 // 공통 컴포넌트 — 모든 뷰에서 재사용
 // ===========================================================
@@ -229,8 +229,9 @@ function Editable({ value, onChange, placeholder = "", multiline = false, style 
 
 // 삭제 버튼 (작은 ×)
 function DelBtn({ onClick }) {
+  if (typeof useI18n === "function") useI18n();
   return (
-    <button onClick={onClick} title="삭제" style={{
+    <button onClick={onClick} title={L("common.delete")} style={{
       all: "unset", cursor: "pointer",
       width: 16, height: 16, borderRadius: "50%",
       display: "grid", placeItems: "center",

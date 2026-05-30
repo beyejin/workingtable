@@ -66,6 +66,16 @@ const today = () => {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
 };
+function normalizeWeeklyDays(days) {
+  const seen = new Set();
+  return (Array.isArray(days) ? days : [])
+    .map(Number)
+    .filter(d => Number.isInteger(d) && d >= 0 && d <= 6 && !seen.has(d) && (seen.add(d), true))
+    .sort((a, b) => a - b);
+}
+function normalizeFrequency(frequency) {
+  return ["daily", "weekdays", "weekly"].includes(frequency) ? frequency : "daily";
+}
 const fmtKDate = (iso) => {
   const [y, m, d] = iso.split("-").map(Number);
   const dow = ["일","월","화","수","목","금","토"][new Date(y, m - 1, d).getDay()];
@@ -196,6 +206,15 @@ function load() {
     data.commands    ??= [];
     data.todos       ??= [];
     data.recurrences ??= [];
+    data.recurrences = data.recurrences.map(r => {
+      const frequency = normalizeFrequency(r.frequency);
+      return {
+        ...r,
+        frequency,
+        weeklyDays: frequency === "weekly" ? normalizeWeeklyDays(r.weeklyDays) : [],
+        active: r.active !== false,
+      };
+    });
     data.lastGenDate ??= today();
     data.prompts     ??= [];
     data.emails      ??= [];
@@ -524,24 +543,51 @@ const actions = {
     });
   },
   removeTodo(id) {
-    setState(s => ({ ...s, todos: s.todos.filter(t => t.id !== id) }));
+    setState(s => {
+      const target = s.todos.find(t => t.id === id);
+      if (!target?.recurrenceId) {
+        return { ...s, todos: s.todos.filter(t => t.id !== id) };
+      }
+      return {
+        ...s,
+        recurrences: (s.recurrences ?? []).filter(r => r.id !== target.recurrenceId),
+        todos: s.todos
+          .filter(t => t.id !== id)
+          .map(t => t.recurrenceId === target.recurrenceId ? { ...t, recurrenceId: null } : t),
+      };
+    });
   },
 
   // ----- 반복 (템플릿) -----
   addRecurrence({ title, frequency, weeklyDays = [] }) {
     const id = uid();
+    const normalizedFrequency = normalizeFrequency(frequency);
     setState(s => ({
       ...s,
       recurrences: [...(s.recurrences ?? []), {
         id, projectId: s.currentProjectId,
-        title: title.trim(), frequency, weeklyDays, active: true,
+        title: title.trim(),
+        frequency: normalizedFrequency,
+        weeklyDays: normalizedFrequency === "weekly" ? normalizeWeeklyDays(weeklyDays) : [],
+        active: true,
         createdAt: today(),
       }],
     }));
     return id;
   },
   updateRecurrence(id, patch) {
-    setState(s => ({ ...s, recurrences: (s.recurrences ?? []).map(r => r.id === id ? { ...r, ...patch } : r) }));
+    setState(s => ({
+      ...s,
+      recurrences: (s.recurrences ?? []).map(r => {
+        if (r.id !== id) return r;
+        const nextFrequency = normalizeFrequency(patch.frequency ?? r.frequency);
+        const next = { ...r, ...patch, frequency: nextFrequency };
+        return {
+          ...next,
+          weeklyDays: nextFrequency === "weekly" ? normalizeWeeklyDays(next.weeklyDays) : [],
+        };
+      }),
+    }));
   },
   removeRecurrence(id) {
     setState(s => ({
@@ -954,7 +1000,7 @@ const actions = {
 
   // ----- 위험: 리셋 -----
   async hardReset() {
-    const msg = (window.i18n && window.i18n.t) ? window.i18n.t("set.resetConfirm") : "정말 모든 데이터를 지우고 초기 시드로 되돌릴까요?";
+    const msg = (window.i18n && window.i18n.t) ? window.i18n.t("set.resetConfirm") : "정말 모든 데이터를 지우고 초기 상태로 되돌릴까요?";
     const ok = await (window.dialog ? window.dialog.confirm(msg) : Promise.resolve(confirm(msg)));
     if (!ok) return;
     setState(seed());

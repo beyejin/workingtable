@@ -127,13 +127,14 @@ function ddayText(diff) {
 function DDay() {
   const { state, actions } = diary.useDiary();
   const dday = state.dday ?? { date: "", label: "" };
+  const ddayLabel = dday.label === "디데이" ? L("dday.label") : dday.label;
   const [open, setOpen] = useState(false);
   const diff = ddayDiff(dday.date);
   const dayNum = dday.date ? new Date(dday.date + "T00:00:00").getDate() : null;
 
   return (
     <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 6 }}>
-      <button onClick={() => setOpen(o => !o)} title={dday.label || L("dday.title")} style={{
+      <button onClick={() => setOpen(o => !o)} title={ddayLabel || L("dday.title")} style={{
         all: "unset", cursor: "pointer",
         display: "inline-flex", alignItems: "center", gap: 6,
       }}>
