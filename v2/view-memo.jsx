@@ -6,9 +6,28 @@
 // ===========================================================
 const { useState, useEffect, useRef } = React;
 
+function consumePendingMemoId() {
+  const id = window.todoaryPendingMemoId || null;
+  if (id) window.todoaryPendingMemoId = null;
+  return id;
+}
+
 function MemoView() {
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedId, setSelectedId] = useState(() => consumePendingMemoId());
   const { state } = diary.useDiary();
+  useEffect(() => {
+    const onOpenMemo = (e) => {
+      const id = e.detail?.memoId || consumePendingMemoId();
+      if (id) {
+        window.todoaryPendingMemoId = null;
+        setSelectedId(id);
+      }
+    };
+    window.addEventListener("todoary-open-memo", onOpenMemo);
+    const pending = consumePendingMemoId();
+    if (pending) setSelectedId(pending);
+    return () => window.removeEventListener("todoary-open-memo", onOpenMemo);
+  }, []);
   useEffect(() => {
     if (selectedId && !state.memos.find(m => m.id === selectedId)) setSelectedId(null);
   }, [selectedId, state.memos]);
@@ -288,6 +307,8 @@ function SortBtn({ active, onClick, children }) {
 function MemoEditScreen({ memoId, onBack }) {
   const { state, actions } = diary.useDiary();
   const memo = state.memos.find(m => m.id === memoId);
+  const linkedTodo = memo?.todoId ? state.todos.find(t => t.id === memo.todoId) : null;
+  const linkedSubTaskSig = (linkedTodo?.subTasks || []).map(st => `${st.id}:${st.done ? 1 : 0}`).join("|");
   const editorRef = useRef(null);
   const saveTimerRef = useRef(null);
   const savedRangeRef = useRef(null);
@@ -302,6 +323,35 @@ function MemoEditScreen({ memoId, onBack }) {
       editorRef.current.innerHTML = memo.html || "";
     }
   }, [memoId]);
+
+  const syncLinkedTodoChecks = React.useCallback((todoId, done) => {
+    const editor = editorRef.current;
+    if (!editor || !todoId) return;
+    editor.querySelectorAll('input[type="checkbox"][data-linked-todo-check]').forEach(el => {
+      if (el.getAttribute("data-linked-todo-check") !== todoId) return;
+      el.checked = !!done;
+      if (done) el.setAttribute("checked", "checked");
+      else el.removeAttribute("checked");
+    });
+  }, []);
+
+  const syncLinkedSubTaskChecks = React.useCallback((todoId, subId, done) => {
+    const editor = editorRef.current;
+    if (!editor || !todoId || !subId) return;
+    editor.querySelectorAll('input[type="checkbox"][data-linked-subtask-check]').forEach(el => {
+      if (el.getAttribute("data-linked-subtask-parent") !== todoId) return;
+      if (el.getAttribute("data-linked-subtask-check") !== subId) return;
+      el.checked = !!done;
+      if (done) el.setAttribute("checked", "checked");
+      else el.removeAttribute("checked");
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!linkedTodo) return;
+    syncLinkedTodoChecks(linkedTodo.id, linkedTodo.done);
+    (linkedTodo.subTasks || []).forEach(st => syncLinkedSubTaskChecks(linkedTodo.id, st.id, st.done));
+  }, [linkedTodo?.id, linkedTodo?.done, linkedSubTaskSig, memoId, syncLinkedTodoChecks, syncLinkedSubTaskChecks]);
 
   // selectionchange로 서식 활성 상태 추적
   useEffect(() => {
@@ -616,6 +666,27 @@ function MemoEditScreen({ memoId, onBack }) {
 
   // 링크 클릭 시 외부 열기 (편집기 안에서도)
   const onEditorClick = (e) => {
+    const linkedCheck = e.target.closest && e.target.closest('input[type="checkbox"][data-linked-todo-check]');
+    if (linkedCheck && editorRef.current?.contains(linkedCheck)) {
+      const todoId = linkedCheck.getAttribute("data-linked-todo-check");
+      if (todoId) {
+        actions.setTodoDone(todoId, linkedCheck.checked);
+        syncLinkedTodoChecks(todoId, linkedCheck.checked);
+      }
+      queueSave();
+      return;
+    }
+    const linkedSubCheck = e.target.closest && e.target.closest('input[type="checkbox"][data-linked-subtask-check]');
+    if (linkedSubCheck && editorRef.current?.contains(linkedSubCheck)) {
+      const todoId = linkedSubCheck.getAttribute("data-linked-subtask-parent");
+      const subId = linkedSubCheck.getAttribute("data-linked-subtask-check");
+      if (todoId && subId) {
+        actions.setSubTaskDone(todoId, subId, linkedSubCheck.checked);
+        syncLinkedSubTaskChecks(todoId, subId, linkedSubCheck.checked);
+      }
+      queueSave();
+      return;
+    }
     const check = e.target.closest && e.target.closest('input[type="checkbox"][data-memo-check]');
     if (check && editorRef.current?.contains(check)) {
       if (check.checked) check.setAttribute("checked", "checked");
@@ -665,6 +736,34 @@ function MemoEditScreen({ memoId, onBack }) {
           style={headerBtn}
         >🗑</button>
       </div>
+
+      {linkedTodo && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "6px 10px",
+          background: linkedTodo.done ? "#eef8ef" : "#fffaf0",
+          borderBottom: "1px solid #e4e8ee",
+        }}>
+          <button
+            onClick={() => actions.setTodoDone(linkedTodo.id, !linkedTodo.done)}
+            className={"sk-check" + (linkedTodo.done ? " done" : "")}
+            style={{ cursor: "pointer", flexShrink: 0 }}
+            title={linkedTodo.done ? L("todo.undoDone") : L("todo.markDone")}
+          />
+          <span style={{
+            flex: 1, minWidth: 0,
+            fontFamily: "var(--hand)", fontSize: 13, fontWeight: 700,
+            color: linkedTodo.done ? "var(--ink-3)" : "var(--ink)",
+            textDecoration: linkedTodo.done ? "line-through" : "none",
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          }}>
+            {linkedTodo.title}
+          </span>
+          <span className="sk-cap" style={{ flexShrink: 0, fontSize: 10 }}>
+            {L("memo.linkedTodo")}
+          </span>
+        </div>
+      )}
 
       <QuickBlockBar
         onHeading={() => onHeading("h2")}

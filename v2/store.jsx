@@ -134,6 +134,22 @@ function memoTitleFromHtml(html) {
   if (/<a /i.test(html)) return "🔗 링크";
   return "";
 }
+function todoMemoHtml(todo) {
+  const todoId = memoEscapeHtml(todo?.id || "");
+  const checked = todo?.done ? ' checked="checked"' : "";
+  return `<div data-linked-todo="${todoId}"><input type="checkbox" data-linked-todo-check="${todoId}"${checked} /> <strong>${memoEscapeHtml(todo?.title || "")}</strong></div>${todoSubTaskMemoHtml(todo)}<div><br></div>`;
+}
+function todoSubTaskMemoHtml(todo, existingHtml = "") {
+  const todoId = memoEscapeHtml(todo?.id || "");
+  return (todo?.subTasks || []).filter(st => {
+    const subId = memoEscapeHtml(st.id || "");
+    return subId && !existingHtml.includes(`data-linked-subtask-check="${subId}"`);
+  }).map(st => {
+    const subId = memoEscapeHtml(st.id || "");
+    const subChecked = st.done ? ' checked="checked"' : "";
+    return `<div data-linked-subtask="${subId}" style="margin-left:22px"><input type="checkbox" data-linked-subtask-check="${subId}" data-linked-subtask-parent="${todoId}"${subChecked} /> <span>${memoEscapeHtml(st.title || "")}</span></div>`;
+  }).join("");
+}
 // 메모 아이콘 — 도트 스프라이트 인덱스 (Sprite-0002.png, 6x4=24).
 // 문자열이 아니라 숫자(0..23). 표시는 <SpriteIcon idx={...} /> 로.
 const MEMO_ICONS = Array.from({ length: 24 }, (_, i) => i);
@@ -245,6 +261,7 @@ function load() {
       const inferredTitle = memoTitleFromHtml(next.html);
       if (!next.title) next.title = inferredTitle;
       next.manualTitle = next.manualTitle ?? (!!String(next.title || "").trim() && next.title !== inferredTitle);
+      next.todoId = next.todoId ?? null;
       return next;
     });
     data.selectedDate = today();   // 시작 시 항상 오늘
@@ -265,6 +282,7 @@ function load() {
       done: !!t.done,
       completedAt: t.completedAt ?? (t.doneTs ? new Date(t.doneTs).toISOString() : (t.doneAt ? t.doneAt + "T12:00:00" : null)),
       recurrenceId: t.recurrenceId ?? null,
+      memoId: t.memoId ?? null,
       trackedSeconds: t.trackedSeconds ?? 0,
       // 서브태스크 — 접히는 하위 목록. 각 항목은 { id, title, done, completedAt, linkUrl }
       subTasks: Array.isArray(t.subTasks) ? t.subTasks.map(st => ({
@@ -374,6 +392,7 @@ const actions = {
           order: nextOrder,
           done: false, completedAt: null,
           recurrenceId: opts.recurrenceId ?? null,
+          memoId: opts.memoId ?? null,
           trackedSeconds: 0,
           subTasks: [],
           createdAt: today(),
@@ -388,6 +407,15 @@ const actions = {
       ...s,
       todos: s.todos.map(t => t.id === id
         ? { ...t, done: !t.done, completedAt: !t.done ? new Date().toISOString() : null }
+        : t),
+    }));
+  },
+  setTodoDone(id, done) {
+    const nextDone = !!done;
+    setState(s => ({
+      ...s,
+      todos: s.todos.map(t => t.id === id
+        ? { ...t, done: nextDone, completedAt: nextDone ? (t.completedAt || new Date().toISOString()) : null }
         : t),
     }));
   },
@@ -456,6 +484,20 @@ const actions = {
           ...st,
           done: !st.done,
           completedAt: !st.done ? new Date().toISOString() : null,
+        } : st),
+      } : t),
+    }));
+  },
+  setSubTaskDone(todoId, subId, done) {
+    const nextDone = !!done;
+    setState(s => ({
+      ...s,
+      todos: s.todos.map(t => t.id === todoId ? {
+        ...t,
+        subTasks: (t.subTasks || []).map(st => st.id === subId ? {
+          ...st,
+          done: nextDone,
+          completedAt: nextDone ? (st.completedAt || new Date().toISOString()) : null,
         } : st),
       } : t),
     }));
@@ -552,6 +594,7 @@ const actions = {
           done,
           completedAt: done ? (todo.completedAt || new Date().toISOString()) : null,
           recurrenceId: null,
+          memoId: null,
           trackedSeconds: todo.trackedSeconds ?? 0,
           subTasks: Array.isArray(todo.subTasks) ? todo.subTasks.map(st => {
             const subDone = !!st.done;
@@ -612,7 +655,11 @@ const actions = {
     setState(s => {
       const target = s.todos.find(t => t.id === id);
       if (!target?.recurrenceId) {
-        return { ...s, todos: s.todos.filter(t => t.id !== id) };
+        return {
+          ...s,
+          todos: s.todos.filter(t => t.id !== id),
+          memos: (s.memos ?? []).map(m => m.todoId === id ? { ...m, todoId: null } : m),
+        };
       }
       return {
         ...s,
@@ -620,6 +667,7 @@ const actions = {
         todos: s.todos
           .filter(t => t.id !== id)
           .map(t => t.recurrenceId === target.recurrenceId ? { ...t, recurrenceId: null } : t),
+        memos: (s.memos ?? []).map(m => m.todoId === id ? { ...m, todoId: null } : m),
       };
     });
   },
@@ -690,6 +738,7 @@ const actions = {
           title: r.title, pinned: false, pinnedAt: null,
           dueDate: t, startDate: null, endDate: null, order: orderMap[r.projectId],
           done: false, completedAt: null,
+          memoId: null,
           recurrenceId: r.id, trackedSeconds: 0,
           createdAt: t,
         });
@@ -823,20 +872,65 @@ const actions = {
   },
 
   // ----- 메모 (단일 html 본문) -----
-  addMemo({ html = "", icon } = {}) {
+  addMemo({ html = "", icon, todoId = null, title = "" } = {}) {
     const id = uid();
     const now = new Date().toISOString();
     setState(s => ({
       ...s,
       memos: [
         { id, projectId: s.currentProjectId,
-          title: memoTitleFromHtml(html), html, manualTitle: false,
+          title: title || memoTitleFromHtml(html), html, manualTitle: !!title,
+          todoId,
           icon: icon || randomMemoIcon(),
           createdAt: now, updatedAt: now },
         ...(s.memos ?? []),
       ],
     }));
     return id;
+  },
+  ensureTodoMemo(todoId) {
+    let memoId = null;
+    setState(s => {
+      const todo = s.todos.find(t => t.id === todoId);
+      if (!todo) return s;
+      const memos = s.memos ?? [];
+      const existing = (todo.memoId && memos.find(m => m.id === todo.memoId))
+        || memos.find(m => m.todoId === todoId);
+      if (existing) {
+        memoId = existing.id;
+        const missingSubTasksHtml = todoSubTaskMemoHtml(todo, existing.html || "");
+        const now = new Date().toISOString();
+        return {
+          ...s,
+          todos: s.todos.map(t => t.id === todoId ? { ...t, memoId } : t),
+          memos: memos.map(m => m.id === memoId ? {
+            ...m,
+            todoId,
+            html: missingSubTasksHtml ? `${m.html || ""}${missingSubTasksHtml}` : m.html,
+            updatedAt: missingSubTasksHtml ? now : m.updatedAt,
+          } : m),
+        };
+      }
+      memoId = uid();
+      const now = new Date().toISOString();
+      const memo = {
+        id: memoId,
+        projectId: todo.projectId || s.currentProjectId,
+        todoId,
+        title: todo.title,
+        html: todoMemoHtml(todo),
+        manualTitle: true,
+        icon: 4,
+        createdAt: now,
+        updatedAt: now,
+      };
+      return {
+        ...s,
+        todos: s.todos.map(t => t.id === todoId ? { ...t, memoId } : t),
+        memos: [memo, ...memos],
+      };
+    });
+    return memoId;
   },
   updateMemo(id, patch) {
     setState(s => ({
@@ -853,7 +947,11 @@ const actions = {
     }));
   },
   removeMemo(id) {
-    setState(s => ({ ...s, memos: (s.memos ?? []).filter(m => m.id !== id) }));
+    setState(s => ({
+      ...s,
+      memos: (s.memos ?? []).filter(m => m.id !== id),
+      todos: (s.todos ?? []).map(t => t.memoId === id ? { ...t, memoId: null } : t),
+    }));
   },
 
   // ----- 회고 (날짜별 1개) -----

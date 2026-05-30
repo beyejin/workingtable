@@ -20,6 +20,11 @@ const TABS = [
 
 function SideDockV2({ tweaks, setTweak }) {
   const [active, setActive] = useState("todo");
+  React.useEffect(() => {
+    const onOpenMemo = () => setActive("memo");
+    window.addEventListener("todoary-open-memo", onOpenMemo);
+    return () => window.removeEventListener("todoary-open-memo", onOpenMemo);
+  }, []);
   // 작업방 탭 표시 여부 (기본 꺼짐). 꺼지면 현재 활성 탭이 room 이었으면 todo 로 자동 전환.
   const showRoomTab = tweaks?.showRoomTab ?? false;
   const visibleTabs = showRoomTab ? TABS : TABS.filter(t => t.id !== "room");

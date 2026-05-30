@@ -712,6 +712,14 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
     setSubInput("");
   };
 
+  const openTodoMemo = (e) => {
+    stop(e);
+    const memoId = actions.ensureTodoMemo ? actions.ensureTodoMemo(t.id) : null;
+    if (!memoId) return;
+    window.todoaryPendingMemoId = memoId;
+    window.dispatchEvent(new CustomEvent("todoary-open-memo", { detail: { memoId, todoId: t.id } }));
+  };
+
   return (
     <div
       onClick={onRowClick}
@@ -819,6 +827,14 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
         )}
         {/* 반복 표시 */}
         {recRule && <span title={`${L("todo.repeat")} — ${recLabel(recRule)}`} style={{ fontSize: 12, color: "var(--ink-2)" }}>↻</span>}
+
+        {(showActions || t.memoId) && !compact && (
+          <button
+            onClick={openTodoMemo}
+            title={L("todo.openMemo")}
+            style={{ ...iconBtn, color: t.memoId ? "var(--ink)" : "var(--ink-3)" }}
+          >📝</button>
+        )}
 
         {/* 호버/선택 시 액션 아이콘 */}
         {showActions && (

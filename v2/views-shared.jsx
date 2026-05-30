@@ -4,6 +4,16 @@
 // ===========================================================
 const { useState, useRef, useEffect } = React;
 
+if (typeof window !== "undefined") {
+  const existingDialog = window.dialog || {};
+  window.dialog = {
+    ...existingDialog,
+    alert: existingDialog.alert || (async (message) => window.alert(message)),
+    confirm: existingDialog.confirm || (async (message) => window.confirm(message)),
+    prompt: existingDialog.prompt || (async (message, defaultValue = "") => window.prompt(message, defaultValue ?? "")),
+  };
+}
+
 // ---- 도트 스프라이트 아이콘 (16x16 셀, 6x4 = 24 인덱스) ----
 // Sprite-0002.png (96x64) 한 장에서 인덱스로 잘라 표시한다.
 // 표시 크기는 size 로 조절 (배수 — 16/24/32/48 ...).
