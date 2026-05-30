@@ -18,7 +18,8 @@ fn main() {
             youtube_player_play,
             youtube_player_pause,
             youtube_player_resume,
-            youtube_player_stop
+            youtube_player_stop,
+            youtube_player_set_volume
         ])
         .setup(|app| {
             #[cfg(all(target_os = "macos", not(debug_assertions)))]
@@ -88,6 +89,11 @@ fn youtube_player_set_bounds(
     native_youtube::set_bounds(app, x, y, width, height, visible)
 }
 
+#[tauri::command]
+fn youtube_player_set_volume(app: tauri::AppHandle, volume: f64) -> Result<(), String> {
+    native_youtube::set_volume(app, volume)
+}
+
 #[cfg(not(debug_assertions))]
 async fn check_update(app: tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let updater = app.updater()?;
@@ -137,7 +143,18 @@ mod native_youtube {
     pub fn resume(app: tauri::AppHandle) -> Result<(), String> {
         eval_player(
             &app,
-            r#"(function(){var v=document.querySelector("video");if(v){v.muted=false;v.volume=1;var p=v.play();if(p&&p.catch)p.catch(function(){});}})()"#,
+            r#"(function(){var v=document.querySelector("video");if(v){var p=v.play();if(p&&p.catch)p.catch(function(){});}})()"#,
+        )
+    }
+
+    pub fn set_volume(app: tauri::AppHandle, volume: f64) -> Result<(), String> {
+        let vol = volume.clamp(0.0, 1.0);
+        let muted = if vol <= 0.0 { "true" } else { "false" };
+        eval_player(
+            &app,
+            &format!(
+                r#"(function(){{var v=document.querySelector("video");if(v){{v.muted={muted};v.volume={vol};}}}})()"#
+            ),
         )
     }
 
@@ -279,6 +296,10 @@ mod native_youtube {
     }
 
     pub fn stop(_app: tauri::AppHandle) -> Result<(), String> {
+        Ok(())
+    }
+
+    pub fn set_volume(_app: tauri::AppHandle, _volume: f64) -> Result<(), String> {
         Ok(())
     }
 }

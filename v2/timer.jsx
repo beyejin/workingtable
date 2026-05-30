@@ -330,6 +330,23 @@ function PlaylistBar() {
           boxShadow: "0 4px 0 var(--paper-3)", zIndex: 28,
         }}>
           <div className="sk-label" style={{ marginBottom: 6 }}>{L("music.playlist")}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span className="sk-cap" style={{ flexShrink: 0, minWidth: 28 }} title={L("music.volume")}>
+              {ms.volume <= 0 ? "🔇" : ms.volume < 50 ? "🔉" : "🔊"}
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={ms.volume ?? 100}
+              onChange={(e) => music.setVolume(Number(e.target.value))}
+              aria-label={L("music.volume")}
+              style={{ flex: 1, minWidth: 0, accentColor: "var(--hi)" }}
+            />
+            <span className="sk-cap" style={{ width: 28, textAlign: "right", flexShrink: 0 }}>
+              {ms.volume ?? 100}
+            </span>
+          </div>
           <InlineAdd placeholder={L("music.paste")} onAdd={add} />
           {ms.nativeMode && (
             <div style={{ marginTop: 8 }}>

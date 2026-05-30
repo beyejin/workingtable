@@ -29,13 +29,49 @@
     title: "",
     videoId: null,
     hasQueue: false,
+    volume: volume,
     debug: "",
     nativeMode: useNativeMode,
   };
   const subs = new Set();
+  const VOLUME_KEY = "todoary.music.volume";
+
+  function loadVolume() {
+    try {
+      const v = parseInt(localStorage.getItem(VOLUME_KEY), 10);
+      if (Number.isFinite(v) && v >= 0 && v <= 100) return v;
+    } catch (_) {}
+    return 100;
+  }
+
+  let volume = loadVolume();
 
   const emit = () => { for (const fn of subs) fn(); };
   const setDebug = (msg) => { state.debug = msg ? String(msg).slice(0, 90) : ""; emit(); };
+
+  function applyVolume() {
+    if (useNativeMode) {
+      invokeNative("youtube_player_set_volume", { volume: volume / 100 }).catch(() => {});
+      return;
+    }
+    if (useRawMode) {
+      if (volume <= 0) rawPostCommand("mute");
+      else {
+        rawPostCommand("unMute");
+        rawPostCommand("setVolume", [volume]);
+      }
+      return;
+    }
+    if (player) {
+      try {
+        if (volume <= 0) player.mute();
+        else {
+          player.unMute();
+          player.setVolume(volume);
+        }
+      } catch (_) {}
+    }
+  }
 
   function invokeNative(command, args) {
     if (!tauriInvoke) return Promise.reject(new Error("tauri invoke unavailable"));
@@ -73,6 +109,8 @@
     invokeNative("youtube_player_play", {
       videoId: cur.videoId,
       playlist: playlistAfter(startIdx),
+    }).then(() => {
+      setTimeout(applyVolume, 400);
     }).catch(err => {
       fallbackToRaw(err && err.message ? err.message : err);
       state.nativeMode = false;
@@ -161,6 +199,7 @@
     iframe.setAttribute("frameborder", "0");
     iframe.style.cssText = "width:100%;height:100%;border:0;";
     host().appendChild(iframe);
+    setTimeout(applyVolume, 800);
   }
 
   function switchToRaw(reason) {
@@ -240,7 +279,7 @@
           if (queue.length && wantPlay) {
             const tr = queue[index] || queue[0];
             try { player.loadVideoById(tr.videoId); } catch (_) {}
-            try { player.unMute(); player.setVolume(100); } catch (_) {}
+            applyVolume();
             try { player.playVideo(); } catch (_) {}
           } else if (queue.length && !started) {
             const tr = queue[index] || queue[0];
@@ -270,12 +309,7 @@
   }
 
   function unmuteSoon() {
-    try {
-      if (player && player.unMute) {
-        player.unMute();
-        player.setVolume(100);
-      }
-    } catch (_) {}
+    applyVolume();
   }
 
   function play(i, gesture) {
@@ -312,7 +346,7 @@
     if (ready && player) {
       try { player.loadVideoById(tr.videoId); } catch (_) {}
       if (gesture) {
-        try { player.unMute(); player.setVolume(100); } catch (_) {}
+        applyVolume();
         try { player.playVideo(); } catch (_) {}
       }
     }
@@ -351,7 +385,9 @@
           setDebug("paused");
           emit();
         } else if (queue.length) {
-          invokeNative("youtube_player_resume").catch(err => {
+          invokeNative("youtube_player_resume").then(() => {
+            applyVolume();
+          }).catch(err => {
             fallbackToRaw(err);
             play(index, true);
           });
@@ -396,6 +432,14 @@
     setNativeViewport(rect) {
       if (!useNativeMode) return;
       invokeNative("youtube_player_set_bounds", rect).catch(err => fallbackToRaw(err));
+    },
+    getVolume() { return volume; },
+    setVolume(v) {
+      volume = Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
+      state.volume = volume;
+      try { localStorage.setItem(VOLUME_KEY, String(volume)); } catch (_) {}
+      applyVolume();
+      emit();
     },
     getState() { return state; },
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
