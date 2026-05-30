@@ -6,10 +6,10 @@
 // 상단 현재 프로젝트 + 하단 타이머는 sticky (모든 탭 공통).
 // ===========================================================
 
-const { useState } = React;
+const { useState, useEffect } = React;
 
 const TABS = [
-  { id: "todo",  labelKey: "tab.todo",     sprite: 4,  color: "#d4ecdb", view: () => <TodoView /> },
+  { id: "todo",  labelKey: "tab.todo",     sprite: 4,  color: "#d4ecdb", view: (ctx) => <TodoView tweaks={ctx?.tweaks} /> },
   { id: "cal",   labelKey: "tab.week",     sprite: 6,  color: "#d4e6fa", view: () => <CalendarView /> },
   { id: "memo",  labelKey: "tab.memo",     sprite: 22, color: "#fff0c0", view: () => <MemoView /> },
   { id: "mail",  labelKey: "tab.mail",     sprite: 0,  color: "#ffe0d2", view: () => <MailView /> },
@@ -103,6 +103,7 @@ function SideDockV2({ tweaks, setTweak }) {
         display: "flex", flexDirection: "column",
         zIndex: 2,
       }}>
+        <AppNotifyToast />
         {/* 글로시 스카이블루 헤더 — 드래그 영역 */}
         <div data-tauri-drag-region style={{
           height: 28,
@@ -566,6 +567,41 @@ function FakeIde({ dockSide, dockWidth }) {
 }
 
 // ===========================================================
+// 앱 내 알림 토스트 (뽀모도로 등 — OS 알림 실패 시에도 표시)
+// ===========================================================
+function AppNotifyToast() {
+  const [msg, setMsg] = useState(null);
+  useI18n();
+  useEffect(() => {
+    let timerId = null;
+    const h = (e) => {
+      const { title, body } = e.detail || {};
+      const text = body ? `${title} — ${body}` : (title || "");
+      if (!text) return;
+      setMsg(text);
+      clearTimeout(timerId);
+      timerId = setTimeout(() => setMsg(null), 4200);
+    };
+    window.addEventListener("app-notify", h);
+    return () => {
+      window.removeEventListener("app-notify", h);
+      clearTimeout(timerId);
+    };
+  }, []);
+  if (!msg) return null;
+  return (
+    <div style={{
+      position: "absolute", top: 34, left: 10, right: 10, zIndex: 50,
+      padding: "8px 10px", borderRadius: 10,
+      border: "1.1px solid var(--ink)", background: "var(--paper)",
+      boxShadow: "0 3px 0 var(--paper-3)",
+      fontFamily: "var(--hand)", fontSize: 13, color: "var(--ink)",
+      pointerEvents: "none",
+    }}>{msg}</div>
+  );
+}
+
+// ===========================================================
 // 헤더 — 제목/음악/타이머/디데이 각 한 줄 (별도 창 크롬 없음)
 // ===========================================================
 function HeaderDesktop() {
@@ -646,6 +682,12 @@ function SettingsView({ tweaks, setTweak }) {
         <SetSeg value={(t.showRoomTab ?? false) ? "on" : "off"} onChange={v => set("showRoomTab", v === "on")}
           options={[["on", L("set.on")], ["off", L("set.off")]]} />
         <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.roomTabHint")}</div>
+      </SetSection>
+
+      <SetSection label={L("set.pomodoro")}>
+        <SetSeg value={(t.showPomodoro ?? false) ? "on" : "off"} onChange={v => set("showPomodoro", v === "on")}
+          options={[["on", L("set.on")], ["off", L("set.off")]]} />
+        <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.pomodoroHint")}</div>
       </SetSection>
 
       <SetSection label={L("set.dockHide")}>

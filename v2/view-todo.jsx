@@ -1,4 +1,4 @@
-/* global React, diary, SplitPane, InlineAdd, DelBtn, openExternalUrl */
+/* global React, diary, SplitPane, InlineAdd, DelBtn, openExternalUrl, PomodoroBarButton */
 // ===========================================================
 // 할 일 — 위(2/3): 입력 + 모든 할 일
 //          아래(1/3): 핀(!) · 반복 · 마감일 설정한 할 일 자동 표시
@@ -110,7 +110,8 @@ function calSnap(h) {
   return CAL_BASE_PX + clamped * CAL_WEEK_PX;
 }
 
-function TodoView() {
+function TodoView({ tweaks } = {}) {
+  const showPomodoro = tweaks?.showPomodoro ?? false;
   const { state, actions } = diary.useDiary();
   const [selId, setSel] = useState(null);
   const undoStackRef = React.useRef([]);
@@ -240,21 +241,24 @@ function TodoView() {
 
   // 헤더 — 두 칸 세그먼트 토글 ([날짜] [전체])
   const headerToggle = (
-    <div style={{ display: "flex", gap: 4, flex: 1, minWidth: 0 }}>
-      <SegPill
-        active={filterMode === "date"}
-        onClick={() => setFilterMode("date")}
-        icon="📅"
-        label={dateLabelShort}
-        count={dateModeIncomplete}
-      />
-      <SegPill
-        active={filterMode === "all"}
-        onClick={() => setFilterMode("all")}
-        icon="📋"
-        label={L("todo.all")}
-        count={allModeIncomplete}
-      />
+    <div style={{ display: "flex", alignItems: "center", gap: 4, width: "100%", minWidth: 0 }}>
+      <div style={{ display: "flex", gap: 4, minWidth: 0 }}>
+        <SegPill
+          active={filterMode === "date"}
+          onClick={() => setFilterMode("date")}
+          icon="📅"
+          label={dateLabelShort}
+          count={dateModeIncomplete}
+        />
+        <SegPill
+          active={filterMode === "all"}
+          onClick={() => setFilterMode("all")}
+          icon="📋"
+          label={L("todo.all")}
+          count={allModeIncomplete}
+        />
+      </div>
+      {showPomodoro && <PomodoroBarButton inline />}
     </div>
   );
 

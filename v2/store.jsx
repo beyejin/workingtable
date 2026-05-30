@@ -198,13 +198,17 @@ function seed() {
     selectedDate: t,
     stuck: {},
     timer: {
-      lengthMin: 30,   // 한 사이클 분
+      workMin: 25,
+      breakMin: 5,
+      lengthMin: 25,   // 현재 사이클 분 (집중/휴식)
+      phase: "idle",   // idle | work | break
       enabled: true,
-      cycleStartedAt: null,        // Date.now() — null이면 아직 안 시작
+      cycleStartedAt: null,
       paused: false,
-      pausedRemainingMs: null,     // 일시정지 시 남은 시간 보존
+      pausedRemainingMs: null,
       notificationsGranted: false,
-      lastNotifiedAt: null,        // 알림 중복 발송 방지
+      lastNotifiedAt: null,
+      pomodoroCount: 0,
     },
     workSessions: [],
     songPlays: {},
@@ -296,7 +300,16 @@ function load() {
       // 작업방 공개 여부 — 기본 false (비공개). 사용자가 켠 항목만 방 멤버에게 제목 노출.
       roomVisible: !!t.roomVisible,
     }));
-    data.timer       ??= { lengthMin: 30, enabled: true, cycleStartedAt: null, paused: false, pausedRemainingMs: null, notificationsGranted: false, lastNotifiedAt: null };
+    data.timer ??= {
+      workMin: 25, breakMin: 5, lengthMin: 25, phase: "idle",
+      enabled: true, cycleStartedAt: null, paused: false, pausedRemainingMs: null,
+      notificationsGranted: false, lastNotifiedAt: null, pomodoroCount: 0,
+    };
+    data.timer.workMin ??= 25;
+    data.timer.breakMin ??= 5;
+    data.timer.phase ??= (data.timer.cycleStartedAt ? "work" : "idle");
+    data.timer.pomodoroCount ??= 0;
+    if (data.timer.lengthMin == null) data.timer.lengthMin = data.timer.workMin;
     data.workSessions ??= [];
     // workSessions 레거시 마이그레이션 — projectId 없던 시절 기록은 null(미분류)로 표기.
     data.workSessions = data.workSessions.map(w => ({
@@ -335,6 +348,14 @@ function setState(updater) {
 }
 function getState() { return _state; }
 function subscribe(fn) { _subs.add(fn); return () => _subs.delete(fn); }
+
+function pomoCycleMs(timer) {
+  return (timer?.lengthMin ?? 25) * 60 * 1000;
+}
+
+function pomoIdleWorkMs(timer) {
+  return (timer?.workMin ?? 25) * 60 * 1000;
+}
 
 // ---- 액션들 ----
 const actions = {
@@ -1078,7 +1099,7 @@ const actions = {
   pauseCycle() {
     setState(s => {
       if (!s.timer.cycleStartedAt || s.timer.paused) return s;
-      const lenMs = s.timer.lengthMin * 60 * 1000;
+      const lenMs = pomoCycleMs(s.timer);
       const elapsed = Date.now() - s.timer.cycleStartedAt;
       const remaining = Math.max(0, lenMs - elapsed);
       return { ...s, timer: { ...s.timer, paused: true, pausedRemainingMs: remaining } };
@@ -1087,7 +1108,7 @@ const actions = {
   resumeCycle() {
     setState(s => {
       if (!s.timer.paused) return s;
-      const lenMs = s.timer.lengthMin * 60 * 1000;
+      const lenMs = pomoCycleMs(s.timer);
       const remaining = s.timer.pausedRemainingMs ?? lenMs;
       // 남은 시간이 이제부터 흐르도록 시작 시각을 보정
       const cycleStartedAt = Date.now() - (lenMs - remaining);
@@ -1103,6 +1124,57 @@ const actions = {
       pausedRemainingMs: null,
       lastNotifiedAt: null,
     }}));
+  },
+  startPomodoro() {
+    setState(s => ({ ...s, timer: {
+      ...s.timer,
+      phase: "work",
+      lengthMin: s.timer.workMin ?? 25,
+      cycleStartedAt: Date.now(),
+      paused: false,
+      pausedRemainingMs: null,
+      lastNotifiedAt: null,
+    }}));
+  },
+  stopPomodoro() {
+    setState(s => ({ ...s, timer: {
+      ...s.timer,
+      phase: "idle",
+      lengthMin: s.timer.workMin ?? 25,
+      cycleStartedAt: null,
+      paused: false,
+      pausedRemainingMs: null,
+      lastNotifiedAt: null,
+    }}));
+  },
+  advancePomodoroPhase() {
+    setState(s => {
+      const t = s.timer;
+      if (t.phase === "work") {
+        return { ...s, timer: {
+          ...t,
+          phase: "break",
+          lengthMin: t.breakMin ?? 5,
+          cycleStartedAt: Date.now(),
+          paused: false,
+          pausedRemainingMs: null,
+          lastNotifiedAt: null,
+          pomodoroCount: (t.pomodoroCount ?? 0) + 1,
+        }};
+      }
+      if (t.phase === "break") {
+        return { ...s, timer: {
+          ...t,
+          phase: "idle",
+          lengthMin: t.workMin ?? 25,
+          cycleStartedAt: null,
+          paused: false,
+          pausedRemainingMs: null,
+          lastNotifiedAt: null,
+        }};
+      }
+      return s;
+    });
   },
   markNotified() {
     setState(s => ({ ...s, timer: { ...s.timer, lastNotifiedAt: Date.now() } }));
@@ -1251,4 +1323,7 @@ const select = {
 };
 
 // 글로벌 노출
-window.diary = { useDiary, actions, select, today, fmtKDate, fmtKDateShort, getState, memoTitleFromHtml, MEMO_ICONS };
+window.diary = {
+  useDiary, actions, select, today, fmtKDate, fmtKDateShort, getState, memoTitleFromHtml, MEMO_ICONS,
+  pomoCycleMs, pomoIdleWorkMs,
+};
