@@ -266,12 +266,13 @@ function load() {
       completedAt: t.completedAt ?? (t.doneTs ? new Date(t.doneTs).toISOString() : (t.doneAt ? t.doneAt + "T12:00:00" : null)),
       recurrenceId: t.recurrenceId ?? null,
       trackedSeconds: t.trackedSeconds ?? 0,
-      // 서브태스크 — 접히는 하위 목록. 각 항목은 { id, title, done, completedAt }
+      // 서브태스크 — 접히는 하위 목록. 각 항목은 { id, title, done, completedAt, linkUrl }
       subTasks: Array.isArray(t.subTasks) ? t.subTasks.map(st => ({
         id: st.id || uid(),
         title: String(st.title || "").trim(),
         done: !!st.done,
         completedAt: st.completedAt || null,
+        linkUrl: String(st.linkUrl || st.url || "").trim(),
       })) : [],
       createdAt: t.createdAt ?? today(),
       // 작업방 공개 여부 — 기본 false (비공개). 사용자가 켠 항목만 방 멤버에게 제목 노출.
@@ -356,14 +357,15 @@ const actions = {
 
   // ----- 할 일 -----
   addTodo(title, opts = {}) {
-    if (!title?.trim()) return;
+    if (!title?.trim()) return null;
+    const id = uid();
     setState(s => {
       const myTodos = s.todos.filter(t => t.projectId === s.currentProjectId);
       const nextOrder = myTodos.reduce((m, t) => Math.max(m, t.order ?? 0), -1) + 1;
       return {
         ...s,
         todos: [...s.todos, {
-          id: uid(), projectId: s.currentProjectId,
+          id, projectId: s.currentProjectId,
           title: title.trim(),
           pinned: !!opts.pinned, pinnedAt: opts.pinned ? Date.now() : null,
           dueDate: opts.dueDate ?? null,
@@ -379,6 +381,7 @@ const actions = {
         }],
       };
     });
+    return id;
   },
   toggleTodo(id) {
     setState(s => ({
@@ -430,15 +433,16 @@ const actions = {
     }));
   },
   // ----- 서브태스크 -----
-  addSubTask(todoId, title) {
+  addSubTask(todoId, title, opts = {}) {
     const text = (title || "").trim();
     if (!text) return;
+    const linkUrl = String(opts.linkUrl || "").trim();
     setState(s => ({
       ...s,
       todos: s.todos.map(t => t.id === todoId ? {
         ...t,
         subTasks: [...(t.subTasks || []), {
-          id: uid(), title: text, done: false, completedAt: null,
+          id: uid(), title: text, done: false, completedAt: null, linkUrl,
         }],
       } : t),
     }));
@@ -467,6 +471,16 @@ const actions = {
       } : t),
     }));
   },
+  setSubTaskLink(todoId, subId, linkUrl) {
+    const url = (linkUrl || "").trim();
+    setState(s => ({
+      ...s,
+      todos: s.todos.map(t => t.id === todoId ? {
+        ...t,
+        subTasks: (t.subTasks || []).map(st => st.id === subId ? { ...st, linkUrl: url } : st),
+      } : t),
+    }));
+  },
   removeSubTask(todoId, subId) {
     setState(s => ({
       ...s,
@@ -490,6 +504,7 @@ const actions = {
           title: dragged.title,
           done: dragged.done,
           completedAt: dragged.completedAt || null,
+          linkUrl: dragged.linkUrl || "",
         },
         // 드래그한 할 일이 가지고 있던 기존 서브태스크도 같이 흡수
         ...(dragged.subTasks || []).map(st => ({
@@ -497,6 +512,7 @@ const actions = {
           title: st.title,
           done: !!st.done,
           completedAt: st.completedAt || null,
+          linkUrl: st.linkUrl || "",
         })),
       ];
       return {
@@ -511,6 +527,56 @@ const actions = {
   },
   updateTodo(id, patch) {
     setState(s => ({ ...s, todos: s.todos.map(t => t.id === id ? { ...t, ...patch } : t) }));
+  },
+  addTodoFromSnapshot(todo, opts = {}) {
+    const title = String(todo?.title || "").trim();
+    if (!title) return null;
+    const id = uid();
+    setState(s => {
+      const projectId = opts.projectId ?? s.currentProjectId;
+      const myTodos = s.todos.filter(t => t.projectId === projectId);
+      const nextOrder = myTodos.reduce((m, t) => Math.max(m, t.order ?? 0), -1) + 1;
+      const done = !!todo.done;
+      return {
+        ...s,
+        todos: [...s.todos, {
+          id,
+          projectId,
+          title,
+          pinned: !!todo.pinned,
+          pinnedAt: todo.pinned ? Date.now() : null,
+          dueDate: opts.dueDate ?? todo.dueDate ?? null,
+          startDate: opts.startDate ?? todo.startDate ?? null,
+          endDate: opts.endDate ?? todo.endDate ?? null,
+          order: nextOrder,
+          done,
+          completedAt: done ? (todo.completedAt || new Date().toISOString()) : null,
+          recurrenceId: null,
+          trackedSeconds: todo.trackedSeconds ?? 0,
+          subTasks: Array.isArray(todo.subTasks) ? todo.subTasks.map(st => {
+            const subDone = !!st.done;
+            return {
+              id: uid(),
+              title: String(st.title || "").trim(),
+              done: subDone,
+              completedAt: subDone ? (st.completedAt || new Date().toISOString()) : null,
+              linkUrl: String(st.linkUrl || "").trim(),
+            };
+          }).filter(st => st.title) : [],
+          createdAt: today(),
+          roomVisible: false,
+        }],
+      };
+    });
+    return id;
+  },
+  restoreTodosSnapshot(snapshot) {
+    if (!snapshot || !Array.isArray(snapshot.todos)) return;
+    setState(s => ({
+      ...s,
+      todos: snapshot.todos,
+      recurrences: Array.isArray(snapshot.recurrences) ? snapshot.recurrences : s.recurrences,
+    }));
   },
   reorderTodoBefore(fromId, beforeId) {
     if (fromId === beforeId) return;

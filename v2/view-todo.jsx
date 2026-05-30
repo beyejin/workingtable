@@ -1,4 +1,4 @@
-/* global React, diary, SplitPane, InlineAdd, DelBtn */
+/* global React, diary, SplitPane, InlineAdd, DelBtn, openExternalUrl */
 // ===========================================================
 // 할 일 — 위(2/3): 입력 + 모든 할 일
 //          아래(1/3): 핀(!) · 반복 · 마감일 설정한 할 일 자동 표시
@@ -30,6 +30,52 @@ function addDaysIso(iso, days) {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
+}
+function clonePlain(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+function isTextEditingTarget(target) {
+  if (!target) return false;
+  const tag = (target.tagName || "").toLowerCase();
+  return tag === "input" || tag === "textarea" || target.isContentEditable || !!target.closest?.("[contenteditable='true']");
+}
+function todoClipboardText(todo) {
+  if (!todo) return "";
+  const lines = [todo.title || ""];
+  (todo.subTasks || []).forEach(st => {
+    const mark = st.done ? "[x]" : "[ ]";
+    const link = st.linkUrl ? ` ${st.linkUrl}` : "";
+    lines.push(`  - ${mark} ${st.title || ""}${link}`);
+  });
+  return lines.filter(Boolean).join("\n");
+}
+async function writeClipboardText(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_) {}
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch (_) {
+    return false;
+  }
+}
+async function readClipboardText() {
+  try {
+    if (navigator.clipboard?.readText) return await navigator.clipboard.readText();
+  } catch (_) {}
+  return "";
 }
 
 // 연한 파스텔 마스킹테이프 색 (행마다 순환)
@@ -67,6 +113,9 @@ function calSnap(h) {
 function TodoView() {
   const { state, actions } = diary.useDiary();
   const [selId, setSel] = useState(null);
+  const undoStackRef = React.useRef([]);
+  const redoStackRef = React.useRef([]);
+  const copiedTodoRef = React.useRef(null);
   const todayStr = diary.today();
   // 현재 보고 있는 날짜. null = 오늘.
   const [selectedDate, setSelectedDate] = useState(todayStr);
@@ -153,11 +202,34 @@ function TodoView() {
 
   const onPick = (id) => setSel(s => (s === id ? null : id));
   const clear = () => setSel(null);
+  const makeHistorySnapshot = React.useCallback(() => {
+    const s = diary.getState();
+    return {
+      todos: clonePlain(s.todos || []),
+      recurrences: clonePlain(s.recurrences || []),
+      selId,
+    };
+  }, [selId]);
+  const pushUndo = React.useCallback(() => {
+    undoStackRef.current = [...undoStackRef.current.slice(-24), makeHistorySnapshot()];
+    redoStackRef.current = [];
+  }, [makeHistorySnapshot]);
+  const pushRedo = React.useCallback(() => {
+    redoStackRef.current = [...redoStackRef.current.slice(-24), makeHistorySnapshot()];
+  }, [makeHistorySnapshot]);
+  const restoreHistorySnapshot = React.useCallback((snapshot) => {
+    actions.restoreTodosSnapshot(snapshot);
+    setSel(snapshot.selId || null);
+  }, [actions]);
 
   const onAdd = (text) => {
+    if (!text?.trim()) return;
+    pushUndo();
     // '전체' 모드에서 추가 — 오늘에 붙임 (마감 없음)
-    if (filterMode === "all" || isToday) actions.addTodo(text);
-    else actions.addTodo(text, { dueDate: selectedDate });
+    const id = (filterMode === "all" || isToday)
+      ? actions.addTodo(text)
+      : actions.addTodo(text, { dueDate: selectedDate });
+    if (id) setSel(id);
   };
 
   const dateLabel = isToday ? L("todo.today") : (window.i18n && window.i18n.fmtDate ? window.i18n.fmtDate(selectedDate) : selectedDate);
@@ -189,6 +261,83 @@ function TodoView() {
   // 진행도 — 보이는 할 일 + 그들의 서브태스크 체크박스 전체 카운팅
   const progressTotal = list.reduce((s, t) => s + 1 + (t.subTasks?.length ?? 0), 0);
   const progressDone = list.reduce((s, t) => s + (t.done ? 1 : 0) + (t.subTasks?.filter(st => st.done).length ?? 0), 0);
+
+  useEffect(() => {
+    const selectedTodo = () => {
+      if (!selId) return null;
+      const s = diary.getState();
+      return (s.todos || []).find(t => t.id === selId) || null;
+    };
+    const addOpts = () => (filterMode === "all" || selectedDate === diary.today())
+      ? {}
+      : { dueDate: selectedDate };
+    const copyTodo = async (todo) => {
+      copiedTodoRef.current = clonePlain(todo);
+      await writeClipboardText(todoClipboardText(todo));
+    };
+    const onKeyDown = async (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || isTextEditingTarget(e.target)) return;
+      const key = e.key.toLowerCase();
+      if ((key === "c" || key === "x") && String(window.getSelection?.() || "").trim()) return;
+      if (key === "z" && !e.shiftKey) {
+        const prev = undoStackRef.current.pop();
+        if (!prev) return;
+        e.preventDefault();
+        pushRedo();
+        restoreHistorySnapshot(prev);
+        return;
+      }
+
+      if (key === "y" || (key === "z" && e.shiftKey) || (key === "x" && redoStackRef.current.length > 0)) {
+        const next = redoStackRef.current.pop();
+        if (!next) return;
+        e.preventDefault();
+        undoStackRef.current = [...undoStackRef.current.slice(-24), makeHistorySnapshot()];
+        restoreHistorySnapshot(next);
+        return;
+      }
+
+      if (key === "c") {
+        const todo = selectedTodo();
+        if (!todo) return;
+        e.preventDefault();
+        await copyTodo(todo);
+        return;
+      }
+
+      if (key === "x") {
+        const todo = selectedTodo();
+        if (!todo) return;
+        e.preventDefault();
+        await copyTodo(todo);
+        pushUndo();
+        actions.removeTodo(todo.id);
+        setSel(null);
+        return;
+      }
+
+      if (key === "v") {
+        e.preventDefault();
+        const text = await readClipboardText();
+        const copied = copiedTodoRef.current;
+        const copiedText = copied ? todoClipboardText(copied).trim() : "";
+        if (copied && (!text.trim() || text.trim() === copiedText)) {
+          pushUndo();
+          const id = actions.addTodoFromSnapshot(copied);
+          if (id) setSel(id);
+          return;
+        }
+        const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+        if (!lines.length) return;
+        pushUndo();
+        let lastId = null;
+        lines.forEach(line => { lastId = actions.addTodo(line, addOpts()) || lastId; });
+        if (lastId) setSel(lastId);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [actions, filterMode, makeHistorySnapshot, pushRedo, pushUndo, restoreHistorySnapshot, selectedDate, selId]);
 
   return (
     <SplitPane
@@ -756,6 +905,20 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
 function SubTaskRow({ st, parentId, actions }) {
   const [hover, setHover] = useState(false);
   const [editing, setEditing] = useState(false);
+  const linkUrl = (st.linkUrl || "").trim();
+  const editLink = async (e) => {
+    e.stopPropagation();
+    const msg = L("todo.subLinkPrompt");
+    const next = window.dialog && window.dialog.prompt
+      ? await window.dialog.prompt(msg, linkUrl)
+      : prompt(msg, linkUrl);
+    if (next == null) return;
+    actions.setSubTaskLink(parentId, st.id, next.trim());
+  };
+  const openLink = (e) => {
+    e.stopPropagation();
+    if (linkUrl) openExternalUrl(linkUrl);
+  };
   return (
     <div
       onMouseEnter={() => setHover(true)}
@@ -810,6 +973,20 @@ function SubTaskRow({ st, parentId, actions }) {
             padding: "1px 2px",
           }}
         >{st.title}</span>
+      )}
+      {linkUrl && (
+        <button
+          onClick={openLink}
+          title={`${L("todo.subLinkOpen")}: ${linkUrl}`}
+          style={{ ...subIconBtn, opacity: 0.78 }}
+        >↗</button>
+      )}
+      {hover && (
+        <button
+          onClick={editLink}
+          title={linkUrl ? L("todo.subLinkEdit") : L("todo.subLinkAdd")}
+          style={{ ...subIconBtn, opacity: 0.68 }}
+        >🔗</button>
       )}
       <button
         onClick={(e) => { e.stopPropagation(); actions.removeSubTask(parentId, st.id); }}
@@ -918,6 +1095,12 @@ const miniLabel = {
 const dateInput = {
   border: "1px solid var(--ink-soft)", borderRadius: 6, padding: "2px 6px",
   fontFamily: "var(--mono)", fontSize: 12, color: "var(--ink)", background: "var(--paper)",
+};
+const subIconBtn = {
+  all: "unset", cursor: "pointer", flexShrink: 0,
+  width: 16, height: 16, display: "grid", placeItems: "center",
+  fontSize: 11, lineHeight: 1, color: "var(--ink-2)", borderRadius: 3,
+  transition: "opacity 0.12s, background 0.12s",
 };
 
 window.TodoView = TodoView;
