@@ -1,6 +1,9 @@
 // todoary - Tauri main entry
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(target_os = "macos")]
+mod legacy_macos;
+
 #[cfg(not(debug_assertions))]
 use tauri_plugin_updater::UpdaterExt;
 
@@ -18,6 +21,9 @@ fn main() {
             youtube_player_stop
         ])
         .setup(|app| {
+            #[cfg(all(target_os = "macos", not(debug_assertions)))]
+            legacy_macos::remove_legacy_vibe_diary_app_once(app.handle());
+
             #[cfg(not(debug_assertions))]
             {
                 let handle = app.handle().clone();
