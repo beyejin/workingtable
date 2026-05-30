@@ -607,26 +607,23 @@ function DayPane({ date, onBack, onJump }) {
       {/* 본문 — 스크롤 */}
       <div style={{
         flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden",
-        padding: "10px 12px 14px",
-        display: "flex", flexDirection: "column", gap: 10,
+        padding: "8px 10px 12px",
+        display: "flex", flexDirection: "column", gap: 8,
       }}>
         {/* 끝낸 일 */}
-        <Section
-          title="끝낸 일"
-          badge={`${bundle.doneCount} / ${bundle.totalCount}`}
-        >
+        <DayPanel title={L("planner.doneSection")} badge={`${bundle.doneCount} / ${bundle.totalCount}`}>
           {bundle.items.length === 0 ? (
-            <Empty text="이 날 할 일이 없었어요" />
+            <Empty text={L("planner.noTasksDay")} />
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
               {bundle.items.map(t => (
                 <TodoLine key={t.id} t={t} onToggle={() => actions.toggleTodo(t.id)} />
               ))}
             </div>
           )}
-        </Section>
+        </DayPanel>
 
-        {/* 작업시간 + 가장 많이 들은 곡 — 레트로 타이머 카드 */}
+        {/* 작업시간 + 가장 많이 들은 곡 */}
         <TimerCard
           totalSec={totalSec}
           workMinutes={bundle.workMinutes}
@@ -634,18 +631,20 @@ function DayPane({ date, onBack, onJump }) {
           isToday={isToday}
         />
 
-        {/* 오늘의 기록 — 일기장 노트 스타일 */}
-        <Notebook
-          date={date}
-          dateObj={dDateObj}
-          dow={dow}
-          endClock={endClock}
-          mood={bundle.retro?.mood || null}
-          onMoodChange={(m) => actions.setMood(date, m)}
-          text={text}
-          onTextChange={onTextChange}
-          isToday={isToday}
-        />
+        {/* 일기 — 메모 편집 UI 톤 */}
+        <div style={{ flex: 1, minHeight: 200, display: "flex", flexDirection: "column" }}>
+          <Notebook
+            date={date}
+            dateObj={dDateObj}
+            dow={dow}
+            endClock={endClock}
+            mood={bundle.retro?.mood || null}
+            onMoodChange={(m) => actions.setMood(date, m)}
+            text={text}
+            onTextChange={onTextChange}
+            isToday={isToday}
+          />
+        </div>
       </div>
     </>
   );
@@ -728,135 +727,119 @@ function TimerCard({ totalSec, workMinutes, topSong, isToday }) {
 }
 
 // ===========================================================
-// 일기장 노트 — 가로 줄/날짜/작업종료 시간
+// 일기 — 메모 편집 UI와 같은 톤
 // ===========================================================
 function Notebook({ date, dateObj, dow, endClock, mood, onMoodChange, text, onTextChange, isToday }) {
-  const LH = 28;             // 줄 간격
-  const MARGIN_L = 32;       // 좌측 빨간 마진선
   const dateLabel = window.i18n && window.i18n.fmtDate
     ? window.i18n.fmtDate(date)
     : `${dateObj.getMonth() + 1}/${dateObj.getDate()} (${dow})`;
 
-  // 줄 패턴 — 가로 라인 (밝은 청회색)
-  const rules = `repeating-linear-gradient(to bottom, transparent 0, transparent ${LH - 1}px, #b8d0e8 ${LH - 1}px, #b8d0e8 ${LH}px)`;
-
   return (
     <div style={{
-      position: "relative",
-      background: "#fdfbf2",                            // 미색 종이톤
-      border: "1.4px solid var(--ink)", borderRadius: 10,
-      boxShadow: "0 3px 0 var(--paper-3), 0 6px 14px -8px rgba(40,51,63,0.18)",
+      flex: 1, minHeight: 0, display: "flex", flexDirection: "column",
+      background: "#ffffff",
+      border: "1.1px solid var(--ink)", borderRadius: 8,
+      boxShadow: "0 2px 0 var(--paper-3)",
       overflow: "hidden",
     }}>
-      {/* 위쪽 펀치홀 띠 */}
+      {/* 타이틀바 — MemoEditScreen 과 동일한 크롬 그라데이션 */}
       <div style={{
-        height: 12, background: "#f5ebd6",
-        borderBottom: "1px dashed #c9b88f",
-        display: "flex", alignItems: "center", justifyContent: "space-around",
-        padding: "0 14px",
-      }}>
-        {[0,1,2,3,4,5].map(i => (
-          <span key={i} style={{
-            width: 5, height: 5, borderRadius: "50%",
-            background: "#d8c69a", boxShadow: "inset 0 1px 0 rgba(0,0,0,0.15)",
-          }} />
-        ))}
-      </div>
-
-      {/* 헤더 — 날짜 + 기분 한 줄 */}
-      <div style={{
-        padding: "9px 12px 8px",
-        borderBottom: "1px dashed #d6c89c",
-        background: "linear-gradient(180deg, rgba(255,255,255,0.6), transparent)",
+        flexShrink: 0, padding: "6px 10px",
+        background: "linear-gradient(180deg, color-mix(in srgb, var(--chrome,#a9cdf5) 42%, white) 0%, color-mix(in srgb, var(--chrome,#a9cdf5) 12%, white) 100%)",
+        borderBottom: "1.1px solid var(--ink)",
         display: "flex", alignItems: "center", gap: 8,
       }}>
-        <div style={{
-          flexShrink: 0,
-          fontFamily: "var(--hand)", fontSize: 14, fontWeight: 700, color: "#5a4a30",
-        }}>
-          <span style={{ fontSize: 11, color: "#9b8453", marginRight: 4 }}>DATE</span>
-          {dateLabel}
+        <span style={{ fontSize: 14, lineHeight: 1, flexShrink: 0 }}>📔</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: "var(--hand)", fontSize: 14, fontWeight: 700, color: "var(--ink)",
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          }}>{L("planner.diaryTitle")}</div>
+          <div style={{
+            fontFamily: "var(--mono)", fontSize: 10, color: "var(--ink-3)", marginTop: 1,
+          }}>{dateLabel}</div>
         </div>
+        {isToday && (
+          <span style={{
+            fontFamily: "var(--mono)", fontSize: 9, color: "var(--ink)",
+            background: "var(--point)", padding: "1px 6px", borderRadius: 99,
+            border: "1px solid var(--ink)", flexShrink: 0,
+          }}>{L("planner.today")}</span>
+        )}
+      </div>
+
+      {/* 기분 — QuickBlockBar 스타일 서브바 */}
+      <div style={{
+        flexShrink: 0, padding: "6px 10px",
+        background: "#fbfcfe", borderBottom: "1px solid #e4e8ee",
+        display: "flex", alignItems: "center", gap: 8, minHeight: 0,
+      }}>
+        <span style={{
+          fontFamily: "var(--mono)", fontSize: 9.5, color: "var(--ink-3)", flexShrink: 0,
+        }}>{L("planner.mood")}</span>
         <MoodRow value={mood} onChange={onMoodChange} />
       </div>
 
-      {/* 줄친 종이 */}
-      <div style={{
-        position: "relative",
-        paddingLeft: MARGIN_L,
-      }}>
-        {/* 좌측 빨간 마진선 */}
-        <div style={{
-          position: "absolute", top: 0, bottom: 0, left: MARGIN_L - 1,
-          width: 1, background: "#e58aa0",
-        }} />
-        <div style={{
-          position: "absolute", top: 0, bottom: 0, left: MARGIN_L - 4,
-          width: 1, background: "rgba(229,138,160,0.3)",
-        }} />
+      {/* 본문 — memo-editor 와 같은 배경·타이포 */}
+      <textarea
+        value={text}
+        onChange={onTextChange}
+        placeholder={L("planner.diaryPh")}
+        style={{
+          flex: 1, minHeight: 140, width: "100%", boxSizing: "border-box",
+          border: 0, outline: "none", resize: "none",
+          padding: "18px 18px 24px",
+          background: "linear-gradient(180deg, #ffffff 0%, #fffdf8 100%)",
+          fontFamily: "var(--hand)", fontSize: 14, lineHeight: 1.65,
+          color: "#222",
+        }}
+      />
 
-        <textarea
-          value={text}
-          onChange={onTextChange}
-          placeholder={L("planner.diaryPh")}
-          rows={7}
-          style={{
-            display: "block", width: "100%", boxSizing: "border-box",
-            border: 0, outline: "none", resize: "vertical",
-            background: rules,
-            backgroundAttachment: "local",
-            paddingTop: 4, paddingRight: 12, paddingBottom: 8, paddingLeft: 6,
-            minHeight: LH * 6 + 4,
-            fontFamily: '"Gaegu", "Caveat", var(--hand)',
-            fontSize: 16,
-            lineHeight: `${LH}px`,
-            color: "#2a3340",
-            letterSpacing: "0.01em",
-          }}
-        />
-      </div>
-
-      {/* 푸터 — 작업 종료 시간 */}
+      {/* 메타 — linkedTodo 바와 같은 톤 */}
       <div style={{
-        padding: "6px 12px 7px",
-        borderTop: "1px dashed #d6c89c",
-        background: "linear-gradient(180deg, transparent, rgba(245,235,214,0.7))",
+        flexShrink: 0, padding: "6px 10px",
+        background: "#eef2f7", borderTop: "1px solid #d8dee5",
         display: "flex", alignItems: "center", gap: 6,
-        fontFamily: "var(--hand)", fontSize: 11, color: "#7a6543",
+        fontFamily: "var(--hand)", fontSize: 11, color: "#4a5568",
       }}>
-        <span style={{ fontSize: 10 }}>⌛</span>
-        <span>작업 종료</span>
+        <span style={{ fontSize: 11 }}>⌛</span>
+        <span>{L("planner.workEnd")}</span>
         <span style={{ flex: 1 }} />
-        <span style={{ fontFamily: "var(--mono)", fontWeight: 700, color: "#5a4a30" }}>
-          {endClock ? endClock : "—"}
+        <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, fontWeight: 700, color: "var(--ink)" }}>
+          {endClock || "—"}
         </span>
       </div>
     </div>
   );
 }
 
-// 기분 — 한 줄 가로 배치 (자그마한 아이콘)
+// 기분 — 메모 QuickBlockBtn 스타일
 function MoodRow({ value, onChange }) {
   return (
     <div style={{
       flex: 1, minWidth: 0,
-      display: "flex", gap: 3, justifyContent: "flex-end",
-      overflowX: "auto",
+      display: "flex", gap: 4, justifyContent: "flex-end", flexWrap: "wrap",
     }}>
       {MOODS.map(m => {
         const active = value === m.id;
         return (
           <button key={m.id} onClick={() => onChange(active ? null : m.id)} title={m.label} style={{
             all: "unset", cursor: "pointer", flexShrink: 0,
-            display: "grid", placeItems: "center",
-            width: 24, height: 24, borderRadius: 6,
-            background: active ? "color-mix(in srgb, var(--point,#fdff85) 70%, white)" : "transparent",
-            border: active ? "1.2px solid var(--ink)" : "1px solid transparent",
-            boxShadow: active ? "0 1.5px 0 var(--paper-3)" : "none",
-            transition: "background .08s, border-color .08s",
-            opacity: active ? 1 : 0.55,
+            display: "inline-flex", alignItems: "center", gap: 4,
+            padding: "2px 7px", borderRadius: 6,
+            border: active ? "1.1px solid var(--ink)" : "1px solid #d8dee5",
+            background: active
+              ? "linear-gradient(180deg, var(--point-soft), var(--point))"
+              : "linear-gradient(180deg, #ffffff 0%, #f3f6fa 100%)",
+            boxShadow: active ? "0 1px 0 var(--paper-3)" : "0 1px 0 rgba(255,255,255,0.75) inset",
+            opacity: active ? 1 : 0.72,
+            transition: "opacity .08s, border-color .08s",
           }}>
-            <MoodIcon mood={m.id} size={18} />
+            <MoodIcon mood={m.id} size={16} />
+            <span style={{
+              fontFamily: "var(--hand)", fontSize: 10.5, color: "var(--ink)",
+              display: active ? "inline" : "none",
+            }}>{m.label}</span>
           </button>
         );
       })}
@@ -864,33 +847,39 @@ function MoodRow({ value, onChange }) {
   );
 }
 
-function Section({ title, badge, children }) {
+function DayPanel({ title, badge, children }) {
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 5 }}>
-        <div style={{
-          fontFamily: "var(--hand)", fontSize: 13, fontWeight: 700,
-          color: "var(--ink)", letterSpacing: "0.02em",
-        }}>{title}</div>
+    <div style={{
+      background: "#ffffff",
+      border: "1.1px solid var(--ink)", borderRadius: 8,
+      boxShadow: "0 2px 0 var(--paper-3)",
+      overflow: "hidden",
+    }}>
+      <div style={{
+        padding: "5px 10px",
+        background: "#eef2f7", borderBottom: "1px solid #d8dee5",
+        display: "flex", alignItems: "center", gap: 6,
+      }}>
+        <span style={{ fontFamily: "var(--hand)", fontSize: 12.5, fontWeight: 700, color: "#2b2f36" }}>{title}</span>
         {badge != null && (
           <span style={{
-            fontFamily: "var(--mono)", fontSize: 10, color: "var(--ink-2)",
-            background: "var(--paper-2)", padding: "0 6px", borderRadius: 99,
-            border: "1px solid var(--ink-soft)",
+            fontFamily: "var(--mono)", fontSize: 10, color: "#4a5568",
+            background: "rgba(255,255,255,0.75)", padding: "0 6px", borderRadius: 99,
+            border: "1px solid #d8dee5",
           }}>{badge}</span>
         )}
       </div>
-      {children}
+      <div style={{ padding: "8px 10px 10px" }}>{children}</div>
     </div>
   );
 }
 function Empty({ text }) {
   return (
-    <div style={{
-      padding: "16px 12px", textAlign: "center",
-      fontFamily: "var(--hand)", fontSize: 12, color: "var(--ink-3)",
-      background: "var(--paper-2)", border: "1.1px dashed var(--ink-soft)",
-      borderRadius: 10,
+    <div className="sk-cap" style={{
+      padding: "14px 10px", textAlign: "center",
+      fontSize: 12, color: "var(--ink-3)",
+      background: "#fafbfc", border: "1px dashed #d8dee5",
+      borderRadius: 8,
     }}>{text}</div>
   );
 }
@@ -899,10 +888,9 @@ function TodoLine({ t, onToggle }) {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 7,
-      padding: "7px 9px",
-      background: "var(--paper)",
-      border: "1.1px solid var(--ink)", borderRadius: 9,
-      boxShadow: "0 1.5px 0 var(--paper-3)",
+      padding: "6px 8px",
+      background: t.done ? "#f7f9fc" : "#ffffff",
+      border: "1px solid #e4e8ee", borderRadius: 6,
     }}>
       <button onClick={onToggle} title={t.done ? "되돌리기" : "끝냄으로"} style={{
         all: "unset", cursor: "pointer", flexShrink: 0,
