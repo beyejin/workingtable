@@ -103,8 +103,26 @@
     readyTimer = null;
   }
 
+  function rawGetIframe() {
+    return document.getElementById("yt-music-iframe");
+  }
+
+  function rawPostCommand(func, args) {
+    const iframe = rawGetIframe();
+    if (!iframe || !iframe.contentWindow) return false;
+    try {
+      iframe.contentWindow.postMessage(
+        JSON.stringify({ event: "command", func: func, args: args || "" }),
+        "*"
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function rawRemoveIframe() {
-    const it = document.getElementById("yt-music-iframe");
+    const it = rawGetIframe();
     if (it && it.parentNode) it.parentNode.removeChild(it);
   }
 
@@ -129,6 +147,7 @@
       rel: "0",
       modestbranding: "1",
       iv_load_policy: "3",
+      enablejsapi: "1",
       origin: embedOrigin,
       widget_referrer: embedOrigin,
     });
@@ -332,23 +351,31 @@
           setDebug("paused");
           emit();
         } else if (queue.length) {
-          if (state.videoId) {
+          invokeNative("youtube_player_resume").catch(err => {
+            fallbackToRaw(err);
             play(index, true);
-          } else {
-            play(index, true);
-          }
+          });
+          state.playing = true;
+          setDebug("playing");
+          emit();
         }
         return;
       }
 
       if (useRawMode) {
         if (state.playing) {
-          rawRemoveIframe();
+          if (!rawPostCommand("pauseVideo")) rawRemoveIframe();
           state.playing = false;
           setDebug("paused");
           emit();
         } else if (queue.length) {
-          play(index, true);
+          if (rawGetIframe() && rawPostCommand("playVideo")) {
+            state.playing = true;
+            setDebug("playing");
+            emit();
+          } else {
+            play(index, true);
+          }
         }
         return;
       }

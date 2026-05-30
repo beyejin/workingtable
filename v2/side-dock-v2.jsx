@@ -264,8 +264,8 @@ function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSt
   const TAB_GAP = 4;
 
   // ---- 자동 숨김 로직 ----
-  // autoHide=true 일 때: 처음엔 숨김. 가장자리에 마우스 ~1.5초 호버 → 슬라이드로 노출.
-  const REVEAL_DELAY = 1500;
+  // autoHide=true 일 때: 처음엔 숨김. 가장자리에 마우스 ~1초 호버 → 슬라이드로 노출.
+  const REVEAL_DELAY = 1000;
   const HIDE_DELAY = 220;
   const [revealed, setRevealed] = useState(false);
   const revealTimerRef = React.useRef(null);
