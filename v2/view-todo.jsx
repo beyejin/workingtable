@@ -24,10 +24,8 @@ function isInTodoPeriod(t, day) {
 function todoMatchesDay(t, day, today) {
   if (isInTodoPeriod(t, day)) return true;
   if (t.dueDate === day) return true;
-  if (day === today) {
-    if (t.dueDate && t.dueDate < day && !t.done) return true;
-    if (!t.dueDate && !normalizedPeriod(t)) return true;
-  }
+  // 오늘: 마감·기간 없는 인박스만. 과거 마감일은 해당 날짜 뷰에서만 표시.
+  if (day === today && !t.dueDate && !normalizedPeriod(t)) return true;
   return false;
 }
 function fmtMonthLabel(iso) {
