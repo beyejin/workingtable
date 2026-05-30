@@ -21,6 +21,22 @@ function isInTodoPeriod(t, day) {
   const p = normalizedPeriod(t);
   return !!p && p.start <= day && day <= p.end;
 }
+function todoMatchesDay(t, day, today) {
+  if (isInTodoPeriod(t, day)) return true;
+  if (t.dueDate === day) return true;
+  if (day === today) {
+    if (t.dueDate && t.dueDate < day && !t.done) return true;
+    if (!t.dueDate && !normalizedPeriod(t)) return true;
+  }
+  return false;
+}
+function fmtMonthLabel(iso) {
+  const m = parseInt(iso.slice(5, 7), 10);
+  const lng = window.i18n?.get?.() || "ko";
+  if (lng === "en") return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m - 1];
+  if (lng === "ja" || lng === "zh") return `${m}月`;
+  return `${m}월`;
+}
 function periodLabel(t) {
   const p = normalizedPeriod(t);
   if (!p) return "";
@@ -142,37 +158,28 @@ function TodoView({ tweaks } = {}) {
   // 이번달 범위 — '전체' 모드에서 사용
   const monthPrefix = todayStr.slice(0, 8); // "YYYY-MM-"
   const inThisMonth = (d) => typeof d === "string" && d.startsWith(monthPrefix);
-  // todo 가 이번달 범위에 걸리는지 (생성/마감/완료 중 하나라도)
-  const inMonthRange = (t) => (
-    inThisMonth(t.createdAt) ||
-    (t.dueDate && inThisMonth(t.dueDate)) ||
-    (t.completedAt && inThisMonth(t.completedAt.slice(0, 10)))
-  );
+  // todo 가 이번달 범위에 걸리는지 (마감/기간/완료 기준 — 생성일만으로는 포함하지 않음)
+  const inMonthRange = (t) => {
+    if (t.dueDate && inThisMonth(t.dueDate)) return true;
+    const p = normalizedPeriod(t);
+    if (p) {
+      const monthStart = monthPrefix + "01";
+      const monthEnd = monthPrefix + "31";
+      return p.start <= monthEnd && p.end >= monthStart;
+    }
+    if (t.completedAt && inThisMonth(t.completedAt.slice(0, 10))) return true;
+    if (!t.dueDate && !p && inThisMonth(t.createdAt)) return true;
+    return false;
+  };
 
   // 모드별 미완료 카운트 — 토글 뱃지에 표시
-  const dateModeIncomplete = items.filter(t => {
-    if (t.done) return false;
-    if (isToday) {
-      if (!t.dueDate) return true;
-      if (t.dueDate === todayStr) return true;
-      if (t.dueDate < todayStr) return true;
-      return false;
-    }
-    return t.dueDate === selectedDate;
-  }).length;
+  const dateModeIncomplete = items.filter(t => !t.done && todoMatchesDay(t, selectedDate, todayStr)).length;
   const allModeIncomplete = items.filter(t => !t.done && inMonthRange(t)).length;
 
   // 필터 — 모드에 따라
   const list = items.filter(t => {
     if (filterMode === "all") return inMonthRange(t);
-    if (isToday) {
-      if (isInTodoPeriod(t, todayStr)) return true;
-      if (!t.dueDate) return true;
-      if (t.dueDate === todayStr) return true;
-      if (t.dueDate < todayStr && !t.done) return true;
-      return false;
-    }
-    return t.dueDate === selectedDate || isInTodoPeriod(t, selectedDate);
+    return todoMatchesDay(t, selectedDate, todayStr);
   }).slice().sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1;
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
@@ -239,13 +246,15 @@ function TodoView({ tweaks } = {}) {
     ? L("todo.addPh")
     : (isToday ? L("todo.addPh") : `${fmtMD(selectedDate)} ${L("todo.addPhDate")}`);
 
-  // 헤더 — 두 칸 세그먼트 토글 ([날짜] [전체])
+  const monthLabel = fmtMonthLabel(todayStr);
+
+  // 헤더 — 두 칸 세그먼트 토글 ([날짜] [N월])
   const headerToggle = (
     <div style={{ display: "flex", alignItems: "center", gap: 4, width: "100%", minWidth: 0 }}>
       <div style={{ display: "flex", gap: 4, minWidth: 0 }}>
         <SegPill
           active={filterMode === "date"}
-          onClick={() => setFilterMode("date")}
+          onClick={() => { setFilterMode("date"); setSelectedDate(todayStr); }}
           icon="📅"
           label={dateLabelShort}
           count={dateModeIncomplete}
@@ -254,7 +263,7 @@ function TodoView({ tweaks } = {}) {
           active={filterMode === "all"}
           onClick={() => setFilterMode("all")}
           icon="📋"
-          label={L("todo.all")}
+          label={monthLabel}
           count={allModeIncomplete}
         />
       </div>
