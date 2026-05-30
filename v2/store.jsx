@@ -349,6 +349,31 @@ function setState(updater) {
 function getState() { return _state; }
 function subscribe(fn) { _subs.add(fn); return () => _subs.delete(fn); }
 
+function normalizedTodoPeriod(t) {
+  const a = t.startDate || null;
+  const b = t.endDate || null;
+  if (!a && !b) return null;
+  const start = a || b;
+  const end = b || a;
+  return start <= end ? { start, end } : { start: end, end: start };
+}
+function completionDay(t) {
+  if (t.completedAt) return t.completedAt.slice(0, 10);
+  if (!t.done) return null;
+  if (t.dueDate) return t.dueDate;
+  return (t.createdAt || "").slice(0, 10) || null;
+}
+function matchesTodoDay(t, day, today) {
+  const comp = completionDay(t);
+  if (t.done) return comp === day;
+  const period = normalizedTodoPeriod(t);
+  if (period && period.start <= day && day <= period.end) return true;
+  if (t.dueDate === day) return true;
+  if (day === today && !t.dueDate && !period) return true;
+  if (day === today && t.dueDate && t.dueDate < today) return true;
+  return false;
+}
+
 function pomoCycleMs(timer) {
   return (timer?.lengthMin ?? 25) * 60 * 1000;
 }
@@ -1295,22 +1320,8 @@ const select = {
   dayBundle: (s, date) => {
     const pid = s.currentProjectId;
     const todos = (s.todos ?? []).filter(t => t.projectId === pid);
-    const inPeriod = (t) => {
-      const a = t.startDate || null;
-      const b = t.endDate || null;
-      if (!a && !b) return false;
-      const start = a || b;
-      const end = b || a;
-      const lo = start <= end ? start : end;
-      const hi = start <= end ? end : start;
-      return lo <= date && date <= hi;
-    };
-    const items = todos.filter(t => {
-      if (t.dueDate === date) return true;
-      if (inPeriod(t)) return true;
-      if (!t.dueDate && !inPeriod(t) && t.done && (t.completedAt || "").slice(0, 10) === date) return true;
-      return false;
-    });
+    const t = today();
+    const items = todos.filter(todo => matchesTodoDay(todo, date, t));
     const totalSec = items.reduce((sum, t) => sum + (t.trackedSeconds || 0), 0);
     const sess = (s.workSessions ?? []).find(w => w.date === date);
     // 그 날 가장 많이 들은 곡
@@ -1338,5 +1349,5 @@ const select = {
 // 글로벌 노출
 window.diary = {
   useDiary, actions, select, today, fmtKDate, fmtKDateShort, getState, memoTitleFromHtml, MEMO_ICONS,
-  pomoCycleMs, pomoIdleWorkMs,
+  pomoCycleMs, pomoIdleWorkMs, matchesTodoDay, completionDay,
 };

@@ -22,11 +22,7 @@ function isInTodoPeriod(t, day) {
   return !!p && p.start <= day && day <= p.end;
 }
 function todoMatchesDay(t, day, today) {
-  if (isInTodoPeriod(t, day)) return true;
-  if (t.dueDate === day) return true;
-  // 오늘: 마감·기간 없는 인박스만. 과거 마감일은 해당 날짜 뷰에서만 표시.
-  if (day === today && !t.dueDate && !normalizedPeriod(t)) return true;
-  return false;
+  return diary.matchesTodoDay(t, day, today);
 }
 function fmtMonthLabel(iso) {
   const m = parseInt(iso.slice(5, 7), 10);
@@ -203,7 +199,7 @@ function TodoView({ tweaks } = {}) {
     }
   });
   const doneDates = new Set(
-    items.filter(t => t.done && t.completedAt).map(t => t.completedAt.slice(0, 10))
+    items.filter(t => t.done).map(t => diary.completionDay(t)).filter(Boolean)
   );
 
   const onPick = (id) => setSel(s => (s === id ? null : id));

@@ -187,24 +187,11 @@ function WeekPane({ onPickDay }) {
   const doneByDay = {};
   dayStrings.forEach(d => { dueByDay[d] = []; doneByDay[d] = []; });
   todos.forEach(t => {
-    const period = normalizedTodoPeriod(t);
-    if (period) {
-      eachIsoDate(period.start, period.end, (d) => {
-        if (dueByDay[d]) dueByDay[d].push(t);
-      });
-      return;
-    }
-    if (t.dueDate) {
-      if (dueByDay[t.dueDate]) dueByDay[t.dueDate].push(t);
-      return;
-    }
-    if (t.done && t.completedAt) {
-      const k = t.completedAt.slice(0, 10);
-      if (doneByDay[k]) doneByDay[k].push(t);
-      return;
-    }
-    // 마감·기간 없는 인박스 — 오늘 칸에만 (할 일 탭과 동일)
-    if (dueByDay[todayStr]) dueByDay[todayStr].push(t);
+    dayStrings.forEach(d => {
+      if (!diary.matchesTodoDay(t, d, todayStr)) return;
+      if (t.done) doneByDay[d].push(t);
+      else dueByDay[d].push(t);
+    });
   });
   // 날짜별 — 현재 프로젝트의 작업시간만 표시. 다른 프로젝트나 미분류는 숨김.
   const workByDay = {};
