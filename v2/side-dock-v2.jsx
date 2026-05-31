@@ -167,7 +167,10 @@ function SideDockV2({ tweaks, setTweak }) {
       <DiaryTabs
         tabs={visibleTabs}
         active={active}
-        onSelect={setActive}
+        onSelect={(tab) => {
+          window.dispatchEvent(new Event("closeMusicPanel"));
+          setActive(tab);
+        }}
         dockSide={dockSide}
         tabSide={effectiveTabSide}
         dockWidth={DOCK_W}
@@ -336,10 +339,10 @@ function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSt
         style={{
           all: "unset",
           cursor: "pointer",
-          width: TAB_W + (isActive ? 6 : 0),
+          width: TAB_W,
           height: TAB_H,
-          marginLeft: stickRight ? (isActive ? -4 : 0) : 0,
-          marginRight: !stickRight ? (isActive ? -4 : 0) : 0,
+          marginLeft: 0,
+          marginRight: 0,
           background: isActive ? cm(72) : cm(42),
           backdropFilter: "blur(6px)",
           WebkitBackdropFilter: "blur(6px)",
@@ -456,11 +459,22 @@ function CloseAppButton() {
 // 위젯은 창 전체를 채우고, 외곽(time row)에 data-tauri-drag-region 을 걸어 OS 레벨로 창을 끔.
 function DockRevealEdge({ tweaks, setTweak, onReveal }) {
   const { state } = diary.useDiary();
-  const minutes = diary.select.workMinutesToday(state);
-  const hh = Math.floor(minutes / 60);
-  const mm = minutes % 60;
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!window.workActivity) return;
+    return window.workActivity.subscribe(setTick);
+  }, []);
+
+  const min = diary.select.workMinutesToday(state);
+  const pendingSec = window.workActivity ? window.workActivity.getPendingSec() : 0;
+  const totalSec = (min * 60) + pendingSec;
+
+  const hh = Math.floor(totalSec / 3600);
+  const mm = Math.floor((totalSec % 3600) / 60);
+  const ss = totalSec % 60;
   const pad = (n) => String(n).padStart(2, "0");
-  const timeDisplay = `${pad(hh)}:${pad(mm)}`;
+  const timeDisplay = `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
 
   // 음악 상태 구독
   const [music, setMusic] = useState(
@@ -512,23 +526,21 @@ function DockRevealEdge({ tweaks, setTweak, onReveal }) {
         <div data-tauri-drag-region style={{ position: "absolute", inset: 0, cursor: "grab" }} />
         <div style={{
           position: "absolute", inset: 0,
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          display: "flex", alignItems: "center", justifyContent: "center",
           pointerEvents: "none",
         }}>
-          <span style={{ fontSize: 12, opacity: 0.65, textShadow: "none" }}>⏱</span>
-          <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: "0.04em", lineHeight: 1 }}>{timeDisplay}</span>
-        </div>
-        <button onClick={onReveal} title={L("set.dockReveal")} aria-label={L("set.dockReveal")}
-          style={{
+          <button onClick={onReveal} title={L("set.dockReveal")} style={{
             all: "unset", cursor: "pointer",
-            position: "absolute", top: 4, right: 4,
-            width: 22, height: 22, borderRadius: 5,
-            display: "grid", placeItems: "center",
-            fontSize: 13, fontWeight: 700, lineHeight: 1, color: "var(--ink)",
-            background: "rgba(255,255,255,0.55)",
-            border: "1px solid var(--ink-soft)",
-            zIndex: 2,
-          }}>⤢</button>
+            display: "inline-flex", alignItems: "center", gap: 5,
+            padding: "2px 8px", borderRadius: 6,
+            background: "rgba(255, 255, 255, 0.12)",
+            pointerEvents: "auto",
+            zIndex: 3,
+          }}>
+            <span style={{ fontSize: 11, opacity: 0.65, textShadow: "none" }}>⏱</span>
+            <span style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: "0.02em", lineHeight: 1 }}>{timeDisplay}</span>
+          </button>
+        </div>
       </div>
       <div style={{
         flexShrink: 0,
@@ -537,13 +549,62 @@ function DockRevealEdge({ tweaks, setTweak, onReveal }) {
         borderTop: "1px solid rgba(0,0,0,0.1)",
         background: "rgba(255,255,255,0.22)",
       }}>
-        <button onClick={onPrev} title={L("music.prev")} style={music.hasQueue ? iconBtn : disabledBtn} disabled={!music.hasQueue}>⏮</button>
-        <button onClick={onToggle} title={music.playing ? L("music.pause") : L("music.play")} style={music.hasQueue ? iconBtn : disabledBtn} disabled={!music.hasQueue}>{music.playing ? "⏸" : "▶"}</button>
-        <button onClick={onNext} title={L("music.next")} style={music.hasQueue ? iconBtn : disabledBtn} disabled={!music.hasQueue}>⏭</button>
+        <button onClick={onPrev} title={L("music.prev")} style={music.hasQueue ? iconBtn : disabledBtn} disabled={!music.hasQueue}>
+          <MusicBtnIcon type="prev" />
+        </button>
+        <button onClick={onToggle} title={music.playing ? L("music.pause") : L("music.play")} style={music.hasQueue ? iconBtn : disabledBtn} disabled={!music.hasQueue}>
+          <MusicBtnIcon type={music.playing ? "pause" : "play"} />
+        </button>
+        <button onClick={onNext} title={L("music.next")} style={music.hasQueue ? iconBtn : disabledBtn} disabled={!music.hasQueue}>
+          <MusicBtnIcon type="next" />
+        </button>
       </div>
     </div>
   );
 }
+
+function MusicBtnIcon({ type }) {
+  const common = {
+    fill: "currentColor",
+    stroke: "none",
+  };
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true" focusable="false" style={{
+      display: "block",
+      overflow: "visible",
+    }}>
+      {type === "prev" && (
+        <>
+          <rect x="3" y="3" width="1.7" height="10" rx="0.6" {...common} />
+          <path d="M12.5 3.2v9.6L5.4 8z" {...common} />
+        </>
+      )}
+      {type === "play" && <path d="M5.2 3.1v9.8L12.4 8z" {...common} />}
+      {type === "pause" && (
+        <>
+          <rect x="4.2" y="3.1" width="2.6" height="9.8" rx="0.7" {...common} />
+          <rect x="9.2" y="3.1" width="2.6" height="9.8" rx="0.7" {...common} />
+        </>
+      )}
+      {type === "next" && (
+        <>
+          <path d="M3.5 3.2v9.6L10.6 8z" {...common} />
+          <rect x="11.3" y="3" width="1.7" height="10" rx="0.6" {...common} />
+        </>
+      )}
+      {type === "plus" && (
+        <>
+          <rect x="7.1" y="3.3" width="1.8" height="9.4" rx="0.7" {...common} />
+          <rect x="3.3" y="7.1" width="9.4" height="1.8" rx="0.7" {...common} />
+        </>
+      )}
+      {type === "chevronUp" && (
+        <path d="M3.5 10.2 8 5.8l4.5 4.4-1.2 1.1L8 8.1l-3.3 3.2z" {...common} />
+      )}
+    </svg>
+  );
+}
+window.MusicBtnIcon = MusicBtnIcon;
 
 // ---- 페이크 IDE 배경 ----
 function FakeIde({ dockSide, dockWidth }) {
@@ -724,12 +785,6 @@ function SettingsView({ tweaks, setTweak }) {
         <SetSeg value={(t.showRoomTab ?? false) ? "on" : "off"} onChange={v => set("showRoomTab", v === "on")}
           options={[["on", L("set.on")], ["off", L("set.off")]]} />
         <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.roomTabHint")}</div>
-      </SetSection>
-
-      <SetSection label={L("set.pomodoro")}>
-        <SetSeg value={(t.showPomodoro ?? false) ? "on" : "off"} onChange={v => set("showPomodoro", v === "on")}
-          options={[["on", L("set.on")], ["off", L("set.off")]]} />
-        <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.pomodoroHint")}</div>
       </SetSection>
 
       <SetSection label={L("set.dockHide")}>
@@ -916,11 +971,18 @@ function DecorateView({ tweaks, setTweak }) {
   };
   useI18n();
   const myThemes = t.myThemes ?? [];
-  const saveMyTheme = () => {
-    const name = prompt(L("deco.saveName"), L("deco.myThemeName") + (myThemes.length + 1));
-    if (!name?.trim()) return;
-    const cur = { name: name.trim(), type: bgType, angle: bgAngle, stops, chrome: t.chromeColor ?? "#a9cdf5", accent: t.tabAccent };
+  const [saving, setSaving] = useState(false);
+  const [themeName, setThemeName] = useState("");
+  const startSaveTheme = () => {
+    setThemeName(L("deco.myThemeName") + (myThemes.length + 1));
+    setSaving(true);
+  };
+  const confirmSaveTheme = () => {
+    if (!themeName.trim()) return;
+    const cur = { name: themeName.trim(), type: bgType, angle: bgAngle, stops, chrome: t.chromeColor ?? "#a9cdf5", accent: t.tabAccent };
     set("myThemes", [...myThemes, cur]);
+    setSaving(false);
+    setThemeName("");
   };
   const delMyTheme = (i) => set("myThemes", myThemes.filter((_, idx) => idx !== i));
   const [sec, setSec] = useState("theme");
@@ -963,12 +1025,44 @@ function DecorateView({ tweaks, setTweak }) {
                   {myThemes.map((th, i) => themeBtn(th, i, true))}
                 </div>
               )}
-              <button onClick={saveMyTheme} style={{
-                all: "unset", cursor: "pointer", display: "block", width: "100%", boxSizing: "border-box", textAlign: "center",
-                padding: "8px", borderRadius: 10,
-                border: "1.1px solid var(--ink)", background: "linear-gradient(180deg, var(--point-soft), var(--point))",
-                fontFamily: "var(--hand)", fontWeight: 700, fontSize: 13, color: "var(--ink)",
-              }}>{L("deco.save")}</button>
+              {saving ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%" }}>
+                  <input
+                    type="text"
+                    value={themeName}
+                    onChange={(e) => setThemeName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") confirmSaveTheme(); }}
+                    style={{
+                      width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 10,
+                      border: "1.1px solid var(--ink)", background: "var(--paper)",
+                      fontFamily: "var(--hand)", fontSize: 13, color: "var(--ink)",
+                    }}
+                    placeholder={L("deco.saveName")}
+                    autoFocus
+                  />
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={confirmSaveTheme} style={{
+                      all: "unset", cursor: "pointer", flex: 1, textAlign: "center",
+                      padding: "6px", borderRadius: 10,
+                      border: "1.1px solid var(--ink)", background: "linear-gradient(180deg, var(--point-soft), var(--point))",
+                      fontFamily: "var(--hand)", fontWeight: 700, fontSize: 13, color: "var(--ink)",
+                    }}>{L("common.save")}</button>
+                    <button onClick={() => setSaving(false)} style={{
+                      all: "unset", cursor: "pointer", flex: 1, textAlign: "center",
+                      padding: "6px", borderRadius: 10,
+                      border: "1.1px solid var(--ink)", background: "var(--paper)",
+                      fontFamily: "var(--hand)", fontWeight: 700, fontSize: 13, color: "var(--ink)",
+                    }}>{L("common.cancel")}</button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={startSaveTheme} style={{
+                  all: "unset", cursor: "pointer", display: "block", width: "100%", boxSizing: "border-box", textAlign: "center",
+                  padding: "8px", borderRadius: 10,
+                  border: "1.1px solid var(--ink)", background: "linear-gradient(180deg, var(--point-soft), var(--point))",
+                  fontFamily: "var(--hand)", fontWeight: 700, fontSize: 13, color: "var(--ink)",
+                }}>{L("deco.save")}</button>
+              )}
             </SetSection>
           </>
         )}

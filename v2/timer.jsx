@@ -35,7 +35,7 @@ function Timer() {
       {/* 작업 시간 / 디데이 — 한 줄 (외곽 박스 없음) */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
         <WorkTime />
-        <span style={{ color: "var(--ink-3)", fontSize: 16 }}>/</span>
+        <span style={{ display: "inline-flex", alignItems: "center", height: 22, color: "var(--ink-3)", fontSize: 15, lineHeight: 1 }}>/</span>
         <DDay />
       </div>
     </div>
@@ -46,66 +46,73 @@ function Timer() {
 // 앱 실행 = 기본 ON (초록 점, "WORKING"). 점 클릭하면 STOP (검은 점, "STOPPED").
 // 호버하면 우측에 작은 ⟳ 버튼 — 클릭 시 오늘 작업 시간을 0으로 초기화.
 function WorkTime() {
-  const { state, actions } = diary.useDiary();
-  const min = diary.select.workMinutesToday(state);
-  const h = Math.floor(min / 60);
-  const m = min % 60;
+  const { state } = diary.useDiary();
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!window.workActivity) return;
+    return window.workActivity.subscribe(setTick);
+  }, []);
+
+  const totalSec = diary.select.workSecondsToday
+    ? diary.select.workSecondsToday(state)
+    : diary.select.workMinutesToday(state) * 60;
+  const pendingSec = window.workActivity ? window.workActivity.getPendingSec() : 0;
+  const currentTotal = totalSec + pendingSec;
+
+  const h = Math.floor(currentTotal / 3600);
+  const m = Math.floor((currentTotal % 3600) / 60);
+  const sec = currentTotal % 60;
   const pad = (n) => String(n).padStart(2, "0");
-  const [hover, setHover] = useState(false);
-  const [running, setRunning] = useState(() => !!(window.workTracker && window.workTracker.isRunning()));
+
+  const [blink, setBlink] = useState(true);
+  const [external, setExternal] = useState(() => !!(window.workTracker && window.workTracker.isExternal()));
+
+  useEffect(() => {
+    const id = setInterval(() => setBlink(b => !b), 1100);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => {
     if (!window.workTracker) return;
-    return window.workTracker.subscribe(setRunning);
+    return window.workTracker.subscribe(setExternal);
   }, []);
-  const toggleRunning = () => { if (window.workTracker) window.workTracker.toggle(); };
-  const resetWork = async () => {
-    const msg = L("worktrack.resetConfirm");
-    const ok = await (window.dialog
-      ? window.dialog.confirm(msg)
-      : Promise.resolve(window.confirm(msg)));
-    if (ok) actions.resetWorkMinutes();
-  };
 
-  const dotColor = running ? "#ff3b3b" : "#1f1f1f";
-  const label = running ? L("worktrack.runningOn") : L("worktrack.runningOff");
+  const toggleExternal = () => { if (window.workTracker) window.workTracker.toggle(); };
+
+  const dotColor = external ? "#111827" : "#ff5e5e";
+  const label = external ? L("worktrack.externalOn") : L("worktrack.externalOff");
+  const statusColor = external ? "var(--ink-3)" : "#e65353";
 
   return (
-    <span
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "var(--mono)", fontWeight: 700, fontSize: 15, color: "var(--ink)" }}
-    >
-      <button onClick={toggleRunning} title={label} style={{
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, height: 22, fontFamily: "var(--mono)", fontWeight: 700, fontSize: 15, lineHeight: 1, color: "var(--ink)" }}>
+      <button onClick={toggleExternal} title={label} style={{
         all: "unset", cursor: "pointer", flexShrink: 0,
-        width: 7, height: 7, borderRadius: "50%",
+        width: 9, height: 9, borderRadius: "50%",
+        boxSizing: "border-box",
+        display: "grid", placeItems: "center",
         background: dotColor,
-        boxShadow: running ? "0 0 4px rgba(255,59,59,0.55)" : "none",
-        animation: running ? "wt-blink 1.1s ease-in-out infinite" : "none",
-        transition: "background .15s",
+        opacity: external ? 1 : (blink ? 0.95 : 0.6),
+        border: external ? "1px solid rgba(255,255,255,0.45)" : "1px solid transparent",
+        transition: "opacity .5s ease, background .15s",
       }} />
-      <span style={{ fontSize: 9.5, letterSpacing: 1, color: running ? "#b03030" : "var(--ink-2)" }}>
-        {running ? "WORKING" : "STOPPED"}
+      <span style={{
+        display: "inline-flex",
+        alignItems: "center",
+        height: 13,
+        fontSize: 9.5,
+        lineHeight: 1,
+        letterSpacing: 1,
+        color: statusColor,
+      }}>
+        {external ? "STOPPED" : "WORKING"}
       </span>
-      <span>{pad(h)}</span>
-      <span style={{ fontSize: 10, opacity: .6 }}>H</span>
-      <span>{pad(m)}</span>
-      <span style={{ fontSize: 10, opacity: .6 }}>M</span>
-      <button
-        onClick={resetWork}
-        title={L("worktrack.resetTip")}
-        aria-label={L("worktrack.resetTip")}
-        style={{
-          all: "unset", cursor: "pointer", flexShrink: 0,
-          marginLeft: 2,
-          width: 16, height: 16, borderRadius: "50%",
-          display: "grid", placeItems: "center",
-          fontSize: 11, fontWeight: 700, lineHeight: 1,
-          color: "var(--ink-2)",
-          opacity: hover ? 0.85 : 0,
-          pointerEvents: hover ? "auto" : "none",
-          transition: "opacity 0.15s",
-        }}
-      >⟳</button>
+      <span style={{ display: "inline-flex", alignItems: "center", height: 22 }}>{pad(h)}</span>
+      <span style={{ fontSize: 10, opacity: .6, display: "inline-flex", alignItems: "center", height: 22, transform: "translateY(-0.5px)" }}>H</span>
+      <span style={{ display: "inline-flex", alignItems: "center", height: 22 }}>{pad(m)}</span>
+      <span style={{ fontSize: 10, opacity: .6, display: "inline-flex", alignItems: "center", height: 22, transform: "translateY(-0.5px)" }}>M</span>
+      <span style={{ display: "inline-flex", alignItems: "center", height: 22 }}>{pad(sec)}</span>
+      <span style={{ fontSize: 10, opacity: .6, display: "inline-flex", alignItems: "center", height: 22, transform: "translateY(-0.5px)" }}>S</span>
     </span>
   );
 }
@@ -133,10 +140,10 @@ function DDay() {
   const dayNum = dday.date ? new Date(dday.date + "T00:00:00").getDate() : null;
 
   return (
-    <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 6 }}>
+    <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 6, height: 24 }}>
       <button onClick={() => setOpen(o => !o)} title={ddayLabel || L("dday.title")} style={{
         all: "unset", cursor: "pointer",
-        display: "inline-flex", alignItems: "center", gap: 6,
+        display: "inline-flex", alignItems: "center", gap: 6, height: 24,
       }}>
         {/* 달력 아이콘 */}
         <div style={{
@@ -153,6 +160,7 @@ function DDay() {
         <span style={{
           fontFamily: "var(--mono)", fontWeight: 700,
           fontSize: diff == null ? 13 : 17, color: "var(--ink)",
+          display: "inline-flex", alignItems: "center", height: 24, lineHeight: 1,
         }}>{ddayText(diff)}</span>
       </button>
 
@@ -164,6 +172,7 @@ function DDay() {
         style={{
           fontFamily: "var(--hand)", fontSize: 12, color: "var(--ink-2)",
           maxWidth: 76, whiteSpace: "nowrap", overflow: "hidden",
+          display: "inline-flex", alignItems: "center", height: 24,
         }}
       />
 
@@ -233,6 +242,20 @@ function extractYouTubeId(url) {
   return null;
 }
 
+// 리렌더링 성능 최적화를 위한 MarqueeText 분리
+const MarqueeText = React.memo(({ label }) => {
+  return (
+    <div className="marquee" style={{
+      flex: 1, height: 20, lineHeight: "20px",
+      borderRadius: 6, padding: "0 4px",
+      background: "rgba(40,51,63,0.92)",
+      color: "#9be15d", fontFamily: "var(--mono)", fontSize: 12,
+    }}>
+      <span className="marquee-inner">{label}　♫　{label}</span>
+    </div>
+  );
+});
+
 function PlaylistBar() {
   const { state, actions } = diary.useDiary();
   const tracks = state.playlist ?? [];
@@ -241,6 +264,17 @@ function PlaylistBar() {
   const [playerOpen, setPlayerOpen] = useState(false);
   const [err, setErr] = useState("");
   const playerSlotRef = useRef(null);
+
+  useEffect(() => {
+    const closeMusic = () => {
+      setOpen(false);
+      setPlayerOpen(false);
+    };
+    window.addEventListener("closeMusicPanel", closeMusic);
+    return () => {
+      window.removeEventListener("closeMusicPanel", closeMusic);
+    };
+  }, []);
 
   // 플레이리스트 변경 시 전역 큐 동기화 (저장 곡 자동 재생)
   useEffect(() => { window.musicPlayer.setQueue(tracks); }, [tracks]);
@@ -307,20 +341,19 @@ function PlaylistBar() {
   return (
     <div style={{ position: "relative" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <button onClick={() => runMusic(() => music.prev())} title="이전" style={pbBtn}>⏮</button>
-        <button onClick={() => runMusic(() => music.toggle())} title={ms.playing ? "일시정지" : "재생"} style={pbBtn}>
-          {ms.playing ? "⏸" : "▶"}
+        <button onClick={() => runMusic(() => music.prev())} title="이전" style={pbBtn}>
+          <MusicBtnIcon type="prev" />
         </button>
-        <button onClick={() => runMusic(() => music.next())} title="다음" style={pbBtn}>⏭</button>
-        <div className="marquee" style={{
-          flex: 1, height: 20, lineHeight: "20px",
-          borderRadius: 6, padding: "0 4px",
-          background: "rgba(40,51,63,0.92)",
-          color: "#9be15d", fontFamily: "var(--mono)", fontSize: 12,
-        }}>
-          <span className="marquee-inner">{label}　♫　{label}</span>
-        </div>
-        <button onClick={() => setOpen(o => !o)} title="플레이리스트" style={pbBtn}>{open ? "▾" : "+"}</button>
+        <button onClick={() => runMusic(() => music.toggle())} title={ms.playing ? "일시정지" : "재생"} style={pbBtn}>
+          <MusicBtnIcon type={ms.playing ? "pause" : "play"} />
+        </button>
+        <button onClick={() => runMusic(() => music.next())} title="다음" style={pbBtn}>
+          <MusicBtnIcon type="next" />
+        </button>
+        <MarqueeText label={label} />
+        <button onClick={() => setOpen(o => !o)} title="플레이리스트" style={pbBtn}>
+          <MusicBtnIcon type={open ? "chevronUp" : "plus"} />
+        </button>
       </div>
       {/* 펼침: 곡 추가 + 목록 (위로 팝오버) */}
       {open && (
@@ -350,21 +383,44 @@ function PlaylistBar() {
           <InlineAdd placeholder={L("music.paste")} onAdd={add} />
           {ms.nativeMode && (
             <div style={{ marginTop: 8 }}>
-              <button
-                onClick={() => setPlayerOpen(v => !v)}
-                title="YouTube"
-                style={{
-                  all: "unset", cursor: "pointer", width: "100%",
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  boxSizing: "border-box", padding: "4px 6px",
-                  border: "1.1px solid var(--ink)", borderRadius: 6,
-                  background: "var(--paper-2)", color: "var(--ink)",
-                  fontFamily: "var(--mono)", fontSize: 11,
-                }}
-              >
-                <span>YouTube</span>
-                <span>{playerOpen ? "▾" : "▸"}</span>
-              </button>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  onClick={() => setPlayerOpen(v => !v)}
+                  title="YouTube"
+                  style={{
+                    all: "unset", cursor: "pointer", flex: 1,
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    boxSizing: "border-box", padding: "4px 6px",
+                    border: "1.1px solid var(--ink)", borderRadius: 6,
+                    background: "var(--paper-2)", color: "var(--ink)",
+                    fontFamily: "var(--mono)", fontSize: 11,
+                  }}
+                >
+                  <span>YouTube</span>
+                  <span>{playerOpen ? "▾" : "▸"}</span>
+                </button>
+                {ms.videoId && (
+                  <button
+                    onClick={() => {
+                      const url = `https://www.youtube.com/watch?v=${ms.videoId}`;
+                      if (window.__TAURI__?.opener?.openUrl) {
+                        window.__TAURI__.opener.openUrl(url);
+                      } else {
+                        window.open(url, "_blank");
+                      }
+                    }}
+                    title="YouTube에서 크게 보기"
+                    style={{
+                      all: "unset", cursor: "pointer", padding: "4px 8px",
+                      border: "1.1px solid var(--ink)", borderRadius: 6,
+                      background: "var(--paper)", color: "var(--ink)",
+                      fontFamily: "var(--hand)", fontSize: 11, fontWeight: 700,
+                    }}
+                  >
+                    ↗ 크게 보기
+                  </button>
+                )}
+              </div>
               {playerOpen && (
                 <div
                   ref={playerSlotRef}
