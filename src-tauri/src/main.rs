@@ -159,7 +159,6 @@ mod native_youtube {
         let webview = get_or_create_webview(&app)?;
 
         let _ = webview.show();
-        let _ = webview.set_focus();
         load_with_referer(&webview, embed_url, REFERRER.to_string())
     }
 

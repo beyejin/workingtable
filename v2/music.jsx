@@ -24,6 +24,17 @@
   let wantPlay = false;
   let apiTimer = null;
   let readyTimer = null;
+  const VOLUME_KEY = "todoary.music.volume";
+
+  function loadVolume() {
+    try {
+      const v = parseInt(localStorage.getItem(VOLUME_KEY), 10);
+      if (Number.isFinite(v) && v >= 0 && v <= 100) return v;
+    } catch (_) {}
+    return 70;
+  }
+
+  let volume = loadVolume();
   const state = {
     playing: false,
     title: "",
@@ -34,17 +45,6 @@
     nativeMode: useNativeMode,
   };
   const subs = new Set();
-  const VOLUME_KEY = "todoary.music.volume";
-
-  function loadVolume() {
-    try {
-      const v = parseInt(localStorage.getItem(VOLUME_KEY), 10);
-      if (Number.isFinite(v) && v >= 0 && v <= 100) return v;
-    } catch (_) {}
-    return 100;
-  }
-
-  let volume = loadVolume();
 
   const emit = () => { for (const fn of subs) fn(); };
   const setDebug = (msg) => { state.debug = msg ? String(msg).slice(0, 90) : ""; emit(); };
@@ -380,34 +380,42 @@
     toggle() {
       if (useNativeMode) {
         if (state.playing) {
+          wantPlay = false;
           invokeNative("youtube_player_pause").catch(err => fallbackToRaw(err));
           state.playing = false;
           setDebug("paused");
           emit();
         } else if (queue.length) {
-          invokeNative("youtube_player_resume").then(() => {
-            applyVolume();
-          }).catch(err => {
-            fallbackToRaw(err);
+          wantPlay = true;
+          if (state.videoId) {
+            invokeNative("youtube_player_resume").then(() => {
+              applyVolume();
+            }).catch(err => {
+              fallbackToRaw(err);
+              play(index, true);
+            });
+            state.playing = true;
+            setDebug("resumed");
+            emit();
+          } else {
             play(index, true);
-          });
-          state.playing = true;
-          setDebug("playing");
-          emit();
+          }
         }
         return;
       }
 
       if (useRawMode) {
         if (state.playing) {
+          wantPlay = false;
           if (!rawPostCommand("pauseVideo")) rawRemoveIframe();
           state.playing = false;
           setDebug("paused");
           emit();
         } else if (queue.length) {
+          wantPlay = true;
           if (rawGetIframe() && rawPostCommand("playVideo")) {
             state.playing = true;
-            setDebug("playing");
+            setDebug("resumed");
             emit();
           } else {
             play(index, true);
@@ -423,8 +431,16 @@
         return;
       }
       const st = player.getPlayerState && player.getPlayerState();
-      if (st === 1) player.pauseVideo();
-      else if (state.videoId) player.playVideo();
+      if (st === 1) {
+        wantPlay = false;
+        state.playing = false;
+        player.pauseVideo();
+        setDebug("paused");
+        emit();
+      } else if (state.videoId) {
+        wantPlay = true;
+        player.playVideo();
+      }
       else if (queue.length) play(index, true);
     },
     next() { if (queue.length) play(index + 1, true); },
@@ -444,6 +460,21 @@
     getState() { return state; },
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
   };
+
+  function isTypingTarget(target) {
+    if (!target) return false;
+    const tag = (target.tagName || "").toLowerCase();
+    return target.isContentEditable || ["input", "textarea", "select"].includes(tag);
+  }
+
+  window.addEventListener("keydown", (e) => {
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (e.code !== "Space" && e.key !== " ") return;
+    if (isTypingTarget(e.target)) return;
+    if (!queue.length) return;
+    e.preventDefault();
+    window.musicPlayer.toggle();
+  });
 
   if (useRawMode) setDebug("raw iframe mode");
 })();
