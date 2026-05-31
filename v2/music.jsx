@@ -24,34 +24,64 @@
   let wantPlay = false;
   let apiTimer = null;
   let readyTimer = null;
-  const volumeKey = "vibe-diary.music.volume";
-  const readVolume = () => {
-    try {
-      const raw = Number(localStorage.getItem(volumeKey));
-      return Number.isFinite(raw) ? Math.max(0, Math.min(100, raw)) : 70;
-    } catch (_) {
-      return 70;
-    }
-  };
   const state = {
     playing: false,
     title: "",
     videoId: null,
     hasQueue: false,
+    volume: volume,
     debug: "",
     nativeMode: useNativeMode,
-    volume: readVolume(),
   };
   const subs = new Set();
+  const VOLUME_KEY = "todoary.music.volume";
+
+  function loadVolume() {
+    try {
+      const v = parseInt(localStorage.getItem(VOLUME_KEY), 10);
+      if (Number.isFinite(v) && v >= 0 && v <= 100) return v;
+    } catch (_) {}
+    return 100;
+  }
+
+  let volume = loadVolume();
 
   const emit = () => { for (const fn of subs) fn(); };
   const setDebug = (msg) => { state.debug = msg ? String(msg).slice(0, 90) : ""; emit(); };
+
+  function applyVolume() {
+    if (useNativeMode) {
+      invokeNative("youtube_player_set_volume", { volume: volume / 100 }).catch(() => {});
+      return;
+    }
+    if (useRawMode) {
+      if (volume <= 0) rawPostCommand("mute");
+      else {
+        rawPostCommand("unMute");
+        rawPostCommand("setVolume", [volume]);
+      }
+      return;
+    }
+    if (player) {
+      try {
+        if (volume <= 0) player.mute();
+        else {
+          player.unMute();
+          player.setVolume(volume);
+        }
+      } catch (_) {}
+    }
+  }
 
   function invokeNative(command, args) {
     if (!tauriInvoke) return Promise.reject(new Error("tauri invoke unavailable"));
     return tauriInvoke(command, args || {});
   }
 
+  // 검증 빌드 (③): path 비디오를 playlist 첫 번째에도 넣는다.
+  // YouTube embed가 path를 무시하고 playlist[0]부터 재생하는 환경 대응.
+  // 공식 시맨틱("path 먼저, 그 다음 playlist") 환경에서는 첫 곡이 두 번 재생될
+  // 수 있음 — 그게 관측되면 path-honor 환경이라는 증거.
   function playlistAfter(startIdx) {
     const rest = [];
     for (let k = 0; k < queue.length; k++) {
@@ -80,7 +110,7 @@
       videoId: cur.videoId,
       playlist: playlistAfter(startIdx),
     }).then(() => {
-      applyVolume();
+      setTimeout(applyVolume, 400);
     }).catch(err => {
       fallbackToRaw(err && err.message ? err.message : err);
       state.nativeMode = false;
@@ -91,8 +121,10 @@
     let el = document.getElementById("yt-music-host");
     if (!el) {
       const wrap = document.createElement("div");
+      // opacity:0 — iframe은 살아있어서 오디오는 재생되지만 보이지 않음.
+      // 윈도우 창이 transparent라 0.08만 줘도 바탕화면 위로 썸네일이 새어 나옴.
       wrap.style.cssText =
-        "position:fixed;right:0;bottom:0;width:356px;height:200px;opacity:0.08;" +
+        "position:fixed;right:0;bottom:0;width:356px;height:200px;opacity:0;" +
         "pointer-events:none;z-index:0;overflow:hidden;";
       el = document.createElement("div");
       el.id = "yt-music-host";
@@ -109,37 +141,27 @@
     readyTimer = null;
   }
 
-  function rawRemoveIframe() {
-    const it = document.getElementById("yt-music-iframe");
-    if (it && it.parentNode) it.parentNode.removeChild(it);
+  function rawGetIframe() {
+    return document.getElementById("yt-music-iframe");
   }
 
-  function rawCommand(command, args) {
-    const iframe = document.getElementById("yt-music-iframe");
+  function rawPostCommand(func, args) {
+    const iframe = rawGetIframe();
     if (!iframe || !iframe.contentWindow) return false;
-    iframe.contentWindow.postMessage(
-      JSON.stringify({ event: "command", func: command, args: args || [] }),
-      "https://www.youtube.com"
-    );
-    return true;
+    try {
+      iframe.contentWindow.postMessage(
+        JSON.stringify({ event: "command", func: func, args: args || "" }),
+        "*"
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
-  function applyVolume() {
-    const vol = Math.max(0, Math.min(100, state.volume));
-    state.volume = vol;
-    try { localStorage.setItem(volumeKey, String(vol)); } catch (_) {}
-    if (useNativeMode) {
-      invokeNative("youtube_player_set_volume", { volume: vol }).catch(() => {});
-    } else if (useRawMode) {
-      rawCommand("setVolume", [vol]);
-      if (vol > 0) rawCommand("unMute");
-    } else if (player) {
-      try {
-        if (vol > 0 && player.unMute) player.unMute();
-        if (player.setVolume) player.setVolume(vol);
-      } catch (_) {}
-    }
-    emit();
+  function rawRemoveIframe() {
+    const it = rawGetIframe();
+    if (it && it.parentNode) it.parentNode.removeChild(it);
   }
 
   function rawCreateIframe(startIdx) {
@@ -148,6 +170,8 @@
 
     const cur = queue[startIdx];
     const embedOrigin = /^https?:\/\//i.test(origin) ? origin : "https://tauri.localhost";
+    // 검증 빌드 (③): path 비디오를 playlist 첫 번째에도 포함.
+    // playlistAfter() 의 주석 참고.
     const rest = [];
     for (let k = 0; k < queue.length; k++) {
       rest.push(queue[(startIdx + k) % queue.length].videoId);
@@ -155,13 +179,13 @@
 
     const params = new URLSearchParams({
       autoplay: "1",
-      enablejsapi: "1",
       playsinline: "1",
       controls: "0",
       disablekb: "1",
       rel: "0",
       modestbranding: "1",
       iv_load_policy: "3",
+      enablejsapi: "1",
       origin: embedOrigin,
       widget_referrer: embedOrigin,
     });
@@ -175,7 +199,7 @@
     iframe.setAttribute("frameborder", "0");
     iframe.style.cssText = "width:100%;height:100%;border:0;";
     host().appendChild(iframe);
-    setTimeout(() => applyVolume(), 400);
+    setTimeout(applyVolume, 800);
   }
 
   function switchToRaw(reason) {
@@ -255,7 +279,7 @@
           if (queue.length && wantPlay) {
             const tr = queue[index] || queue[0];
             try { player.loadVideoById(tr.videoId); } catch (_) {}
-            try { player.unMute(); player.setVolume(state.volume); } catch (_) {}
+            applyVolume();
             try { player.playVideo(); } catch (_) {}
           } else if (queue.length && !started) {
             const tr = queue[index] || queue[0];
@@ -285,12 +309,7 @@
   }
 
   function unmuteSoon() {
-    try {
-      if (player && player.unMute) {
-        player.unMute();
-        player.setVolume(state.volume);
-      }
-    } catch (_) {}
+    applyVolume();
   }
 
   function play(i, gesture) {
@@ -318,10 +337,16 @@
 
     emit();
     ensure();
+    // 재생 카운트 — 곡 시작 시점에 한 번
+    try {
+      if (window.diary && window.diary.actions && window.diary.actions.recordPlay) {
+        window.diary.actions.recordPlay({ videoId: tr.videoId, title: tr.title });
+      }
+    } catch (_) {}
     if (ready && player) {
       try { player.loadVideoById(tr.videoId); } catch (_) {}
       if (gesture) {
-        try { player.unMute(); player.setVolume(state.volume); } catch (_) {}
+        applyVolume();
         try { player.playVideo(); } catch (_) {}
       }
     }
@@ -355,37 +380,34 @@
     toggle() {
       if (useNativeMode) {
         if (state.playing) {
-          wantPlay = false;
-          invokeNative("youtube_player_pause").catch(err => setDebug("pause failed - " + (err?.message || err)));
+          invokeNative("youtube_player_pause").catch(err => fallbackToRaw(err));
           state.playing = false;
           setDebug("paused");
           emit();
         } else if (queue.length) {
-          wantPlay = true;
-          if (state.videoId) {
-            invokeNative("youtube_player_resume").catch(() => play(index, true));
-            state.playing = true;
-            setDebug("resumed");
-            emit();
-          } else {
+          invokeNative("youtube_player_resume").then(() => {
+            applyVolume();
+          }).catch(err => {
+            fallbackToRaw(err);
             play(index, true);
-          }
+          });
+          state.playing = true;
+          setDebug("playing");
+          emit();
         }
         return;
       }
 
       if (useRawMode) {
         if (state.playing) {
-          wantPlay = false;
-          rawCommand("pauseVideo");
+          if (!rawPostCommand("pauseVideo")) rawRemoveIframe();
           state.playing = false;
           setDebug("paused");
           emit();
         } else if (queue.length) {
-          wantPlay = true;
-          if (state.videoId && rawCommand("playVideo")) {
+          if (rawGetIframe() && rawPostCommand("playVideo")) {
             state.playing = true;
-            setDebug("resumed");
+            setDebug("playing");
             emit();
           } else {
             play(index, true);
@@ -395,39 +417,29 @@
       }
 
       ensure();
+      unmuteSoon();
       if (!ready || !player) {
         if (queue.length) play(index, true);
         return;
       }
       const st = player.getPlayerState && player.getPlayerState();
-      if (st === 1) {
-        wantPlay = false;
-        state.playing = false;
-        player.pauseVideo();
-        setDebug("paused");
-        emit();
-      } else if (state.videoId) {
-        wantPlay = true;
-        player.playVideo();
-      }
+      if (st === 1) player.pauseVideo();
+      else if (state.videoId) player.playVideo();
       else if (queue.length) play(index, true);
     },
     next() { if (queue.length) play(index + 1, true); },
     prev() { if (queue.length) play(index - 1, true); },
-    setVolume(volume) {
-      state.volume = Math.max(0, Math.min(100, Number(volume) || 0));
-      applyVolume();
-      setDebug("volume " + state.volume);
-    },
-    volumeUp(step) {
-      this.setVolume(state.volume + (step || 5));
-    },
-    volumeDown(step) {
-      this.setVolume(state.volume - (step || 5));
-    },
     setNativeViewport(rect) {
       if (!useNativeMode) return;
       invokeNative("youtube_player_set_bounds", rect).catch(err => fallbackToRaw(err));
+    },
+    getVolume() { return volume; },
+    setVolume(v) {
+      volume = Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
+      state.volume = volume;
+      try { localStorage.setItem(VOLUME_KEY, String(volume)); } catch (_) {}
+      applyVolume();
+      emit();
     },
     getState() { return state; },
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },

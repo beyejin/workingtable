@@ -1,4 +1,4 @@
-# 🪄 vibe diary
+# 🪄 todoary
 
 작업할 때 화면 옆에 띄워두는 **투명 사이드 다이어리** 데스크탑 앱.
 할 일·명령어·문의 메일·달력 메모를 한 창에서 관리하고, 배경/테마를 자유롭게 꾸밀 수 있어요.
@@ -29,8 +29,8 @@ Windows · macOS 지원, 자동 업데이트.
 
 | OS | 파일 |
 |----|------|
-| **Windows** | `vibe-diary_x.y.z_x64-setup.exe` (또는 `_x64_en-US.msi`) |
-| **macOS** (Apple Silicon + Intel) | `vibe-diary_x.y.z_universal.dmg` |
+| **Windows** | `todoary_x.y.z_x64-setup.exe` (또는 `_x64_en-US.msi`) |
+| **macOS** (Apple Silicon + Intel) | `todoary_x.y.z_universal.dmg` |
 
 설치 후 새 버전이 나오면 **자동 업데이트**로 받아집니다.
 
@@ -49,12 +49,12 @@ Windows · macOS 지원, 자동 업데이트.
    **앱 우클릭(Control+클릭) → 열기 → 열기**, 또는 **시스템 설정 → 개인정보 보호 및 보안**에서 **"확인 없이 열기"**.
 3. `"손상되어 열 수 없습니다"`(격리 속성) 가 뜨면 터미널에서:
    ```bash
-   xattr -dr com.apple.quarantine "/Applications/vibe-diary.app"
+   xattr -dr com.apple.quarantine "/Applications/todoary.app"
    ```
 
 > English: the app isn't code-signed/notarized, so allow it once —
 > Windows: **More info → Run anyway**; macOS: right-click → **Open → Open**
-> (or `xattr -dr com.apple.quarantine "/Applications/vibe-diary.app"` if it says "damaged").
+> (or `xattr -dr com.apple.quarantine "/Applications/todoary.app"` if it says "damaged").
 > 자세한 내용은 **[INSTALL.md](INSTALL.md)** 참고.
 
 ---
@@ -69,7 +69,7 @@ Windows · macOS 지원, 자동 업데이트.
 ## 📂 구조
 
 ```
-index.html                              # 진입점 (스크립트 로드 + App)
+todoary.html                            # 진입점 (스크립트 로드 + App)
 v2/                                    # 화면 모듈 (스토어/뷰/타이머/꾸미기/i18n …)
 styles.css                             # 디자인 토큰 & 공통 스타일
 src-tauri/                             # Tauri (Rust) — 설정·권한·번들

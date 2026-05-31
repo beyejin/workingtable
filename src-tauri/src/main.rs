@@ -1,5 +1,10 @@
+// todoary - Tauri main entry
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(target_os = "macos")]
+mod legacy_macos;
+
+#[cfg(not(debug_assertions))]
 use tauri_plugin_updater::UpdaterExt;
 
 fn main() {
@@ -19,12 +24,19 @@ fn main() {
             youtube_player_set_volume
         ])
         .setup(|app| {
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(e) = check_update(handle).await {
-                    eprintln!("update check failed: {e}");
-                }
-            });
+            #[cfg(all(target_os = "macos", not(debug_assertions)))]
+            legacy_macos::remove_legacy_vibe_diary_app_once(app.handle());
+
+            #[cfg(not(debug_assertions))]
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = check_update(handle).await {
+                        eprintln!("update check failed: {e}");
+                    }
+                });
+            }
+            let _ = app;
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -96,11 +108,6 @@ fn youtube_player_stop(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn youtube_player_set_volume(app: tauri::AppHandle, volume: u8) -> Result<(), String> {
-    native_youtube::set_volume(app, volume)
-}
-
-#[tauri::command]
 fn youtube_player_set_bounds(
     app: tauri::AppHandle,
     x: f64,
@@ -112,6 +119,12 @@ fn youtube_player_set_bounds(
     native_youtube::set_bounds(app, x, y, width, height, visible)
 }
 
+#[tauri::command]
+fn youtube_player_set_volume(app: tauri::AppHandle, volume: f64) -> Result<(), String> {
+    native_youtube::set_volume(app, volume)
+}
+
+#[cfg(not(debug_assertions))]
 async fn check_update(app: tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let updater = app.updater()?;
     if let Some(update) = updater.check().await? {
@@ -146,6 +159,7 @@ mod native_youtube {
         let webview = get_or_create_webview(&app)?;
 
         let _ = webview.show();
+        let _ = webview.set_focus();
         load_with_referer(&webview, embed_url, REFERRER.to_string())
     }
 
@@ -163,13 +177,13 @@ mod native_youtube {
         )
     }
 
-    pub fn set_volume(app: tauri::AppHandle, volume: u8) -> Result<(), String> {
-        let volume = volume.min(100);
+    pub fn set_volume(app: tauri::AppHandle, volume: f64) -> Result<(), String> {
+        let vol = volume.clamp(0.0, 1.0);
+        let muted = if vol <= 0.0 { "true" } else { "false" };
         eval_player(
             &app,
             &format!(
-                r#"(function(){{var v=document.querySelector("video");if(v){{v.volume={};v.muted=false;}}}})()"#,
-                volume as f64 / 100.0
+                r#"(function(){{var v=document.querySelector("video");if(v){{v.muted={muted};v.volume={vol};}}}})()"#
             ),
         )
     }
@@ -311,11 +325,11 @@ mod native_youtube {
         Err("native YouTube player is only available on macOS".to_string())
     }
 
-    pub fn set_volume(_app: tauri::AppHandle, _volume: u8) -> Result<(), String> {
-        Err("native YouTube player is only available on macOS".to_string())
+    pub fn stop(_app: tauri::AppHandle) -> Result<(), String> {
+        Ok(())
     }
 
-    pub fn stop(_app: tauri::AppHandle) -> Result<(), String> {
+    pub fn set_volume(_app: tauri::AppHandle, _volume: f64) -> Result<(), String> {
         Ok(())
     }
 }

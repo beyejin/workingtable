@@ -1,8 +1,18 @@
-/* global React, diary */
+/* global React, diary, L, useI18n */
 // ===========================================================
 // 공통 컴포넌트 — 모든 뷰에서 재사용
 // ===========================================================
 const { useState, useRef, useEffect } = React;
+
+if (typeof window !== "undefined") {
+  const existingDialog = window.dialog || {};
+  window.dialog = {
+    ...existingDialog,
+    alert: existingDialog.alert || (async (message) => window.alert(message)),
+    confirm: existingDialog.confirm || (async (message) => window.confirm(message)),
+    prompt: existingDialog.prompt || (async (message, defaultValue = "") => window.prompt(message, defaultValue ?? "")),
+  };
+}
 
 // ---- 도트 스프라이트 아이콘 (16x16 셀, 6x4 = 24 인덱스) ----
 // Sprite-0002.png (96x64) 한 장에서 인덱스로 잘라 표시한다.
@@ -229,8 +239,9 @@ function Editable({ value, onChange, placeholder = "", multiline = false, style 
 
 // 삭제 버튼 (작은 ×)
 function DelBtn({ onClick }) {
+  if (typeof useI18n === "function") useI18n();
   return (
-    <button onClick={onClick} title="삭제" style={{
+    <button onClick={onClick} title={L("common.delete")} style={{
       all: "unset", cursor: "pointer",
       width: 16, height: 16, borderRadius: "50%",
       display: "grid", placeItems: "center",

@@ -1,4 +1,4 @@
-# 바이브 다이어리 — Tauri 데스크탑 앱 빌드
+# todoary — Tauri 데스크탑 앱 빌드
 
 투명 사이드바로 바탕화면에 떠 있는 다이어리 앱.
 
@@ -35,7 +35,7 @@ npm run build
 
 ```
 project/
-├── index.html                              ← Tauri가 로드하는 메인 HTML
+├── todoary.html                              ← Tauri가 로드하는 메인 HTML
 ├── styles.css, design-canvas.jsx, ...
 ├── v2/                                       ← React 컴포넌트
 ├── package.json                              ← Tauri CLI

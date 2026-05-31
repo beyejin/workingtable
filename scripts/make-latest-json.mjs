@@ -17,7 +17,7 @@ const version = conf.version;
 const notes = process.argv[2] || `v${version} 업데이트`;
 
 // Windows NSIS 설치 파일이 업데이터 아티팩트
-const setupName = `vibe-diary_${version}_x64-setup.exe`;
+const setupName = `todoary_${version}_x64-setup.exe`;
 const sigPath = join(
   root,
   "src-tauri/target/release/bundle/nsis",

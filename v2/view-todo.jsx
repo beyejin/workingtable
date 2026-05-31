@@ -1,4 +1,4 @@
-/* global React, diary, SplitPane, InlineAdd, DelBtn */
+/* global React, diary, SplitPane, InlineAdd, DelBtn, openExternalUrl, PomodoroBarButton */
 // ===========================================================
 // 할 일 — 위(2/3): 입력 + 모든 할 일
 //          아래(1/3): 핀(!) · 반복 · 마감일 설정한 할 일 자동 표시
@@ -22,13 +22,14 @@ function isInTodoPeriod(t, day) {
   return !!p && p.start <= day && day <= p.end;
 }
 function todoMatchesDay(t, day, today) {
-  if (isInTodoPeriod(t, day)) return true;
-  if (t.dueDate === day) return true;
-  if (day === today) {
-    if (t.dueDate && t.dueDate < day && !t.done) return true;
-    if (!t.dueDate && !normalizedPeriod(t)) return true;
-  }
-  return false;
+  return diary.matchesTodoDay(t, day, today);
+}
+function fmtMonthLabel(iso) {
+  const m = parseInt(iso.slice(5, 7), 10);
+  const lng = window.i18n?.get?.() || "ko";
+  if (lng === "en") return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m - 1];
+  if (lng === "ja" || lng === "zh") return `${m}月`;
+  return `${m}월`;
 }
 function periodLabel(t) {
   const p = normalizedPeriod(t);
@@ -39,6 +40,52 @@ function addDaysIso(iso, days) {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
+}
+function clonePlain(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+function isTextEditingTarget(target) {
+  if (!target) return false;
+  const tag = (target.tagName || "").toLowerCase();
+  return tag === "input" || tag === "textarea" || target.isContentEditable || !!target.closest?.("[contenteditable='true']");
+}
+function todoClipboardText(todo) {
+  if (!todo) return "";
+  const lines = [todo.title || ""];
+  (todo.subTasks || []).forEach(st => {
+    const mark = st.done ? "[x]" : "[ ]";
+    const link = st.linkUrl ? ` ${st.linkUrl}` : "";
+    lines.push(`  - ${mark} ${st.title || ""}${link}`);
+  });
+  return lines.filter(Boolean).join("\n");
+}
+async function writeClipboardText(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_) {}
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch (_) {
+    return false;
+  }
+}
+async function readClipboardText() {
+  try {
+    if (navigator.clipboard?.readText) return await navigator.clipboard.readText();
+  } catch (_) {}
+  return "";
 }
 
 // 연한 파스텔 마스킹테이프 색 (행마다 순환)
@@ -55,10 +102,10 @@ function lightTape(i, pinned) {
 
 function recLabel(r) {
   if (!r) return "";
-  if (r.frequency === "daily") return "매일";
-  if (r.frequency === "weekdays") return "평일";
-  const DOW = ["일", "월", "화", "수", "목", "금", "토"];
-  return (r.weeklyDays || []).map(d => DOW[d]).join("·") || "특정 요일";
+  if (r.frequency === "daily") return L("todo.recDaily");
+  if (r.frequency === "weekdays") return L("todo.recWeekdays");
+  const DOW = (window.i18n && window.i18n.weekdays) ? window.i18n.weekdays() : ["일", "월", "화", "수", "목", "금", "토"];
+  return (r.weeklyDays || []).map(d => DOW[d]).join("·") || L("todo.specificDays");
 }
 
 // 달력 영역 높이 — 1주 단위로 스냅. (헤더+요일행+컨테이너 보더+패딩 ≈ 70px, 주 한 행 ≈ 30px)
@@ -73,12 +120,18 @@ function calSnap(h) {
   return CAL_BASE_PX + clamped * CAL_WEEK_PX;
 }
 
-function TodoView() {
+function TodoView({ tweaks } = {}) {
+  const showPomodoro = tweaks?.showPomodoro ?? false;
   const { state, actions } = diary.useDiary();
   const [selId, setSel] = useState(null);
+  const undoStackRef = React.useRef([]);
+  const redoStackRef = React.useRef([]);
+  const copiedTodoRef = React.useRef(null);
   const todayStr = diary.today();
   // 현재 보고 있는 날짜. null = 오늘.
   const [selectedDate, setSelectedDate] = useState(todayStr);
+  // 필터 모드 — 'date': selectedDate 기반 (기존), 'all': 이번달 전체
+  const [filterMode, setFilterMode] = useState("date");
   // 달력 영역 높이 — 저장된 값 복원, 없으면 4주 기본
   const [calHeight, setCalHeight] = useState(() => {
     try {
@@ -96,10 +149,30 @@ function TodoView() {
   const items = diary.select.todosForCurrent(state);
   const isToday = selectedDate === todayStr;
 
-  // 날짜별 필터:
-  //  - 오늘: 마감 없는 일 + 오늘 마감 + 과거에 마감이었으나 미완료 + 오늘이 포함된 기간
-  //  - 다른 날짜: 그 날짜 마감 또는 기간에 포함된 일
+  // 이번달 범위 — '전체' 모드에서 사용
+  const monthPrefix = todayStr.slice(0, 8); // "YYYY-MM-"
+  const inThisMonth = (d) => typeof d === "string" && d.startsWith(monthPrefix);
+  // todo 가 이번달 범위에 걸리는지 (마감/기간/완료 기준 — 생성일만으로는 포함하지 않음)
+  const inMonthRange = (t) => {
+    if (t.dueDate && inThisMonth(t.dueDate)) return true;
+    const p = normalizedPeriod(t);
+    if (p) {
+      const monthStart = monthPrefix + "01";
+      const monthEnd = monthPrefix + "31";
+      return p.start <= monthEnd && p.end >= monthStart;
+    }
+    if (t.completedAt && inThisMonth(t.completedAt.slice(0, 10))) return true;
+    if (!t.dueDate && !p && inThisMonth(t.createdAt)) return true;
+    return false;
+  };
+
+  // 모드별 미완료 카운트 — 토글 뱃지에 표시
+  const dateModeIncomplete = items.filter(t => !t.done && todoMatchesDay(t, selectedDate, todayStr)).length;
+  const allModeIncomplete = items.filter(t => !t.done && inMonthRange(t)).length;
+
+  // 필터 — 모드에 따라
   const list = items.filter(t => {
+    if (filterMode === "all") return inMonthRange(t);
     return todoMatchesDay(t, selectedDate, todayStr);
   }).slice().sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1;
@@ -126,27 +199,157 @@ function TodoView() {
     }
   });
   const doneDates = new Set(
-    items.filter(t => t.done && t.completedAt).map(t => t.completedAt.slice(0, 10))
+    items.filter(t => t.done).map(t => diary.completionDay(t)).filter(Boolean)
   );
 
   const onPick = (id) => setSel(s => (s === id ? null : id));
   const clear = () => setSel(null);
+  const makeHistorySnapshot = React.useCallback(() => {
+    const s = diary.getState();
+    return {
+      todos: clonePlain(s.todos || []),
+      recurrences: clonePlain(s.recurrences || []),
+      selId,
+    };
+  }, [selId]);
+  const pushUndo = React.useCallback(() => {
+    undoStackRef.current = [...undoStackRef.current.slice(-24), makeHistorySnapshot()];
+    redoStackRef.current = [];
+  }, [makeHistorySnapshot]);
+  const pushRedo = React.useCallback(() => {
+    redoStackRef.current = [...redoStackRef.current.slice(-24), makeHistorySnapshot()];
+  }, [makeHistorySnapshot]);
+  const restoreHistorySnapshot = React.useCallback((snapshot) => {
+    actions.restoreTodosSnapshot(snapshot);
+    setSel(snapshot.selId || null);
+  }, [actions]);
 
   const onAdd = (text) => {
-    actions.addTodo(text, { dueDate: selectedDate });
+    if (!text?.trim()) return;
+    pushUndo();
+    // '전체' 모드에서 추가 — 오늘에 붙임 (마감 없음)
+    const id = (filterMode === "all" || isToday)
+      ? actions.addTodo(text)
+      : actions.addTodo(text, { dueDate: selectedDate });
+    if (id) setSel(id);
   };
 
   const dateLabel = isToday ? L("todo.today") : (window.i18n && window.i18n.fmtDate ? window.i18n.fmtDate(selectedDate) : selectedDate);
-  const placeholder = isToday ? L("todo.addPh") : `${fmtMD(selectedDate)} ${L("todo.addPhDate")}`;
+  const dateLabelShort = isToday ? L("todo.today") : fmtMD(selectedDate);
+  const placeholder = filterMode === "all"
+    ? L("todo.addPh")
+    : (isToday ? L("todo.addPh") : `${fmtMD(selectedDate)} ${L("todo.addPhDate")}`);
+
+  const monthLabel = fmtMonthLabel(todayStr);
+
+  // 헤더 — 두 칸 세그먼트 토글 ([날짜] [N월])
+  const headerToggle = (
+    <div style={{ display: "flex", alignItems: "center", gap: 4, width: "100%", minWidth: 0 }}>
+      <div style={{ display: "flex", gap: 4, minWidth: 0 }}>
+        <SegPill
+          active={filterMode === "date"}
+          onClick={() => { setFilterMode("date"); setSelectedDate(todayStr); }}
+          icon="📅"
+          label={dateLabelShort}
+          count={dateModeIncomplete}
+        />
+        <SegPill
+          active={filterMode === "all"}
+          onClick={() => setFilterMode("all")}
+          icon="📋"
+          label={monthLabel}
+          count={allModeIncomplete}
+        />
+      </div>
+      {showPomodoro && <PomodoroBarButton inline />}
+    </div>
+  );
 
   // 진행도 — 보이는 할 일 + 그들의 서브태스크 체크박스 전체 카운팅
   const progressTotal = list.reduce((s, t) => s + 1 + (t.subTasks?.length ?? 0), 0);
   const progressDone = list.reduce((s, t) => s + (t.done ? 1 : 0) + (t.subTasks?.filter(st => st.done).length ?? 0), 0);
 
+  useEffect(() => {
+    const selectedTodo = () => {
+      if (!selId) return null;
+      const s = diary.getState();
+      return (s.todos || []).find(t => t.id === selId) || null;
+    };
+    const addOpts = () => (filterMode === "all" || selectedDate === diary.today())
+      ? {}
+      : { dueDate: selectedDate };
+    const copyTodo = async (todo) => {
+      copiedTodoRef.current = clonePlain(todo);
+      await writeClipboardText(todoClipboardText(todo));
+    };
+    const onKeyDown = async (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || isTextEditingTarget(e.target)) return;
+      const key = e.key.toLowerCase();
+      if ((key === "c" || key === "x") && String(window.getSelection?.() || "").trim()) return;
+      if (key === "z" && !e.shiftKey) {
+        const prev = undoStackRef.current.pop();
+        if (!prev) return;
+        e.preventDefault();
+        pushRedo();
+        restoreHistorySnapshot(prev);
+        return;
+      }
+
+      if (key === "y" || (key === "z" && e.shiftKey) || (key === "x" && redoStackRef.current.length > 0)) {
+        const next = redoStackRef.current.pop();
+        if (!next) return;
+        e.preventDefault();
+        undoStackRef.current = [...undoStackRef.current.slice(-24), makeHistorySnapshot()];
+        restoreHistorySnapshot(next);
+        return;
+      }
+
+      if (key === "c") {
+        const todo = selectedTodo();
+        if (!todo) return;
+        e.preventDefault();
+        await copyTodo(todo);
+        return;
+      }
+
+      if (key === "x") {
+        const todo = selectedTodo();
+        if (!todo) return;
+        e.preventDefault();
+        await copyTodo(todo);
+        pushUndo();
+        actions.removeTodo(todo.id);
+        setSel(null);
+        return;
+      }
+
+      if (key === "v") {
+        e.preventDefault();
+        const text = await readClipboardText();
+        const copied = copiedTodoRef.current;
+        const copiedText = copied ? todoClipboardText(copied).trim() : "";
+        if (copied && (!text.trim() || text.trim() === copiedText)) {
+          pushUndo();
+          const id = actions.addTodoFromSnapshot(copied);
+          if (id) setSel(id);
+          return;
+        }
+        const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+        if (!lines.length) return;
+        pushUndo();
+        let lastId = null;
+        lines.forEach(line => { lastId = actions.addTodo(line, addOpts()) || lastId; });
+        if (lastId) setSel(lastId);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [actions, filterMode, makeHistorySnapshot, pushRedo, pushUndo, restoreHistorySnapshot, selectedDate, selId]);
+
   return (
     <SplitPane
-      topLabel={`📅 ${dateLabel} · ${list.filter(t => !t.done).length}`}
-      topRight={!isToday && (
+      topLabel={headerToggle}
+      topRight={filterMode === "date" && !isToday && (
         <button onClick={() => setSelectedDate(todayStr)} style={{
           all: "unset", cursor: "pointer",
           padding: "2px 9px", borderRadius: 99,
@@ -165,7 +368,9 @@ function TodoView() {
           ))}
           {list.length === 0 && (
             <div className="sk-cap" style={{ padding: "4px 2px" }}>
-              {isToday ? L("todo.emptyToday") : L("todo.emptyDate", { d: fmtMD(selectedDate) })}
+              {filterMode === "all"
+                ? L("todo.emptyMonth")
+                : (isToday ? L("todo.emptyToday") : L("todo.emptyDate", { d: fmtMD(selectedDate) }))}
             </div>
           )}
         </div>
@@ -178,14 +383,46 @@ function TodoView() {
         <TodoMonthCalendar
           dueDates={dueDates}
           doneDates={doneDates}
-          selectedDate={selectedDate}
-          onPick={(d) => setSelectedDate(d)}
+          selectedDate={filterMode === "date" ? selectedDate : null}
+          onPick={(d) => { setSelectedDate(d); setFilterMode("date"); }}
           actions={actions}
           selId={selId}
           selectedTodo={selId ? items.find(t => t.id === selId) : null}
         />
       }
     />
+  );
+}
+
+// 헤더 세그먼트 알약 — sk-label 의 uppercase / 라벨 폰트를 셀프 리셋
+function SegPill({ active, onClick, icon, label, count }) {
+  return (
+    <button onClick={onClick} style={{
+      all: "unset", cursor: "pointer",
+      display: "inline-flex", alignItems: "center", gap: 5,
+      padding: "2px 9px", borderRadius: 99,
+      border: active ? "1.2px solid var(--ink)" : "1px solid var(--ink-soft)",
+      background: active ? "var(--paper)" : "transparent",
+      boxShadow: active ? "0 1.5px 0 var(--paper-3)" : "none",
+      fontFamily: "var(--hand)", fontSize: 12,
+      textTransform: "none", letterSpacing: "normal",
+      color: active ? "var(--ink)" : "var(--ink-3)",
+      minWidth: 0, flexShrink: 1,
+    }}>
+      <span style={{ fontSize: 11, flexShrink: 0 }}>{icon}</span>
+      <span style={{
+        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        minWidth: 0,
+      }}>{label}</span>
+      <span style={{
+        fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700,
+        color: active ? "var(--ink)" : "var(--ink-3)",
+        background: active ? "rgba(255,255,255,0.7)" : "transparent",
+        padding: active ? "0 5px" : "0 2px", borderRadius: 99,
+        border: active ? "1px solid rgba(40,51,63,0.2)" : "none",
+        flexShrink: 0,
+      }}>{count}</span>
+    </button>
   );
 }
 
@@ -482,6 +719,14 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
     setSubInput("");
   };
 
+  const openTodoMemo = (e) => {
+    stop(e);
+    const memoId = actions.ensureTodoMemo ? actions.ensureTodoMemo(t.id) : null;
+    if (!memoId) return;
+    window.todoaryPendingMemoId = memoId;
+    window.dispatchEvent(new CustomEvent("todoary-open-memo", { detail: { memoId, todoId: t.id } }));
+  };
+
   return (
     <div
       onClick={onRowClick}
@@ -508,7 +753,7 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         {/* 드래그 핸들 — Notion 패턴: 호버 시에만 왼쪽 가장자리에 ⋮⋮ */}
         <span
-          title={showHandle ? "드래그로 이동" : ""}
+          title={showHandle ? L("todo.dragMove") : ""}
           style={{
             flexShrink: 0, width: 12,
             cursor: showHandle ? "grab" : "default",
@@ -522,13 +767,13 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
           onClick={(e) => { stop(e); actions.toggleTodo(t.id); }}
           className={"sk-check" + (t.done ? " done" : "")}
           style={{ cursor: "pointer", flexShrink: 0 }}
-          title={t.done ? "되돌리기" : "끝냄으로 표시"}
+          title={t.done ? L("todo.undoDone") : L("todo.markDone")}
         />
         {/* 서브태스크 접힘 토글 — 항목 있거나 호버/선택일 때 노출 */}
         {(hasSubs || hover || selected) && !compact && (
           <button
             onClick={(e) => { stop(e); setSubOpen(o => !o); }}
-            title={subOpen ? "하위 목록 접기" : "하위 목록 펼치기"}
+            title={subOpen ? L("todo.subCollapse") : L("todo.subExpand")}
             style={{
               all: "unset", cursor: "pointer", flexShrink: 0,
               width: 14, height: 14, display: "grid", placeItems: "center",
@@ -570,7 +815,7 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
         ) : (
           <span
             onClick={(e) => { stop(e); if (!t.done) setEditingTitle(true); }}
-            title="클릭해서 편집"
+            title={L("todo.editTitle")}
             style={{
               flex: 1, minWidth: 0, fontFamily: "var(--hand)",
               fontSize: compact ? 14 : 15,
@@ -584,20 +829,27 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
         )}
 
         {/* 마감 뱃지 */}
-        {t.dueDate ? (
-          <button onClick={(e) => { stop(e); setDueOpen(o => !o); }} title={`마감 ${t.dueDate} 수정`} style={dueBadge}>{fmtMD(t.dueDate)}</button>
-        ) : showActions && (
-          <button onClick={(e) => { stop(e); setDueOpen(o => !o); }} title="마감일 지정" style={{ ...dueBadge, color: "var(--ink-3)" }}>날짜</button>
+        {t.dueDate && (
+          <span title={`${L("todo.due")} ${t.dueDate}`} style={dueBadge}>{fmtMD(t.dueDate)}</span>
         )}
         {/* 반복 표시 */}
-        {recRule && <span title={`반복 — ${recLabel(recRule)}`} style={{ fontSize: 12, color: "var(--ink-2)" }}>↻</span>}
+        {recRule && <span title={`${L("todo.repeat")} — ${recLabel(recRule)}`} style={{ fontSize: 12, color: "var(--ink-2)" }}>↻</span>}
+
+        {(showActions || t.memoId) && !compact && (
+          <button
+            onClick={openTodoMemo}
+            title={L("todo.openMemo")}
+            style={{ ...iconBtn, color: t.memoId ? "var(--ink)" : "var(--ink-3)" }}
+          >📝</button>
+        )}
 
         {/* 호버/선택 시 액션 아이콘 */}
         {showActions && (
           <>
-            <button onClick={(e) => { stop(e); actions.togglePin(t.id); }} title={t.pinned ? "핀 해제" : "핀(중요·예정으로 이동)"}
+            <button onClick={(e) => { stop(e); actions.togglePin(t.id); }} title={t.pinned ? L("todo.unpin") : L("todo.pin")}
               style={{ ...iconBtn, color: t.pinned ? "#7a5a10" : "var(--ink-3)", fontWeight: t.pinned ? 800 : 400 }}>!</button>
-            <button onClick={(e) => { stop(e); setRecOpen(o => !o); }} title="반복" style={{ ...iconBtn, color: recRule ? "var(--ink)" : "var(--ink-3)" }}>↻</button>
+            <button onClick={(e) => { stop(e); setDueOpen(o => !o); }} title={L("todo.dueDate")} style={iconBtn}>📅</button>
+            <button onClick={(e) => { stop(e); setRecOpen(o => !o); }} title={L("todo.repeat")} style={{ ...iconBtn, color: recRule ? "var(--ink)" : "var(--ink-3)" }}>↻</button>
             <DelBtn onClick={(e) => { if (e && e.stopPropagation) e.stopPropagation(); actions.removeTodo(t.id); }} />
           </>
         )}
@@ -635,7 +887,7 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
                   e.target.blur();
                 }
               }}
-              placeholder="하위 할 일 추가…"
+              placeholder={L("todo.subAdd")}
               style={{
                 flex: 1, minWidth: 0,
                 border: 0, outline: "none", background: "transparent",
@@ -650,15 +902,15 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
       {/* 마감일 펼침 */}
       {dueOpen && showActions && (
         <div style={expanderRow} onClick={stop}>
-          <span style={miniLabel}>마감</span>
+          <span style={miniLabel}>{L("todo.due")}</span>
           <input type="date" value={t.dueDate || ""} onChange={(e) => actions.setTodoDue(t.id, e.target.value)} style={dateInput} />
-          {t.dueDate && <button onClick={(e) => { stop(e); actions.setTodoDue(t.id, null); setDueOpen(false); }} style={miniBtn}>지우기</button>}
-          <span style={miniLabel}>기간</span>
+          {t.dueDate && <button onClick={(e) => { stop(e); actions.setTodoDue(t.id, null); setDueOpen(false); }} style={miniBtn}>{L("todo.clear")}</button>}
+          <span style={miniLabel}>{L("todo.period")}</span>
           <input type="date" value={t.startDate || ""} onChange={(e) => actions.setTodoPeriod(t.id, e.target.value, t.endDate || e.target.value)} style={dateInput} />
           <span style={miniLabel}>~</span>
           <input type="date" value={t.endDate || ""} onChange={(e) => actions.setTodoPeriod(t.id, t.startDate || e.target.value, e.target.value)} style={dateInput} />
-          {(t.startDate || t.endDate) && <button onClick={(e) => { stop(e); actions.setTodoPeriod(t.id, null, null); }} style={miniBtn}>기간 지우기</button>}
-          <button onClick={(e) => { stop(e); setDueOpen(false); }} style={miniBtn}>닫기</button>
+          {(t.startDate || t.endDate) && <button onClick={(e) => { stop(e); actions.setTodoPeriod(t.id, null, null); }} style={miniBtn}>{L("todo.clearPeriod")}</button>}
+          <button onClick={(e) => { stop(e); setDueOpen(false); }} style={miniBtn}>{L("todo.close")}</button>
         </div>
       )}
 
@@ -676,6 +928,20 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
 function SubTaskRow({ st, parentId, actions }) {
   const [hover, setHover] = useState(false);
   const [editing, setEditing] = useState(false);
+  const linkUrl = (st.linkUrl || "").trim();
+  const editLink = async (e) => {
+    e.stopPropagation();
+    const msg = L("todo.subLinkPrompt");
+    const next = window.dialog && window.dialog.prompt
+      ? await window.dialog.prompt(msg, linkUrl)
+      : prompt(msg, linkUrl);
+    if (next == null) return;
+    actions.setSubTaskLink(parentId, st.id, next.trim());
+  };
+  const openLink = (e) => {
+    e.stopPropagation();
+    if (linkUrl) openExternalUrl(linkUrl);
+  };
   return (
     <div
       onMouseEnter={() => setHover(true)}
@@ -689,7 +955,7 @@ function SubTaskRow({ st, parentId, actions }) {
         onClick={(e) => { e.stopPropagation(); actions.toggleSubTask(parentId, st.id); }}
         className={"sk-check" + (st.done ? " done" : "")}
         style={{ cursor: "pointer", flexShrink: 0, transform: "scale(0.82)" }}
-        title={st.done ? "되돌리기" : "끝냄으로 표시"}
+        title={st.done ? L("todo.undoDone") : L("todo.markDone")}
       />
       {editing ? (
         <input
@@ -731,9 +997,23 @@ function SubTaskRow({ st, parentId, actions }) {
           }}
         >{st.title}</span>
       )}
+      {linkUrl && (
+        <button
+          onClick={openLink}
+          title={`${L("todo.subLinkOpen")}: ${linkUrl}`}
+          style={{ ...subIconBtn, opacity: 0.78 }}
+        >↗</button>
+      )}
+      {hover && (
+        <button
+          onClick={editLink}
+          title={linkUrl ? L("todo.subLinkEdit") : L("todo.subLinkAdd")}
+          style={{ ...subIconBtn, opacity: 0.68 }}
+        >🔗</button>
+      )}
       <button
         onClick={(e) => { e.stopPropagation(); actions.removeSubTask(parentId, st.id); }}
-        title="삭제"
+        title={L("memo.delete")}
         style={{
           all: "unset", cursor: "pointer", flexShrink: 0,
           width: 14, height: 14, display: "grid", placeItems: "center",
@@ -748,12 +1028,17 @@ function SubTaskRow({ st, parentId, actions }) {
 
 function RecurrencePanel({ t, recRule, actions, onClose }) {
   const [freq, setFreq] = useState(recRule?.frequency || "daily");
-  const [days, setDays] = useState(recRule?.weeklyDays || [1, 3, 5]);
-  const DOW = ["일", "월", "화", "수", "목", "금", "토"];
+  const initialDays = Array.isArray(recRule?.weeklyDays) && recRule.weeklyDays.length
+    ? recRule.weeklyDays.map(Number).filter(d => Number.isInteger(d) && d >= 0 && d <= 6)
+    : [1, 3, 5];
+  const [days, setDays] = useState(initialDays);
+  const DOW = (window.i18n && window.i18n.weekdays) ? window.i18n.weekdays() : ["일", "월", "화", "수", "목", "금", "토"];
   const toggleDay = (d) => setDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort());
 
   const apply = () => {
-    const patch = { title: t.title, frequency: freq, weeklyDays: freq === "weekly" ? days : [] };
+    const weeklyDays = days.map(Number).filter(d => Number.isInteger(d) && d >= 0 && d <= 6);
+    if (freq === "weekly" && weeklyDays.length === 0) return;
+    const patch = { title: t.title, frequency: freq, weeklyDays: freq === "weekly" ? weeklyDays : [] };
     if (recRule) actions.updateRecurrence(recRule.id, patch);
     else {
       const id = actions.addRecurrence(patch);
@@ -766,7 +1051,7 @@ function RecurrencePanel({ t, recRule, actions, onClose }) {
   return (
     <div style={expanderRow}>
       <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap", width: "100%" }}>
-        {[["daily", "매일"], ["weekdays", "평일"], ["weekly", "특정 요일"]].map(([v, lbl]) => (
+        {[["daily", L("todo.recDaily")], ["weekdays", L("todo.recWeekdays")], ["weekly", L("todo.recWeekly")]].map(([v, lbl]) => (
           <button key={v} onClick={() => setFreq(v)} style={{ ...chipBtn, background: freq === v ? "var(--hi)" : "var(--paper)" }}>{lbl}</button>
         ))}
         {freq === "weekly" && (
@@ -781,9 +1066,18 @@ function RecurrencePanel({ t, recRule, actions, onClose }) {
           </div>
         )}
         <span style={{ flex: 1 }} />
-        <button onClick={apply} style={{ ...miniBtn, background: "var(--point)" }}>적용</button>
-        {recRule && <button onClick={remove} style={{ ...miniBtn, color: "var(--bad)" }}>반복 해제</button>}
-        <button onClick={onClose} style={miniBtn}>닫기</button>
+        <button
+          onClick={apply}
+          disabled={freq === "weekly" && days.length === 0}
+          style={{
+            ...miniBtn,
+            background: "var(--point)",
+            opacity: freq === "weekly" && days.length === 0 ? 0.45 : 1,
+            cursor: freq === "weekly" && days.length === 0 ? "not-allowed" : "pointer",
+          }}
+        >{L("todo.apply")}</button>
+        {recRule && <button onClick={remove} style={{ ...miniBtn, color: "var(--bad)" }}>{L("todo.removeRepeat")}</button>}
+        <button onClick={onClose} style={miniBtn}>{L("todo.close")}</button>
       </div>
     </div>
   );
@@ -824,6 +1118,12 @@ const miniLabel = {
 const dateInput = {
   border: "1px solid var(--ink-soft)", borderRadius: 6, padding: "2px 6px",
   fontFamily: "var(--mono)", fontSize: 12, color: "var(--ink)", background: "var(--paper)",
+};
+const subIconBtn = {
+  all: "unset", cursor: "pointer", flexShrink: 0,
+  width: 16, height: 16, display: "grid", placeItems: "center",
+  fontSize: 11, lineHeight: 1, color: "var(--ink-2)", borderRadius: 3,
+  transition: "opacity 0.12s, background 0.12s",
 };
 
 window.TodoView = TodoView;

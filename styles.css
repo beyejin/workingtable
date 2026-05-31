@@ -1,5 +1,5 @@
 /* ============================================================
-   바이브코딩 다이어리 — 파스텔 카와이 테마
+   todoary — 파스텔 카와이 테마
    thin lines / soft pastels / brown-grey strokes / clean solids
    ============================================================ */
 
@@ -452,14 +452,7 @@ html[data-desktop-mode="true"] .dock-body {
   letter-spacing: 0.02em;
   border: var(--bw) solid var(--ink);
 }
-button,
-input,
-select,
-textarea,
-[role="button"] {
-  -webkit-app-region: no-drag;
-  pointer-events: auto;
-}
+
 
 /* ===== 도트 스프라이트 아이콘 ===== */
 /* 96x64 PNG = 6열 x 4행, 셀당 16x16. 인덱스 [0..23] */

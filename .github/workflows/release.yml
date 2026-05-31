@@ -23,9 +23,7 @@ jobs:
           - platform: macos-latest
             args: "--target universal-apple-darwin"
             rust-targets: "aarch64-apple-darwin,x86_64-apple-darwin"
-
     runs-on: ${{ matrix.platform }}
-
     steps:
       - uses: actions/checkout@v4
 
@@ -54,66 +52,42 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          # 태그가 이미 push 된 상태면 그 태그로 릴리스 생성/갱신
           tagName: ${{ github.ref_name }}
-          releaseName: "vibe diary ${{ github.ref_name }}"
-          releaseDraft: false
+          releaseName: "todoary ${{ github.ref_name }}"
+          # draft: true 면 GitHub 에 자산은 업로드되지만 latest 로 노출 안 됨.
+          # Mac 빌드 검증 후 GitHub UI 에서 수동 publish.
+          releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
           releaseBody: |
             ## ⬇️ 다운로드 / Download / ダウンロード
 
-            아래 **Assets**에서 본인 OS에 맞는 파일 하나만 받으세요.
+            아래 **Assets**(맨 아래 펼치기)에서 **본인 OS에 맞는 파일 하나만** 받으세요.
+            나머지(`.sig` · `.msi` · `.tar.gz` · `latest.json`)는 받지 않아도 됩니다.
+            *Grab just one file for your OS from **Assets** below — skip the rest.*
+            ***Assets** からお使いのOSのファイルを1つだけどうぞ。*
 
-            | OS | 파일 |
+            | OS | 파일 / File / ファイル |
             |----|------|
-            | Windows | `vibe-diary-yejin_*_x64-setup.exe` |
-            | macOS | `vibe-diary-yejin_*_universal.dmg` |
+            | 🪟 **Windows** | `todoary_*_x64-setup.exe` |
+            | 🍎 **macOS** (Apple Silicon + Intel) | `todoary_*_universal.dmg` |
 
-            한 번 설치하면 이후 새 버전은 앱 설정 탭에서 업데이트 확인이 가능합니다.
+            ### ▶️ 실행 / Run / 起動
+            - **Windows** — 파란 SmartScreen 경고에서 **추가 정보 → 실행**
+              *(blue SmartScreen → **More info → Run anyway** / 詳細情報 → 実行)*
+            - **macOS** — 앱을 **응용 프로그램**으로 드래그 후 **우클릭 → 열기 → 열기**
+              *(drag to Applications, then **right-click → Open → Open** / 右クリック → 開く → 開く)*
+
+            > 💡 **보안 경고가 떠도 괜찮아요.** 개발자 서명이 없어 첫 실행 시 "알 수 없는 개발자" 경고가 나옵니다. **악성 프로그램이 아니며**, 한 번만 허용하면 다음부터는 바로 실행됩니다.
+            > *Not code-signed → you'll see an "unknown developer" warning on first launch. It's not malware — allow it once.*
+            > *開発元署名がないため初回のみ警告が出ます。マルウェアではありません。一度許可すればOKです。*
+
+            한 번 설치하면 새 버전은 **자동 업데이트** 🎉 / Auto-updates after install / 自動アップデート
 
             <details><summary>macOS에서 "손상되어 열 수 없습니다" 가 뜰 때</summary>
 
             ```bash
-            xattr -dr com.apple.quarantine "/Applications/vibe-diary-yejin.app"
+            xattr -dr com.apple.quarantine "/Applications/todoary.app"
             ```
-
             </details>
-
-      - name: Generate latest.json
-        if: matrix.platform == 'macos-latest'
-        run: |
-          APP_ARCHIVE=$(find src-tauri/target -path "*/bundle/macos/*.app.tar.gz" -type f | head -n 1)
-          if [ -z "$APP_ARCHIVE" ]; then
-            echo "Could not find macOS updater archive"
-            find src-tauri/target -type f \( -name "*.app.tar.gz" -o -name "*.sig" \) || true
-            exit 1
-          fi
-
-          APP_ARCHIVE_BASENAME=$(basename "$APP_ARCHIVE")
-          APP_ARCHIVE_NAME="${APP_ARCHIVE_BASENAME/.app.tar.gz/_universal.app.tar.gz}"
-          SIG=$(cat "$APP_ARCHIVE.sig")
-          APP_URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/${APP_ARCHIVE_NAME}"
-
-          cat > latest.json <<EOF
-          {
-            "version": "${GITHUB_REF_NAME#v}",
-            "notes": "Automatic release build",
-            "pub_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-            "platforms": {
-              "darwin-aarch64": {
-                "signature": "$SIG",
-                "url": "$APP_URL"
-              },
-              "darwin-x86_64": {
-                "signature": "$SIG",
-                "url": "$APP_URL"
-              }
-            }
-          }
-          EOF
-
-      - name: Upload latest.json
-        if: matrix.platform == 'macos-latest'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: latest.json

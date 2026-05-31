@@ -12,11 +12,12 @@ const dist = join(root, "dist");
 
 // 메인 HTML 이 로드하는 자산 목록
 const assets = [
-  "index.html",
+  "todoary.html",
   "styles.css",
   "tweaks-panel.jsx",
   "v2",
   "vendor",
+  "asset",
 ];
 
 function copyRecursive(src, dest) {
@@ -34,6 +35,5 @@ mkdirSync(dist, { recursive: true });
 for (const name of assets) {
   copyRecursive(join(root, name), join(dist, name));
 }
-copyRecursive(join(root, "public/asset"), join(dist, "asset"));
 
-console.log(`dist/ 준비 완료 (${assets.length + 1}개 자산)`);
+console.log(`dist/ 준비 완료 (${assets.length}개 자산)`);

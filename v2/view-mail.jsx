@@ -108,7 +108,7 @@ function InquiryRow({ m, onPick, actions }) {
       <button onClick={() => actions.toggleReplied(m.id)}
         className={"sk-check" + (m.replied ? " done" : "")}
         style={{ cursor: "pointer", flexShrink: 0 }}
-        title={m.replied ? "미답으로" : "답장함으로"} />
+        title={m.replied ? L("mail.markUnread") : L("mail.markRepliedTip")} />
       <DelBtn onClick={() => actions.removeEmail(m.id)} />
     </div>
   );
@@ -335,19 +335,19 @@ function PresetRow({ p, onCopy, onEdit, onDelete }) {
       background: "var(--paper)",
     }}>
       <span style={{ fontSize: 12, flexShrink: 0 }}>⚡</span>
-      <button onClick={onCopy} title="클립보드에 복사" style={{
+      <button onClick={onCopy} title={L("mail.copyClipboard")} style={{
         all: "unset", cursor: "pointer", flex: 1, minWidth: 0,
       }}>
         <div style={{
           fontFamily: "var(--hand)", fontSize: 13, fontWeight: 700, color: "var(--ink)",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        }}>{p.label || "(라벨 없음)"}</div>
+        }}>{p.label || L("mail.noLabel")}</div>
         <div style={{
           fontFamily: "var(--hand)", fontSize: 11, color: "var(--ink-2)",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.3,
         }}>{(p.text || "").slice(0, 60)}</div>
       </button>
-      <button onClick={onEdit} title="편집" style={mailIconBtn}>✎</button>
+      <button onClick={onEdit} title={L("mail.edit")} style={mailIconBtn}>✎</button>
       <DelBtn onClick={onDelete} />
     </div>
   );

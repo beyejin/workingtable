@@ -1,8 +1,8 @@
 {
-  "name": "vibe-diary",
-  "version": "0.5.5",
+  "name": "todoary",
+  "version": "0.7.9",
   "private": true,
-  "description": "바이브코딩 다이어리 — 데스크탑 투명 사이드바",
+  "description": "todoary — 데스크탑 투명 사이드바",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",

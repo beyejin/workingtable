@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "vibe-diary-yejin",
-  "version": "0.5.5",
-  "identifier": "app.vibe-diary-yejin",
+  "productName": "todoary",
+  "version": "0.7.9",
+  "identifier": "app.vibe-diary",
   "build": {
     "frontendDist": "../dist",
     "beforeDevCommand": "node scripts/build-dist.mjs",
@@ -14,11 +14,10 @@
     "windows": [
       {
         "label": "main",
-        "url": "index.html",
-        "title": "vibe diary",
-        "width": 420,
-        "height": 760,
-        "visible": true,
+        "url": "todoary.html",
+        "title": "todoary",
+        "width": 440,
+        "height": 1000,
         "minWidth": 380,
         "minHeight": 360,
         "decorations": false,
@@ -44,14 +43,19 @@
       "icons/icon.png",
       "icons/icon.ico",
       "icons/icon.icns"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installerHooks": "installer-hooks.nsh"
+      }
+    }
   },
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/beyejin/workingtable/releases/latest/download/latest.json"
+        "https://github.com/binglehaepi/workingtable/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVBQTg5RTk5OTc2MUM3NTMKUldSVHgyR1htWjZvNnArWXVqS01mdzdsTkdjU2xzR1F3Znc3MG1VakxqU2dReC9sMTdqclo1bVMK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ4NDA5NDJERjQ5OUIzQjQKUldTMHM1bjBMWlJBU1BFUVkyRnErc05BTXVJVDNQUmZPakY4eGtkTWJpMHp2akhZaW42N0JoVkEK"
     }
   }
 }
