@@ -35,10 +35,28 @@ function dDayLabel(target, base) {
   if (days > 0) return `D-${days}`;
   return `D+${-days}`;
 }
+function normalizedTodoPeriod(t) {
+  const a = t.startDate || null;
+  const b = t.endDate || null;
+  if (!a && !b) return null;
+  const start = a || b;
+  const end = b || a;
+  return start <= end ? { start, end } : { start: end, end: start };
+}
+function eachIsoDate(start, end, fn) {
+  let d = start;
+  for (let i = 0; i < 370 && d <= end; i += 1) {
+    fn(d);
+    const nd = new Date(d + "T00:00:00");
+    nd.setDate(nd.getDate() + 1);
+    d = dateOnly(nd);
+  }
+}
 
 function CalendarView() {
   const { state, actions } = diary.useDiary();
   const today = new Date();
+  const todayStr = diary.today();
   const [weekStart, setWeekStart] = useState(() => startOfWeekMonday(today));
 
   const mondayStr = dateOnly(weekStart);
@@ -51,11 +69,23 @@ function CalendarView() {
   const doneByDay = {};
   dayStrings.forEach(d => { dueByDay[d] = []; doneByDay[d] = []; });
   todos.forEach(t => {
-    if (t.dueDate && dueByDay[t.dueDate]) dueByDay[t.dueDate].push(t);
-    if (!t.dueDate && t.done && t.completedAt) {
+    const period = normalizedTodoPeriod(t);
+    if (period) {
+      eachIsoDate(period.start, period.end, (d) => {
+        if (dueByDay[d]) dueByDay[d].push(t);
+      });
+      return;
+    }
+    if (t.dueDate) {
+      if (dueByDay[t.dueDate]) dueByDay[t.dueDate].push(t);
+      return;
+    }
+    if (t.done && t.completedAt) {
       const k = t.completedAt.slice(0, 10);
       if (doneByDay[k]) doneByDay[k].push(t);
+      return;
     }
+    if (dueByDay[todayStr]) dueByDay[todayStr].push(t);
   });
   const workByDay = {};
   (state.workSessions ?? []).forEach(w => { if (dayStrings.includes(w.date)) workByDay[w.date] = w.minutes; });

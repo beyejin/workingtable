@@ -21,6 +21,15 @@ function isInTodoPeriod(t, day) {
   const p = normalizedPeriod(t);
   return !!p && p.start <= day && day <= p.end;
 }
+function todoMatchesDay(t, day, today) {
+  if (isInTodoPeriod(t, day)) return true;
+  if (t.dueDate === day) return true;
+  if (day === today) {
+    if (t.dueDate && t.dueDate < day && !t.done) return true;
+    if (!t.dueDate && !normalizedPeriod(t)) return true;
+  }
+  return false;
+}
 function periodLabel(t) {
   const p = normalizedPeriod(t);
   if (!p) return "";
@@ -88,17 +97,10 @@ function TodoView() {
   const isToday = selectedDate === todayStr;
 
   // 날짜별 필터:
-  //  - 오늘: 마감 없는 일 + 오늘 마감 + 과거에 마감이었으나 미완료 (놓친 일 보호)
-  //  - 다른 날짜: 그 날짜에 마감인 일만
+  //  - 오늘: 마감 없는 일 + 오늘 마감 + 과거에 마감이었으나 미완료 + 오늘이 포함된 기간
+  //  - 다른 날짜: 그 날짜 마감 또는 기간에 포함된 일
   const list = items.filter(t => {
-    if (isToday) {
-      if (isInTodoPeriod(t, todayStr)) return true;
-      if (!t.dueDate) return true;
-      if (t.dueDate === todayStr) return true;
-      if (t.dueDate < todayStr && !t.done) return true;
-      return false;
-    }
-    return t.dueDate === selectedDate || isInTodoPeriod(t, selectedDate);
+    return todoMatchesDay(t, selectedDate, todayStr);
   }).slice().sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1;
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
