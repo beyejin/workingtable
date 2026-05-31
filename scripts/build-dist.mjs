@@ -3,7 +3,7 @@
 //
 // 주의: 이 환경에선 fs.rmSync/cpSync 의 recursive 옵션이 죽는다(STATUS_STACK_BUFFER_OVERRUN).
 //       그래서 단일 파일 연산(mkdirSync/copyFileSync)만으로 직접 재귀 복사한다.
-import { mkdirSync, copyFileSync, readdirSync, statSync } from "node:fs";
+import { mkdirSync, copyFileSync, readdirSync, statSync, unlinkSync, rmdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -20,6 +20,19 @@ const assets = [
   "asset",
 ];
 
+function clearDir(dir) {
+  if (!existsSync(dir)) return;
+  for (const entry of readdirSync(dir)) {
+    const path = join(dir, entry);
+    if (statSync(path).isDirectory()) {
+      clearDir(path);
+      rmdirSync(path);
+    } else {
+      unlinkSync(path);
+    }
+  }
+}
+
 function copyRecursive(src, dest) {
   if (statSync(src).isDirectory()) {
     mkdirSync(dest, { recursive: true });
@@ -32,6 +45,7 @@ function copyRecursive(src, dest) {
 }
 
 mkdirSync(dist, { recursive: true });
+clearDir(dist);
 for (const name of assets) {
   copyRecursive(join(root, name), join(dist, name));
 }
