@@ -604,7 +604,7 @@ function RoomMainView({ tweaks } = {}) {
     const ok = window.dialog
       ? await window.dialog.confirm(msg)
       : window.confirm(msg);
-    if (ok) room.leaveRoom();
+    if (ok) await room.leaveRoom();
   };
   return (
     <div style={{
