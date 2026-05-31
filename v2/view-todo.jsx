@@ -131,8 +131,7 @@ function TodoView() {
   const clear = () => setSel(null);
 
   const onAdd = (text) => {
-    if (isToday) actions.addTodo(text);
-    else actions.addTodo(text, { dueDate: selectedDate });
+    actions.addTodo(text, { dueDate: selectedDate });
   };
 
   const dateLabel = isToday ? L("todo.today") : (window.i18n && window.i18n.fmtDate ? window.i18n.fmtDate(selectedDate) : selectedDate);
@@ -583,8 +582,10 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
         )}
 
         {/* 마감 뱃지 */}
-        {t.dueDate && (
-          <span title={`마감 ${t.dueDate}`} style={dueBadge}>{fmtMD(t.dueDate)}</span>
+        {t.dueDate ? (
+          <button onClick={(e) => { stop(e); setDueOpen(o => !o); }} title={`마감 ${t.dueDate} 수정`} style={dueBadge}>{fmtMD(t.dueDate)}</button>
+        ) : showActions && (
+          <button onClick={(e) => { stop(e); setDueOpen(o => !o); }} title="마감일 지정" style={{ ...dueBadge, color: "var(--ink-3)" }}>날짜</button>
         )}
         {/* 반복 표시 */}
         {recRule && <span title={`반복 — ${recLabel(recRule)}`} style={{ fontSize: 12, color: "var(--ink-2)" }}>↻</span>}
@@ -594,7 +595,6 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
           <>
             <button onClick={(e) => { stop(e); actions.togglePin(t.id); }} title={t.pinned ? "핀 해제" : "핀(중요·예정으로 이동)"}
               style={{ ...iconBtn, color: t.pinned ? "#7a5a10" : "var(--ink-3)", fontWeight: t.pinned ? 800 : 400 }}>!</button>
-            <button onClick={(e) => { stop(e); setDueOpen(o => !o); }} title="마감일" style={iconBtn}>📅</button>
             <button onClick={(e) => { stop(e); setRecOpen(o => !o); }} title="반복" style={{ ...iconBtn, color: recRule ? "var(--ink)" : "var(--ink-3)" }}>↻</button>
             <DelBtn onClick={(e) => { if (e && e.stopPropagation) e.stopPropagation(); actions.removeTodo(t.id); }} />
           </>

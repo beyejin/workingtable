@@ -13,8 +13,8 @@ const {useState} = React;
 // [12]cake [13]coffee [14]mouse [15]cat [16]bear [17]rabbit [18]pencil [19]book [20]coin [21]pill [22]memo [23]face
 const TABS = [
     {id: "todo", labelKey: "tab.todo", glyph: "✓", sprite: 4, color: "#d4ecdb", view: () => <TodoView/>},
-    {id: "cal", labelKey: "tab.week", glyph: "17", sprite: 6, color: "#d4e6fa", view: () => <CalendarView/>},
-    {id: "memo", labelKey: "tab.memo", glyph: "▤", sprite: 22, color: "#fff0c0", view: () => <MemoView/>},
+    {id: "cal", labelKey: "tab.week", glyph: "⊞", sprite: 6, color: "#d4e6fa", view: () => <CalendarView/>},
+    {id: "memo", labelKey: "tab.memo", glyph: "□", sprite: 22, color: "#fff0c0", view: () => <MemoView/>},
     {id: "mail", labelKey: "tab.mail", glyph: "@", sprite: 0, color: "#ffe0d2", view: () => <MailView/>},
     {id: "deco", labelKey: "tab.deco", glyph: "◇", sprite: 9, color: "#ffe6f0", view: () => null, foot: true},
     {id: "settings", labelKey: "tab.settings", glyph: "⚙", sprite: 1, color: "#e6e6ee", view: () => null, foot: true},
@@ -23,8 +23,8 @@ const TABS = [
 const TAB_ICONS = {
     business: {
         todo: "✓",
-        cal: "17",
-        memo: "▤",
+        cal: "⊞",
+        memo: "□",
         mail: "@",
         deco: "◇",
         settings: "⚙",
@@ -66,12 +66,22 @@ function SideDockV2({tweaks, setTweak}) {
 
         const onKeyDown = (event) => {
             const isSpace = event.key === " " || event.key === "Spacebar" || event.code === "Space";
-            if (!isSpace || event.repeat || event.defaultPrevented) return;
+            const isPrev = event.key === "ArrowLeft";
+            const isNext = event.key === "ArrowRight";
+            const isVolumeUp = event.key === "ArrowUp";
+            const isVolumeDown = event.key === "ArrowDown";
+            if ((!isSpace && !isPrev && !isNext && !isVolumeUp && !isVolumeDown) || event.repeat || event.defaultPrevented) return;
             if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
             if (isEditableTarget(event.target)) return;
+            const music = window.musicPlayer;
+            if (!music?.getState?.().hasQueue) return;
 
             event.preventDefault();
-            window.musicPlayer?.toggle?.();
+            if (isSpace) music.toggle?.();
+            else if (isPrev) music.prev?.();
+            else if (isNext) music.next?.();
+            else if (isVolumeUp) music.volumeUp?.();
+            else if (isVolumeDown) music.volumeDown?.();
         };
 
         document.addEventListener("keydown", onKeyDown, true);
@@ -83,6 +93,8 @@ function SideDockV2({tweaks, setTweak}) {
     const tabStyle = tweaks?.tabStyle ?? "paper";
     const tabIconStyle = tweaks?.tabIconStyle ?? "business";
     const desktopMode = tweaks?.desktopMode ?? false;
+    const dockHidden = tweaks?.dockHidden ?? false;
+    const tabsHidden = tweaks?.tabsHidden ?? false;
     // 배경 (그라데이션 / 도형)
     const dockBg = buildBackground(
         tweaks?.bgType ?? "linear",
@@ -106,6 +118,16 @@ function SideDockV2({tweaks, setTweak}) {
     const effectiveTabSide = dockSide === "left" ? tabSide : (tabSide === "right" ? "left" : "right");
 
     const DOCK_W = 380;
+
+    if (dockHidden) {
+        return (
+            <DockRevealEdge
+                tweaks={tweaks}
+                setTweak={setTweak}
+                onReveal={() => setTweak && setTweak("dockHidden", false)}
+            />
+        );
+    }
 
     return (
         <div style={{
@@ -147,7 +169,7 @@ function SideDockV2({tweaks, setTweak}) {
 
                 {/* sticky — 헤더 (제목/음악/타이머/디데이 각 한 줄) */}
                 <div style={{
-                    padding: "9px 12px 10px",
+                    padding: "8px 12px 9px",
                     background: (isPhoto && desktopMode) ? "transparent" : headerBg,
                     borderBottom: "1.1px solid var(--ink)",
                     flexShrink: 0,
@@ -181,7 +203,221 @@ function SideDockV2({tweaks, setTweak}) {
                 tabIconStyle={tabIconStyle}
                 chrome={chrome}
                 compact={compactTabs}
+                autoHide={tabsHidden}
             />
+        </div>
+    );
+}
+
+// ---- 도크 미니화 시 디지털 타이머 위젯 ----
+function DockRevealEdge({tweaks, setTweak, onReveal}) {
+    const [hover, setHover] = useState(false);
+    const [dragging, setDragging] = useState(false);
+    const dockSide = tweaks?.dockSide ?? "left";
+    const isLeft = dockSide === "left";
+    const savedPos = tweaks?.dockMiniPos ?? null;
+    const [pos, setPos] = useState(savedPos);
+
+    React.useEffect(() => { setPos(savedPos); }, [savedPos]);
+
+    const {state} = diary.useDiary();
+    const totalSec = diary.select.workSecondsToday
+        ? diary.select.workSecondsToday(state)
+        : diary.select.workMinutesToday(state) * 60;
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    const display = h > 0
+        ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+        : `${m}:${String(s).padStart(2, "0")}`;
+
+    const [musicPlaying, setMusicPlaying] = useState(
+        () => !!(window.musicPlayer && window.musicPlayer.getState().playing)
+    );
+    React.useEffect(() => {
+        if (!window.musicPlayer) return;
+        const sync = () => setMusicPlaying(!!window.musicPlayer.getState().playing);
+        sync();
+        return window.musicPlayer.subscribe(sync);
+    }, []);
+
+    const W = hover ? 126 : 116;
+    const H = hover ? 58 : 52;
+    const DRAG_THRESHOLD = 4;
+
+    React.useEffect(() => {
+        if (!pos) return;
+        const onResize = () => {
+            setPos(p => {
+                if (!p) return p;
+                return {
+                    x: Math.max(0, Math.min(window.innerWidth - W, p.x)),
+                    y: Math.max(0, Math.min(window.innerHeight - H, p.y)),
+                };
+            });
+        };
+        window.addEventListener("resize", onResize);
+        return () => window.removeEventListener("resize", onResize);
+    }, [!!pos, W, H]);
+
+    const onMouseDown = (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        const rect = e.currentTarget.getBoundingClientRect();
+        const startMouseX = e.clientX;
+        const startMouseY = e.clientY;
+        const startElX = rect.left;
+        const startElY = rect.top;
+        let moved = false;
+        let lastPos = {x: startElX, y: startElY};
+        setDragging(true);
+
+        const onMove = (ev) => {
+            const dx = ev.clientX - startMouseX;
+            const dy = ev.clientY - startMouseY;
+            if (!moved && Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD) moved = true;
+            if (!moved) return;
+            const nx = Math.max(0, Math.min(window.innerWidth - W, startElX + dx));
+            const ny = Math.max(0, Math.min(window.innerHeight - H, startElY + dy));
+            lastPos = {x: nx, y: ny};
+            setPos(lastPos);
+        };
+        const onUp = () => {
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+            setDragging(false);
+            if (moved) {
+                if (setTweak) setTweak("dockMiniPos", lastPos);
+            } else if (onReveal) {
+                onReveal();
+            }
+        };
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+    };
+
+    const isFloating = !!pos;
+    const positionStyle = isFloating
+        ? {left: pos.x, top: pos.y, transform: "none"}
+        : {top: "50%", transform: "translateY(-50%)", [isLeft ? "left" : "right"]: 0};
+    const borderRadius = isFloating ? 10 : (isLeft ? "0 10px 10px 0" : "10px 0 0 10px");
+    const borderStyle = "1.1px solid var(--ink)";
+    const themeBg = buildBackground(
+        tweaks?.bgType ?? "linear",
+        tweaks?.bgAngle ?? 180,
+        tweaks?.bgStops ?? [{c: "#a9cdf5", p: 0}, {c: "#ffffff", p: 100}],
+        tweaks?.bgShape ?? "none"
+    );
+
+    const miniMusicAction = (e, action) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (action === "prev") window.musicPlayer?.prev?.();
+        if (action === "toggle") window.musicPlayer?.toggle?.();
+        if (action === "next") window.musicPlayer?.next?.();
+    };
+    const controlStyle = {
+        all: "unset",
+        cursor: "pointer",
+        width: 22,
+        height: 20,
+        borderRadius: 6,
+        display: "grid",
+        placeItems: "center",
+        border: "1.1px solid var(--ink)",
+        background: "var(--paper)",
+        boxShadow: "0 1px 0 rgba(255,255,255,0.5)",
+        fontFamily: "var(--mono)",
+        fontSize: 11,
+        lineHeight: 1,
+        color: "var(--ink)",
+    };
+
+    return (
+        <div
+            role="button"
+            tabIndex={0}
+            onMouseDown={onMouseDown}
+            onMouseEnter={() => setHover(true)}
+            onMouseLeave={() => setHover(false)}
+            onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    if (onReveal) onReveal();
+                }
+            }}
+            title={L("set.dockMiniTip")}
+            style={{
+                cursor: dragging ? "grabbing" : "grab",
+                position: "fixed",
+                ...positionStyle,
+                width: W,
+                height: H,
+                background: themeBg,
+                backgroundSize: "180% 180%",
+                backgroundPosition: "center center",
+                border: borderStyle,
+                borderLeft: (!isFloating && isLeft) ? "none" : borderStyle,
+                borderRight: (!isFloating && !isLeft) ? "none" : borderStyle,
+                borderRadius,
+                boxShadow: "inset 0 1px 2px rgba(255,255,255,0.35), inset 0 -1px 1px rgba(0,0,0,0.08), 2px 2px 0 var(--paper-3), 3px 3px 12px rgba(138,106,94,0.18)",
+                boxSizing: "border-box",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 4,
+                padding: "5px 7px",
+                color: "var(--ink)",
+                fontFamily: "var(--mono)",
+                fontSize: hover ? 16 : 15,
+                fontWeight: 700,
+                letterSpacing: 0,
+                textShadow: "0 1px 0 rgba(255,255,255,0.55)",
+                transition: dragging ? "none" : "width 0.18s, height 0.18s, font-size 0.18s",
+                zIndex: 10,
+                userSelect: "none",
+                overflow: "hidden",
+            }}
+        >
+            <div style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 5,
+                width: "100%",
+                minHeight: 18,
+            }}>
+                <span style={{fontSize: 11, opacity: 0.7, textShadow: "none"}}>⏱</span>
+                <span style={{lineHeight: 1}}>{display}</span>
+                {musicPlaying && (
+                    <span style={{
+                        fontSize: 9,
+                        color: "var(--ink-2)",
+                        opacity: 0.85,
+                        letterSpacing: 0,
+                        textShadow: "none",
+                    }}>♪</span>
+                )}
+            </div>
+            <div style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 4,
+                width: "100%",
+                textShadow: "none",
+            }}>
+                <button type="button" onMouseDown={(e) => miniMusicAction(e, "prev")} title="이전 곡" style={controlStyle}>
+                    <MusicBtnIcon type="prev"/>
+                </button>
+                <button type="button" onMouseDown={(e) => miniMusicAction(e, "toggle")} title={musicPlaying ? "음악 멈춤" : "음악 재생"} style={controlStyle}>
+                    <MusicBtnIcon type={musicPlaying ? "pause" : "play"}/>
+                </button>
+                <button type="button" onMouseDown={(e) => miniMusicAction(e, "next")} title="다음 곡" style={controlStyle}>
+                    <MusicBtnIcon type="next"/>
+                </button>
+            </div>
         </div>
     );
 }
@@ -243,8 +479,9 @@ function TabHeader({active}) {
 }
 
 // ---- 다이어리 인덱스 탭 ----
-function DiaryTabs({tabs, active, onSelect, dockSide, tabSide, dockWidth, tabStyle, tabIconStyle, chrome, compact}) {
+function DiaryTabs({tabs, active, onSelect, dockSide, tabSide, dockWidth, tabStyle, tabIconStyle, chrome, compact, autoHide}) {
     const cm = (pct) => `color-mix(in srgb, ${chrome || "#a9cdf5"} ${pct}%, white)`;
+    const iconMode = tabIconStyle === "none" ? "textOnly" : (tabIconStyle || "business");
     // 탭이 도크의 어느 쪽 바깥에 붙는지 → 위치 계산
     const onLeft = tabSide === "left";
 
@@ -263,11 +500,60 @@ function DiaryTabs({tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSty
     const TAB_H = compact ? 40 : 74;   // 짧을 땐 아이콘만(낮은 탭)
     const TAB_GAP = 4;
     const inactiveCenterShift = stickRight ? 0 : -2;
+    const REVEAL_DELAY = 1500;
+    const HIDE_DELAY = 220;
+    const [revealed, setRevealed] = useState(false);
+    const revealTimerRef = React.useRef(null);
+    const hideTimerRef = React.useRef(null);
+
+    React.useEffect(() => {
+        if (!autoHide) {
+            setRevealed(false);
+            if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+            if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+        } else {
+            setRevealed(false);
+        }
+        return () => {
+            if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+            if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+        };
+    }, [autoHide]);
+
+    const onZoneEnter = () => {
+        if (!autoHide) return;
+        if (hideTimerRef.current) {
+            clearTimeout(hideTimerRef.current);
+            hideTimerRef.current = null;
+        }
+        if (revealed || revealTimerRef.current) return;
+        revealTimerRef.current = setTimeout(() => {
+            setRevealed(true);
+            revealTimerRef.current = null;
+        }, REVEAL_DELAY);
+    };
+
+    const onZoneLeave = () => {
+        if (!autoHide) return;
+        if (revealTimerRef.current) {
+            clearTimeout(revealTimerRef.current);
+            revealTimerRef.current = null;
+        }
+        if (!revealed) return;
+        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = setTimeout(() => {
+            setRevealed(false);
+            hideTimerRef.current = null;
+        }, HIDE_DELAY);
+    };
 
     const renderTab = (t) => {
         const isActive = t.id === active;
-        const icon = TAB_ICONS[tabIconStyle]?.[t.id] ?? t.glyph;
-        const showIcon = tabIconStyle !== "none";
+        const icon = iconMode === "iconOnly"
+            ? TAB_ICONS.kitsch[t.id]
+            : (TAB_ICONS[iconMode]?.[t.id] ?? TAB_ICONS.business[t.id] ?? t.glyph);
+        const showIcon = iconMode !== "textOnly";
+        const showLabel = !compact && iconMode !== "iconOnly";
         const isSpriteIcon = typeof icon === "number";
         return (
             <button
@@ -305,7 +591,7 @@ function DiaryTabs({tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSty
                     flexDirection: "column",
                     alignItems: "center",
                     justifyContent: "center",
-                    gap: showIcon && !compact ? 3 : 0,
+                    gap: showIcon && showLabel ? 3 : 0,
                     transform: isActive ? "none" : `translateX(${inactiveCenterShift}px)`,
                 }}>
                     {showIcon && (
@@ -320,7 +606,7 @@ function DiaryTabs({tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSty
                                 }}>{icon}</span>
                             )
                     )}
-                    {!compact && (
+                    {showLabel && (
                         <span style={{
                             writingMode: "vertical-rl",
                             textOrientation: "mixed",
@@ -341,16 +627,50 @@ function DiaryTabs({tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSty
         );
     };
 
+    const hidden = autoHide && !revealed;
+    const slideOffset = TAB_W + 8;
+    const hiddenTransform = stickRight
+        ? `translateX(-${slideOffset}px)`
+        : `translateX(${slideOffset}px)`;
+    const HOVER_ZONE_W = autoHide && !revealed ? 36 : (TAB_W + 12);
+
     return (
-        <div style={{
+        <div
+            onMouseEnter={onZoneEnter}
+            onMouseLeave={onZoneLeave}
+            style={{
             position: "absolute",
-            top: 70,
+            top: 0,
+            bottom: 0,
             ...containerPos,
-            display: "flex", flexDirection: "column", gap: TAB_GAP,
-            alignItems: stickRight ? "flex-start" : "flex-end",
+            width: HOVER_ZONE_W,
             zIndex: 1,
+            pointerEvents: "auto",
         }}>
-            {tabs.map(renderTab)}
+            {hidden && (
+                <div style={{
+                    position: "absolute",
+                    top: 72,
+                    [stickRight ? "left" : "right"]: 0,
+                    width: 3,
+                    height: 60,
+                    background: cm(35),
+                    borderRadius: stickRight ? "0 3px 3px 0" : "3px 0 0 3px",
+                    opacity: 0.6,
+                    pointerEvents: "none",
+                }}/>
+            )}
+            <div style={{
+                position: "absolute",
+                top: 70,
+                [stickRight ? "left" : "right"]: 0,
+                display: "flex", flexDirection: "column", gap: TAB_GAP,
+                alignItems: stickRight ? "flex-start" : "flex-end",
+                transform: hidden ? hiddenTransform : "none",
+                transition: "transform 0.32s cubic-bezier(0.4, 0, 0.2, 1)",
+            }}>
+                {tabs.map(renderTab)}
+            </div>
         </div>
     );
 }
@@ -430,6 +750,7 @@ function SettingsView({tweaks, setTweak}) {
     const t = tweaks || {};
     const set = setTweak || (() => {
     });
+    const tabIconValue = t.tabIconStyle === "none" ? "textOnly" : (t.tabIconStyle ?? "business");
     const i18 = useI18n();
     const [updateStatus, setUpdateStatus] = useState("");
     const [backupStatus, setBackupStatus] = useState("");
@@ -467,9 +788,21 @@ function SettingsView({tweaks, setTweak}) {
                         options={[["left", L("set.left")], ["right", L("set.right")]]}/>
             </SetSection>
 
-            <SetSection label="인덱스 아이콘">
-                <SetSeg value={t.tabIconStyle ?? "business"} onChange={v => set("tabIconStyle", v)}
-                        options={[["business", "비즈니스"], ["kitsch", "키치"], ["none", "없음"]]}/>
+            <SetSection label={L("set.dockHide")}>
+                <SetSeg value={t.dockHidden ? "on" : "off"} onChange={v => set("dockHidden", v === "on")}
+                        options={[["on", L("set.on")], ["off", L("set.off")]]}/>
+                <div className="sk-cap" style={{marginTop: 6, fontSize: 11}}>{L("set.dockHideHint")}</div>
+            </SetSection>
+
+            <SetSection label={L("set.tabsAutoHide")}>
+                <SetSeg value={t.tabsHidden ? "on" : "off"} onChange={v => set("tabsHidden", v === "on")}
+                        options={[["on", L("set.on")], ["off", L("set.off")]]}/>
+                <div className="sk-cap" style={{marginTop: 6, fontSize: 11}}>{L("set.tabsAutoHideHint")}</div>
+            </SetSection>
+
+            <SetSection label={L("set.indexIcon")}>
+                <SetSeg value={tabIconValue} onChange={v => set("tabIconStyle", v)}
+                        options={[["business", L("set.iconBusiness")], ["kitsch", L("set.iconKitsch")], ["iconOnly", L("set.iconOnly")], ["textOnly", L("set.textOnly")]]}/>
             </SetSection>
 
             <SetSection label={L("set.alwaysOnTop")}>
@@ -478,33 +811,33 @@ function SettingsView({tweaks, setTweak}) {
                 <div className="sk-cap" style={{marginTop: 6, fontSize: 11}}>{L("set.alwaysOnTopHint")}</div>
             </SetSection>
 
-            <SetSection label="업데이트">
+            <SetSection label={L("set.update")}>
                 <button
                     onClick={async () => {
-                        setUpdateStatus("업데이트를 확인하는 중이에요...");
+                        setUpdateStatus(L("set.updateChecking"));
                         try {
                             const updater = window.__TAURI__?.updater;
 
                             if (!updater?.check) {
-                                await notify("업데이트 기능을 사용할 수 없어요.", setUpdateStatus);
+                                await notify(L("set.updateUnavailable"), setUpdateStatus);
                                 return;
                             }
 
                             const update = await updater.check();
 
                             if (!update) {
-                                await notify("현재 최신 버전입니다.", setUpdateStatus);
+                                await notify(L("set.updateLatest"), setUpdateStatus);
                                 return;
                             }
 
-                            const ok = await ask(`새 버전 ${update.version}이 있습니다. 업데이트할까요?`);
+                            const ok = await ask(L("set.updateAsk", {version: update.version}));
                             if (!ok) return;
 
-                            setUpdateStatus("업데이트를 다운로드하고 설치하는 중이에요...");
+                            setUpdateStatus(L("set.updateInstalling"));
                             await update.downloadAndInstall();
-                            await notify("업데이트가 완료되었습니다. 앱을 다시 실행해주세요.", setUpdateStatus);
+                            await notify(L("set.updateDone"), setUpdateStatus);
                         } catch (e) {
-                            await notify("업데이트 확인 중 오류가 발생했습니다: " + (e?.message || e), setUpdateStatus);
+                            await notify(L("set.updateError", {error: e?.message || e}), setUpdateStatus);
                         }
                     }}
                     style={{
@@ -520,11 +853,11 @@ function SettingsView({tweaks, setTweak}) {
                         background: "var(--hi)",
                         color: "var(--ink)",
                         fontFamily: "var(--hand)",
-                        fontWeight: 700,
+                        fontWeight: 500,
                         fontSize: 14,
                     }}
                 >
-                    업데이트 확인
+                    {L("set.updateCheck")}
                 </button>
                 {updateStatus && (
                     <div className="sk-cap" style={{
@@ -539,107 +872,108 @@ function SettingsView({tweaks, setTweak}) {
                 )}
             </SetSection>
 
-            <SetSection label="백업">
-                <button
-                    onClick={async () => {
-                        try {
-                            const data = diary.actions.exportData();
-                            const json = JSON.stringify(data, null, 2);
-                            const stamp = new Date().toISOString().slice(0, 10);
-                            const fileName = `vibe-diary-backup-${stamp}.json`;
-                            const invoke = window.__TAURI__?.core?.invoke;
-
-                            if (invoke) {
-                                const saved = await invoke("export_backup_file", {fileName, contents: json});
-                                if (saved) await notify("백업 파일을 저장했어요.", setBackupStatus);
-                                return;
-                            }
-
-                            const blob = new Blob([json], {type: "application/json"});
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement("a");
-
-                            a.href = url;
-                            a.download = fileName;
-                            document.body.appendChild(a);
-                            a.click();
-                            a.remove();
-                            URL.revokeObjectURL(url);
-                            await notify("백업 파일을 만들었어요. 다운로드 폴더를 확인해주세요.", setBackupStatus);
-                        } catch (e) {
-                            await notify("내보내기 실패: " + (e?.message || e), setBackupStatus);
-                        }
-                    }}
-                    style={{
-                        all: "unset",
-                        cursor: "pointer",
-                        display: "block",
-                        width: "100%",
-                        boxSizing: "border-box",
-                        textAlign: "center",
-                        padding: "8px 12px",
-                        borderRadius: 10,
-                        border: "1.1px solid var(--ink)",
-                        background: "var(--hi)",
-                        color: "var(--ink)",
-                        fontFamily: "var(--hand)",
-                        fontWeight: 700,
-                        fontSize: 14,
-                        marginBottom: 8,
-                    }}
-                >
-                    데이터 내보내기
-                </button>
-
-                <button
-                    onClick={() => {
-                        const input = document.createElement("input");
-                        input.type = "file";
-                        input.accept = "application/json,.json";
-
-                        input.onchange = async () => {
-                            const file = input.files?.[0];
-                            if (!file) return;
-
+            <SetSection label={L("set.backup")}>
+                <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8}}>
+                    <button
+                        onClick={async () => {
                             try {
-                                const text = await file.text();
-                                const json = JSON.parse(text);
+                                const data = diary.actions.exportData();
+                                const json = JSON.stringify(data, null, 2);
+                                const stamp = new Date().toISOString().slice(0, 10);
+                                const fileName = `vibe-diary-backup-${stamp}.json`;
+                                const invoke = window.__TAURI__?.core?.invoke;
 
-                                const ok = await ask("백업 데이터를 가져오면 현재 데이터가 덮어쓰기 됩니다. 계속할까요?");
-                                if (!ok) return;
+                                if (invoke) {
+                                    const saved = await invoke("export_backup_file", {fileName, contents: json});
+                                    if (saved) await notify(L("set.backupSaved"), setBackupStatus);
+                                    return;
+                                }
 
-                                diary.actions.importData(json);
-                                await notify("데이터를 가져왔습니다. 앱을 새로고침합니다.", setBackupStatus);
-                                location.reload();
+                                const blob = new Blob([json], {type: "application/json"});
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+
+                                a.href = url;
+                                a.download = fileName;
+                                document.body.appendChild(a);
+                                a.click();
+                                a.remove();
+                                URL.revokeObjectURL(url);
+                                await notify(L("set.backupDownloaded"), setBackupStatus);
                             } catch (e) {
-                                await notify("가져오기 실패: " + (e?.message || e), setBackupStatus);
+                                await notify(L("set.backupExportError", {error: e?.message || e}), setBackupStatus);
                             }
-                        };
+                        }}
+                        style={{
+                            all: "unset",
+                            cursor: "pointer",
+                            display: "block",
+                            boxSizing: "border-box",
+                            textAlign: "center",
+                            padding: "7px 8px",
+                            borderRadius: 10,
+                            border: "1.1px solid var(--ink)",
+                            background: "var(--hi)",
+                            color: "var(--ink)",
+                            fontFamily: "var(--hand)",
+                            fontWeight: 400,
+                            fontSize: 13,
+                            lineHeight: 1.15,
+                        }}
+                    >
+                        {L("set.backupExport")}
+                    </button>
 
-                        input.click();
-                    }}
-                    style={{
-                        all: "unset",
-                        cursor: "pointer",
-                        display: "block",
-                        width: "100%",
-                        boxSizing: "border-box",
-                        textAlign: "center",
-                        padding: "8px 12px",
-                        borderRadius: 10,
-                        border: "1.1px solid var(--ink)",
-                        background: "var(--paper)",
-                        color: "var(--ink)",
-                        fontFamily: "var(--hand)",
-                        fontWeight: 700,
-                        fontSize: 14,
-                    }}
-                >
-                    데이터 가져오기
-                </button>
+                    <button
+                        onClick={() => {
+                            const input = document.createElement("input");
+                            input.type = "file";
+                            input.accept = "application/json,.json";
+
+                            input.onchange = async () => {
+                                const file = input.files?.[0];
+                                if (!file) return;
+
+                                try {
+                                    const text = await file.text();
+                                    const json = JSON.parse(text);
+
+                                    const ok = await ask(L("set.backupImportAsk"));
+                                    if (!ok) return;
+
+                                    diary.actions.importData(json);
+                                    await notify(L("set.backupImported"), setBackupStatus);
+                                    location.reload();
+                                } catch (e) {
+                                    await notify(L("set.backupImportError", {error: e?.message || e}), setBackupStatus);
+                                }
+                            };
+
+                            input.click();
+                        }}
+                        style={{
+                            all: "unset",
+                            cursor: "pointer",
+                            display: "block",
+                            boxSizing: "border-box",
+                            textAlign: "center",
+                            padding: "7px 8px",
+                            borderRadius: 10,
+                            border: "1.1px solid var(--ink)",
+                            background: "var(--paper)",
+                            color: "var(--ink)",
+                            fontFamily: "var(--hand)",
+                            fontWeight: 400,
+                            fontSize: 13,
+                            lineHeight: 1.15,
+                        }}
+                    >
+                        {L("set.backupImport")}
+                    </button>
+                </div>
 
                 <div className="sk-cap" style={{marginTop: 6, fontSize: 12}}>
-                    JSON 파일로 데이터를 백업하고 복원할 수 있습니다.
+                    {L("set.backupHint")}
                 </div>
                 {backupStatus && (
                     <div className="sk-cap" style={{

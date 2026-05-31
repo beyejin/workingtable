@@ -29,13 +29,13 @@ function randTip() { return STRETCH_TIPS[Math.floor(Math.random() * STRETCH_TIPS
 
 function Timer() {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
       {/* 음악 한 줄 */}
       <PlaylistBar />
       {/* 작업 시간 / 디데이 — 한 줄 (외곽 박스 없음) */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, minHeight: 22 }}>
         <WorkTime />
-        <span style={{ color: "var(--ink-3)", fontSize: 16 }}>/</span>
+        <span style={{ display: "inline-flex", alignItems: "center", height: 22, color: "var(--ink-3)", fontSize: 16, lineHeight: 1 }}>/</span>
         <DDay />
       </div>
     </div>
@@ -43,7 +43,7 @@ function Timer() {
 }
 
 // ---- 작업 시간 (프로그램 켜둔 활동 시간 누적) — 00 H 00 M 00 S ----
-// 점(•)을 클릭하면 EXTERNAL 모드 토글. 켜지면 작업 시간 카운트를 멈춘다.
+// 점(•)을 클릭하면 STOPPED 모드 토글. 켜지면 작업 시간 카운트를 멈춘다.
 function WorkTime() {
   const { state } = diary.useDiary();
   const totalSec = diary.select.workSecondsToday
@@ -65,22 +65,33 @@ function WorkTime() {
   }, []);
   const toggleExternal = () => { if (window.workTracker) window.workTracker.toggle(); };
 
-  const dotColor = external ? "#52c759" : "#ff5e5e";
+  const dotColor = external ? "#111827" : "#ff5e5e";
   const label = external ? L("worktrack.externalOn") : L("worktrack.externalOff");
 
+  const statusColor = external ? "var(--ink-3)" : "#e65353";
+
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "var(--mono)", fontWeight: 700, fontSize: 15, color: "var(--ink)" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, height: 22, fontFamily: "var(--mono)", fontWeight: 700, fontSize: 15, lineHeight: 1, color: "var(--ink)" }}>
       <button onClick={toggleExternal} title={label} style={{
         all: "unset", cursor: "pointer", flexShrink: 0,
-        width: 11, height: 11, borderRadius: "50%",
+        width: 9, height: 9, borderRadius: "50%",
+        boxSizing: "border-box",
         display: "grid", placeItems: "center",
         background: dotColor,
         opacity: external ? 1 : (blink ? 0.95 : 0.6),
-        border: external ? "1px solid rgba(0,0,0,0.2)" : "none",
+        border: external ? "1px solid rgba(255,255,255,0.45)" : "1px solid transparent",
         transition: "opacity .5s ease, background .15s",
       }} />
-      <span style={{ fontSize: 9.5, letterSpacing: 1, color: external ? "#2f7d44" : "var(--ink-2)" }}>
-        {external ? "EXTERNAL" : "WORKING"}
+      <span style={{
+        display: "inline-flex",
+        alignItems: "center",
+        height: 13,
+        fontSize: 9.5,
+        lineHeight: 1,
+        letterSpacing: 1,
+        color: statusColor,
+      }}>
+        {external ? "STOPPED" : "WORKING"}
       </span>
       <span>{pad(h)}</span>
       <span style={{ fontSize: 10, opacity: .6 }}>H</span>
@@ -114,26 +125,27 @@ function DDay() {
   const dayNum = dday.date ? new Date(dday.date + "T00:00:00").getDate() : null;
 
   return (
-    <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 6 }}>
+    <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 6, height: 22 }}>
       <button onClick={() => setOpen(o => !o)} title={dday.label || L("dday.title")} style={{
         all: "unset", cursor: "pointer",
-        display: "inline-flex", alignItems: "center", gap: 6,
+        display: "inline-flex", alignItems: "center", gap: 6, height: 22,
       }}>
         {/* 달력 아이콘 */}
         <div style={{
-          width: 22, height: 24, borderRadius: 4, overflow: "hidden", flexShrink: 0,
+          width: 20, height: 22, borderRadius: 4, overflow: "hidden", flexShrink: 0,
           border: "1.1px solid var(--ink)", background: "#fff", position: "relative",
         }}>
           <div style={{ position: "absolute", top: -2, left: 5, width: 2, height: 4, background: "var(--ink)", borderRadius: 1 }} />
           <div style={{ position: "absolute", top: -2, right: 5, width: 2, height: 4, background: "var(--ink)", borderRadius: 1 }} />
           <div style={{ height: 6, background: "#ff8da1", borderBottom: "1px solid var(--ink)" }} />
-          <div style={{ display: "grid", placeItems: "center", height: 17, fontFamily: "var(--mono)", fontWeight: 700, fontSize: 11, color: "var(--ink)" }}>
+          <div style={{ display: "grid", placeItems: "center", height: 15, fontFamily: "var(--mono)", fontWeight: 700, fontSize: 10, color: "var(--ink)" }}>
             {dayNum ?? "·"}
           </div>
         </div>
         <span style={{
+          display: "inline-flex", alignItems: "center", height: 22,
           fontFamily: "var(--mono)", fontWeight: 700,
-          fontSize: diff == null ? 13 : 17, color: "var(--ink)",
+          fontSize: 15, lineHeight: "22px", color: "var(--ink)",
         }}>{ddayText(diff)}</span>
       </button>
 
@@ -143,9 +155,10 @@ function DDay() {
         onChange={(v) => actions.setDday({ label: v })}
         placeholder={L("dday.label")}
         style={{
-          fontFamily: "var(--hand)", fontSize: 12, lineHeight: "18px", color: "var(--ink-2)",
-          minHeight: 18, padding: "0 4px",
+          fontFamily: "var(--hand)", fontSize: 12, lineHeight: 1, color: "var(--ink-2)",
+          height: 22, padding: "0 4px",
           display: "inline-flex", alignItems: "center",
+          transform: "translateY(1px)",
           maxWidth: 76, whiteSpace: "nowrap", overflow: "hidden",
         }}
       />

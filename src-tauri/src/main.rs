@@ -15,7 +15,8 @@ fn main() {
             youtube_player_play,
             youtube_player_pause,
             youtube_player_resume,
-            youtube_player_stop
+            youtube_player_stop,
+            youtube_player_set_volume
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -95,6 +96,11 @@ fn youtube_player_stop(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn youtube_player_set_volume(app: tauri::AppHandle, volume: u8) -> Result<(), String> {
+    native_youtube::set_volume(app, volume)
+}
+
+#[tauri::command]
 fn youtube_player_set_bounds(
     app: tauri::AppHandle,
     x: f64,
@@ -140,7 +146,6 @@ mod native_youtube {
         let webview = get_or_create_webview(&app)?;
 
         let _ = webview.show();
-        let _ = webview.set_focus();
         load_with_referer(&webview, embed_url, REFERRER.to_string())
     }
 
@@ -155,6 +160,17 @@ mod native_youtube {
         eval_player(
             &app,
             r#"(function(){var v=document.querySelector("video");if(v){var p=v.play();if(p&&p.catch)p.catch(function(){});}})()"#,
+        )
+    }
+
+    pub fn set_volume(app: tauri::AppHandle, volume: u8) -> Result<(), String> {
+        let volume = volume.min(100);
+        eval_player(
+            &app,
+            &format!(
+                r#"(function(){{var v=document.querySelector("video");if(v){{v.volume={};v.muted=false;}}}})()"#,
+                volume as f64 / 100.0
+            ),
         )
     }
 
@@ -292,6 +308,10 @@ mod native_youtube {
     }
 
     pub fn resume(_app: tauri::AppHandle) -> Result<(), String> {
+        Err("native YouTube player is only available on macOS".to_string())
+    }
+
+    pub fn set_volume(_app: tauri::AppHandle, _volume: u8) -> Result<(), String> {
         Err("native YouTube player is only available on macOS".to_string())
     }
 

@@ -24,6 +24,15 @@
   let wantPlay = false;
   let apiTimer = null;
   let readyTimer = null;
+  const volumeKey = "vibe-diary.music.volume";
+  const readVolume = () => {
+    try {
+      const raw = Number(localStorage.getItem(volumeKey));
+      return Number.isFinite(raw) ? Math.max(0, Math.min(100, raw)) : 70;
+    } catch (_) {
+      return 70;
+    }
+  };
   const state = {
     playing: false,
     title: "",
@@ -31,6 +40,7 @@
     hasQueue: false,
     debug: "",
     nativeMode: useNativeMode,
+    volume: readVolume(),
   };
   const subs = new Set();
 
@@ -69,6 +79,8 @@
     invokeNative("youtube_player_play", {
       videoId: cur.videoId,
       playlist: playlistAfter(startIdx),
+    }).then(() => {
+      applyVolume();
     }).catch(err => {
       fallbackToRaw(err && err.message ? err.message : err);
       state.nativeMode = false;
@@ -102,14 +114,32 @@
     if (it && it.parentNode) it.parentNode.removeChild(it);
   }
 
-  function rawCommand(command) {
+  function rawCommand(command, args) {
     const iframe = document.getElementById("yt-music-iframe");
     if (!iframe || !iframe.contentWindow) return false;
     iframe.contentWindow.postMessage(
-      JSON.stringify({ event: "command", func: command, args: [] }),
+      JSON.stringify({ event: "command", func: command, args: args || [] }),
       "https://www.youtube.com"
     );
     return true;
+  }
+
+  function applyVolume() {
+    const vol = Math.max(0, Math.min(100, state.volume));
+    state.volume = vol;
+    try { localStorage.setItem(volumeKey, String(vol)); } catch (_) {}
+    if (useNativeMode) {
+      invokeNative("youtube_player_set_volume", { volume: vol }).catch(() => {});
+    } else if (useRawMode) {
+      rawCommand("setVolume", [vol]);
+      if (vol > 0) rawCommand("unMute");
+    } else if (player) {
+      try {
+        if (vol > 0 && player.unMute) player.unMute();
+        if (player.setVolume) player.setVolume(vol);
+      } catch (_) {}
+    }
+    emit();
   }
 
   function rawCreateIframe(startIdx) {
@@ -145,6 +175,7 @@
     iframe.setAttribute("frameborder", "0");
     iframe.style.cssText = "width:100%;height:100%;border:0;";
     host().appendChild(iframe);
+    setTimeout(() => applyVolume(), 400);
   }
 
   function switchToRaw(reason) {
@@ -224,7 +255,7 @@
           if (queue.length && wantPlay) {
             const tr = queue[index] || queue[0];
             try { player.loadVideoById(tr.videoId); } catch (_) {}
-            try { player.unMute(); player.setVolume(100); } catch (_) {}
+            try { player.unMute(); player.setVolume(state.volume); } catch (_) {}
             try { player.playVideo(); } catch (_) {}
           } else if (queue.length && !started) {
             const tr = queue[index] || queue[0];
@@ -257,7 +288,7 @@
     try {
       if (player && player.unMute) {
         player.unMute();
-        player.setVolume(100);
+        player.setVolume(state.volume);
       }
     } catch (_) {}
   }
@@ -290,7 +321,7 @@
     if (ready && player) {
       try { player.loadVideoById(tr.videoId); } catch (_) {}
       if (gesture) {
-        try { player.unMute(); player.setVolume(100); } catch (_) {}
+        try { player.unMute(); player.setVolume(state.volume); } catch (_) {}
         try { player.playVideo(); } catch (_) {}
       }
     }
@@ -383,6 +414,17 @@
     },
     next() { if (queue.length) play(index + 1, true); },
     prev() { if (queue.length) play(index - 1, true); },
+    setVolume(volume) {
+      state.volume = Math.max(0, Math.min(100, Number(volume) || 0));
+      applyVolume();
+      setDebug("volume " + state.volume);
+    },
+    volumeUp(step) {
+      this.setVolume(state.volume + (step || 5));
+    },
+    volumeDown(step) {
+      this.setVolume(state.volume - (step || 5));
+    },
     setNativeViewport(rect) {
       if (!useNativeMode) return;
       invokeNative("youtube_player_set_bounds", rect).catch(err => fallbackToRaw(err));
