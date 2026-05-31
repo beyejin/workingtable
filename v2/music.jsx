@@ -457,6 +457,12 @@
       applyVolume();
       emit();
     },
+    volumeUp(step) {
+      this.setVolume(volume + (step || 5));
+    },
+    volumeDown(step) {
+      this.setVolume(volume - (step || 5));
+    },
     getState() { return state; },
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
   };
@@ -469,11 +475,20 @@
 
   window.addEventListener("keydown", (e) => {
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-    if (e.code !== "Space" && e.key !== " ") return;
+    const isSpace = e.code === "Space" || e.key === " " || e.key === "Spacebar";
+    const isPrev = e.key === "ArrowLeft";
+    const isNext = e.key === "ArrowRight";
+    const isVolumeUp = e.key === "ArrowUp";
+    const isVolumeDown = e.key === "ArrowDown";
+    if (!isSpace && !isPrev && !isNext && !isVolumeUp && !isVolumeDown) return;
     if (isTypingTarget(e.target)) return;
     if (!queue.length) return;
     e.preventDefault();
-    window.musicPlayer.toggle();
+    if (isSpace) window.musicPlayer.toggle();
+    else if (isPrev) window.musicPlayer.prev();
+    else if (isNext) window.musicPlayer.next();
+    else if (isVolumeUp) window.musicPlayer.volumeUp();
+    else if (isVolumeDown) window.musicPlayer.volumeDown();
   });
 
   if (useRawMode) setDebug("raw iframe mode");

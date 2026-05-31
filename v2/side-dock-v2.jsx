@@ -9,14 +9,35 @@
 const { useState, useEffect } = React;
 
 const TABS = [
-  { id: "todo",  labelKey: "tab.todo",     sprite: 4,  color: "#d4ecdb", view: (ctx) => <TodoView tweaks={ctx?.tweaks} /> },
-  { id: "cal",   labelKey: "tab.week",     sprite: 6,  color: "#d4e6fa", view: () => <CalendarView /> },
-  { id: "memo",  labelKey: "tab.memo",     sprite: 22, color: "#fff0c0", view: () => <MemoView /> },
-  { id: "mail",  labelKey: "tab.mail",     sprite: 0,  color: "#ffe0d2", view: () => <MailView /> },
-  { id: "room",  labelKey: "tab.room",     sprite: 14, color: "#ecdcf5", view: (ctx) => <RoomView tweaks={ctx?.tweaks} /> },
-  { id: "deco",  labelKey: "tab.deco",     sprite: 9,  color: "#ffe6f0", view: () => null, foot: true },
-  { id: "settings", labelKey: "tab.settings", sprite: 1, color: "#e6e6ee", view: () => null, foot: true },
+  { id: "todo",  labelKey: "tab.todo",     glyph: "✓", sprite: 4,  color: "#d4ecdb", view: (ctx) => <TodoView tweaks={ctx?.tweaks} /> },
+  { id: "cal",   labelKey: "tab.week",     glyph: "⊞", sprite: 6,  color: "#d4e6fa", view: () => <CalendarView /> },
+  { id: "memo",  labelKey: "tab.memo",     glyph: "□", sprite: 22, color: "#fff0c0", view: () => <MemoView /> },
+  { id: "mail",  labelKey: "tab.mail",     glyph: "@", sprite: 0,  color: "#ffe0d2", view: () => <MailView /> },
+  { id: "room",  labelKey: "tab.room",     glyph: "◌", sprite: 14, color: "#ecdcf5", view: (ctx) => <RoomView tweaks={ctx?.tweaks} /> },
+  { id: "deco",  labelKey: "tab.deco",     glyph: "◇", sprite: 9,  color: "#ffe6f0", view: () => null, foot: true },
+  { id: "settings", labelKey: "tab.settings", glyph: "⚙", sprite: 1, color: "#e6e6ee", view: () => null, foot: true },
 ];
+
+const TAB_ICONS = {
+  business: {
+    todo: "✓",
+    cal: "⊞",
+    memo: "□",
+    mail: "@",
+    room: "◌",
+    deco: "◇",
+    settings: "⚙",
+  },
+  kitsch: {
+    todo: 4,
+    cal: 6,
+    memo: 22,
+    mail: 0,
+    room: 14,
+    deco: 9,
+    settings: 1,
+  },
+};
 
 function SideDockV2({ tweaks, setTweak }) {
   const [active, setActive] = useState("todo");
@@ -46,6 +67,7 @@ function SideDockV2({ tweaks, setTweak }) {
   const tabSide  = tweaks?.tabSide  ?? "right";
   const dockSide = tweaks?.dockSide ?? "left";
   const tabStyle = tweaks?.tabStyle ?? "paper";
+  const tabIconStyle = tweaks?.tabIconStyle ?? "business";
   const desktopMode = tweaks?.desktopMode ?? false;
   const dockHidden = tweaks?.dockHidden ?? false;
   const tabsHidden = tweaks?.tabsHidden ?? false;
@@ -150,6 +172,7 @@ function SideDockV2({ tweaks, setTweak }) {
         tabSide={effectiveTabSide}
         dockWidth={DOCK_W}
         tabStyle={tabStyle}
+        tabIconStyle={tabIconStyle}
         chrome={chrome}
         compact={compactTabs}
         autoHide={tabsHidden}
@@ -243,8 +266,9 @@ function TabHeader({ active }) {
 }
 
 // ---- 다이어리 인덱스 탭 ----
-function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabStyle, chrome, compact, autoHide }) {
+function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabStyle, tabIconStyle, chrome, compact, autoHide }) {
   const cm = (pct) => `color-mix(in srgb, ${chrome || "#a9cdf5"} ${pct}%, white)`;
+  const iconMode = tabIconStyle === "none" ? "textOnly" : (tabIconStyle || "business");
   // 탭이 도크의 어느 쪽 바깥에 붙는지 → 위치 계산
   const onLeft = tabSide === "left";
 
@@ -299,6 +323,12 @@ function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSt
 
   const renderTab = (t) => {
     const isActive = t.id === active;
+    const icon = iconMode === "iconOnly"
+      ? TAB_ICONS.kitsch[t.id]
+      : (TAB_ICONS[iconMode]?.[t.id] ?? TAB_ICONS.business[t.id] ?? t.glyph);
+    const showIcon = iconMode !== "textOnly";
+    const showLabel = !compact && iconMode !== "iconOnly";
+    const isSpriteIcon = typeof icon === "number";
     return (
       <button
         key={t.id}
@@ -326,10 +356,10 @@ function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSt
         }}
         title={L(t.labelKey)}
       >
-        {t.sprite != null
-          ? <SpriteIcon idx={t.sprite} size={compact ? 20 : 16} title={L(t.labelKey)} style={{ flexShrink: 0 }} />
-          : <span style={{ fontSize: compact ? 18 : 15, color: "var(--ink)", flexShrink: 0 }}>{t.glyph}</span>}
-        {!compact && (
+        {showIcon && (isSpriteIcon
+          ? <SpriteIcon idx={icon} size={compact ? 20 : 16} title={L(t.labelKey)} style={{ flexShrink: 0 }} />
+          : <span style={{ fontSize: compact ? 18 : 15, color: "var(--ink)", flexShrink: 0 }}>{icon}</span>)}
+        {showLabel && (
           <span style={{
             writingMode: "vertical-rl", textOrientation: "mixed",
             fontSize: 11, letterSpacing: "0.01em", color: "var(--ink)",
@@ -619,6 +649,7 @@ function SettingsView({ tweaks, setTweak }) {
   const [updateStatus, setUpdateStatus] = useState("");
   const [backupStatus, setBackupStatus] = useState("");
   const currentLang = i18.list().find(([code]) => code === i18.get()) || i18.list()[0];
+  const tabIconValue = t.tabIconStyle === "none" ? "textOnly" : (t.tabIconStyle ?? "business");
   const notify = async (message, setMessage) => {
     setMessage(message);
     if (window.dialog?.alert) await window.dialog.alert(message);
@@ -711,6 +742,11 @@ function SettingsView({ tweaks, setTweak }) {
         <SetSeg value={t.tabsHidden ? "on" : "off"} onChange={v => set("tabsHidden", v === "on")}
           options={[["on", L("set.on")], ["off", L("set.off")]]} />
         <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.tabsAutoHideHint")}</div>
+      </SetSection>
+
+      <SetSection label={L("set.indexIcon")}>
+        <SetSeg value={tabIconValue} onChange={v => set("tabIconStyle", v)}
+          options={[["business", L("set.iconBusiness")], ["kitsch", L("set.iconKitsch")], ["iconOnly", L("set.iconOnly")], ["textOnly", L("set.textOnly")]]} />
       </SetSection>
 
       <SetSection label={L("set.update")}>
