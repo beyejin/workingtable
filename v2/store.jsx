@@ -216,114 +216,118 @@ function seed() {
 }
 
 // ---- 저장 / 불러오기 ----
+function migrateState(data) {
+  if (!data || data.schemaVersion !== 1) return seed();
+  // ---- 마이그레이션 (필드 추가에 안전) ----
+  data.commands    ??= [];
+  data.todos       ??= [];
+  data.recurrences ??= [];
+  data.recurrences = data.recurrences.map(r => {
+    const frequency = normalizeFrequency(r.frequency);
+    return {
+      ...r,
+      frequency,
+      weeklyDays: frequency === "weekly" ? normalizeWeeklyDays(r.weeklyDays) : [],
+      active: r.active !== false,
+    };
+  });
+  data.lastGenDate ??= today();
+  data.prompts     ??= [];
+  data.emails      ??= [];
+  data.aiBookmarks ??= [];
+  data.retros      ??= [];
+  // mood 필드 보강 (기존 회고 데이터 보존)
+  data.retros = data.retros.map(r => ({ mood: null, ...r }));
+  data.playlist    ??= [];
+  data.dday        ??= { date: "", label: "디데이" };
+  data.mailUrl     ??= "";
+  data.notes       ??= {};
+  data.weekNotes   ??= {};
+  data.replyPresets ??= [];
+  data.memos       ??= [];
+  // 기존 메모를 단일 html 본문으로 통합. body → html, messages → html.
+  data.memos = data.memos.map(m => {
+    // icon: 숫자 인덱스(0..23). 기존 문자열 이모지는 마이그레이션 시 랜덤 도트로 교체.
+    const next = { ...m, icon: (typeof m.icon === "number" ? m.icon : randomMemoIcon()) };
+    if (typeof next.html !== "string") next.html = "";
+    if (!next.html && Array.isArray(next.messages) && next.messages.length > 0) {
+      next.html = memoMessagesToHtml(next.messages);
+    }
+    if (!next.html && (next.body || "").trim()) {
+      next.html = memoBodyToHtml(next.body);
+    }
+    // body는 비워둠 (messages는 보존 — 데이터 보안용으로 일단 남김)
+    next.body = "";
+    const inferredTitle = memoTitleFromHtml(next.html);
+    if (!next.title) next.title = inferredTitle;
+    next.manualTitle = next.manualTitle ?? (!!String(next.title || "").trim() && next.title !== inferredTitle);
+    next.todoId = next.todoId ?? null;
+    return next;
+  });
+  data.selectedDate = today();   // 시작 시 항상 오늘
+  data.stuck       ??= {};
+  // 메일에 body/draft/platformUrl 보강
+  data.emails = (data.emails ?? []).map(e => ({ body: "", draft: "", platformUrl: "", ...e }));
+  // 할 일 스키마 마이그레이션 (text→title, hot→pinned, doneTs→completedAt 등)
+  data.todos = (data.todos ?? []).map((t, i) => ({
+    id: t.id,
+    projectId: t.projectId,
+    title: t.title ?? t.text ?? "",
+    pinned: t.pinned ?? !!t.hot ?? false,
+    pinnedAt: t.pinnedAt ?? null,
+    dueDate: t.dueDate ?? null,
+    startDate: t.startDate ?? null,
+    endDate: t.endDate ?? null,
+    order: t.order ?? i,
+    done: !!t.done,
+    completedAt: t.completedAt ?? (t.doneTs ? new Date(t.doneTs).toISOString() : (t.doneAt ? t.doneAt + "T12:00:00" : null)),
+    recurrenceId: t.recurrenceId ?? null,
+    memoId: t.memoId ?? null,
+    trackedSeconds: t.trackedSeconds ?? 0,
+    // 서브태스크 — 접히는 하위 목록. 각 항목은 { id, title, done, completedAt, linkUrl }
+    subTasks: Array.isArray(t.subTasks) ? t.subTasks.map(st => ({
+      id: st.id || uid(),
+      title: String(st.title || "").trim(),
+      done: !!st.done,
+      completedAt: st.completedAt || null,
+      linkUrl: String(st.linkUrl || st.url || "").trim(),
+    })) : [],
+    createdAt: t.createdAt ?? today(),
+    // 작업방 공개 여부 — 기본 false (비공개). 사용자가 켠 항목만 방 멤버에게 제목 노출.
+    roomVisible: !!t.roomVisible,
+  }));
+  data.timer ??= {
+    workMin: 25, breakMin: 5, lengthMin: 25, phase: "idle",
+    enabled: true, cycleStartedAt: null, paused: false, pausedRemainingMs: null,
+    notificationsGranted: false, lastNotifiedAt: null, pomodoroCount: 0,
+  };
+  data.timer.workMin ??= 25;
+  data.timer.breakMin ??= 5;
+  data.timer.phase ??= (data.timer.cycleStartedAt ? "work" : "idle");
+  data.timer.pomodoroCount ??= 0;
+  if (data.timer.lengthMin == null) data.timer.lengthMin = data.timer.workMin;
+  data.workSessions ??= [];
+  // workSessions 레거시 마이그레이션 — projectId 없던 시절 기록은 null(미분류)로 표기.
+  data.workSessions = data.workSessions.map(w => ({
+    lastTs: null,
+    ...w,
+    projectId: w.projectId !== undefined ? w.projectId : null,
+    minutes: w.minutes ?? 0,
+  }));
+  data.songPlays   ??= {};
+  // 프로젝트에 버전/저장소 필드 보강 (기존 값 우선)
+  data.projects = (data.projects ?? []).map(p => ({
+    repoUrl: "", version: "0.1.0", nextVersion: "", ...p,
+  }));
+  return data;
+}
+
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return seed();
     const data = JSON.parse(raw);
-    if (!data || data.schemaVersion !== 1) return seed();
-    // ---- 마이그레이션 (필드 추가에 안전) ----
-    data.commands    ??= [];
-    data.todos       ??= [];
-    data.recurrences ??= [];
-    data.recurrences = data.recurrences.map(r => {
-      const frequency = normalizeFrequency(r.frequency);
-      return {
-        ...r,
-        frequency,
-        weeklyDays: frequency === "weekly" ? normalizeWeeklyDays(r.weeklyDays) : [],
-        active: r.active !== false,
-      };
-    });
-    data.lastGenDate ??= today();
-    data.prompts     ??= [];
-    data.emails      ??= [];
-    data.aiBookmarks ??= [];
-    data.retros      ??= [];
-    // mood 필드 보강 (기존 회고 데이터 보존)
-    data.retros = data.retros.map(r => ({ mood: null, ...r }));
-    data.playlist    ??= [];
-    data.dday        ??= { date: "", label: "디데이" };
-    data.mailUrl     ??= "";
-    data.notes       ??= {};
-    data.weekNotes   ??= {};
-    data.replyPresets ??= [];
-    data.memos       ??= [];
-    // 기존 메모를 단일 html 본문으로 통합. body → html, messages → html.
-    data.memos = data.memos.map(m => {
-      // icon: 숫자 인덱스(0..23). 기존 문자열 이모지는 마이그레이션 시 랜덤 도트로 교체.
-      const next = { ...m, icon: (typeof m.icon === "number" ? m.icon : randomMemoIcon()) };
-      if (typeof next.html !== "string") next.html = "";
-      if (!next.html && Array.isArray(next.messages) && next.messages.length > 0) {
-        next.html = memoMessagesToHtml(next.messages);
-      }
-      if (!next.html && (next.body || "").trim()) {
-        next.html = memoBodyToHtml(next.body);
-      }
-      // body는 비워둠 (messages는 보존 — 데이터 보안용으로 일단 남김)
-      next.body = "";
-      const inferredTitle = memoTitleFromHtml(next.html);
-      if (!next.title) next.title = inferredTitle;
-      next.manualTitle = next.manualTitle ?? (!!String(next.title || "").trim() && next.title !== inferredTitle);
-      next.todoId = next.todoId ?? null;
-      return next;
-    });
-    data.selectedDate = today();   // 시작 시 항상 오늘
-    data.stuck       ??= {};
-    // 메일에 body/draft/platformUrl 보강
-    data.emails = (data.emails ?? []).map(e => ({ body: "", draft: "", platformUrl: "", ...e }));
-    // 할 일 스키마 마이그레이션 (text→title, hot→pinned, doneTs→completedAt 등)
-    data.todos = (data.todos ?? []).map((t, i) => ({
-      id: t.id,
-      projectId: t.projectId,
-      title: t.title ?? t.text ?? "",
-      pinned: t.pinned ?? !!t.hot ?? false,
-      pinnedAt: t.pinnedAt ?? null,
-      dueDate: t.dueDate ?? null,
-      startDate: t.startDate ?? null,
-      endDate: t.endDate ?? null,
-      order: t.order ?? i,
-      done: !!t.done,
-      completedAt: t.completedAt ?? (t.doneTs ? new Date(t.doneTs).toISOString() : (t.doneAt ? t.doneAt + "T12:00:00" : null)),
-      recurrenceId: t.recurrenceId ?? null,
-      memoId: t.memoId ?? null,
-      trackedSeconds: t.trackedSeconds ?? 0,
-      // 서브태스크 — 접히는 하위 목록. 각 항목은 { id, title, done, completedAt, linkUrl }
-      subTasks: Array.isArray(t.subTasks) ? t.subTasks.map(st => ({
-        id: st.id || uid(),
-        title: String(st.title || "").trim(),
-        done: !!st.done,
-        completedAt: st.completedAt || null,
-        linkUrl: String(st.linkUrl || st.url || "").trim(),
-      })) : [],
-      createdAt: t.createdAt ?? today(),
-      // 작업방 공개 여부 — 기본 false (비공개). 사용자가 켠 항목만 방 멤버에게 제목 노출.
-      roomVisible: !!t.roomVisible,
-    }));
-    data.timer ??= {
-      workMin: 25, breakMin: 5, lengthMin: 25, phase: "idle",
-      enabled: true, cycleStartedAt: null, paused: false, pausedRemainingMs: null,
-      notificationsGranted: false, lastNotifiedAt: null, pomodoroCount: 0,
-    };
-    data.timer.workMin ??= 25;
-    data.timer.breakMin ??= 5;
-    data.timer.phase ??= (data.timer.cycleStartedAt ? "work" : "idle");
-    data.timer.pomodoroCount ??= 0;
-    if (data.timer.lengthMin == null) data.timer.lengthMin = data.timer.workMin;
-    data.workSessions ??= [];
-    // workSessions 레거시 마이그레이션 — projectId 없던 시절 기록은 null(미분류)로 표기.
-    data.workSessions = data.workSessions.map(w => ({
-      lastTs: null,
-      ...w,
-      projectId: w.projectId !== undefined ? w.projectId : null,
-      minutes: w.minutes ?? 0,
-    }));
-    data.songPlays   ??= {};
-    // 프로젝트에 버전/저장소 필드 보강 (기존 값 우선)
-    data.projects = (data.projects ?? []).map(p => ({
-      repoUrl: "", version: "0.1.0", nextVersion: "", ...p,
-    }));
-    return data;
+    return migrateState(data);
   } catch (e) {
     console.warn("diary: load failed, reseeding", e);
     return seed();
@@ -344,6 +348,9 @@ function setState(updater) {
   const next = typeof updater === "function" ? updater(_state) : updater;
   _state = next;
   save(_state);
+  _subs.forEach(fn => fn(_state));
+}
+function emitState() {
   _subs.forEach(fn => fn(_state));
 }
 function getState() { return _state; }
@@ -1261,12 +1268,17 @@ const actions = {
 
   // ----- 데이터 백업/복원 -----
   exportData() {
+    let tweaks = null;
+    try {
+      tweaks = JSON.parse(localStorage.getItem("todoary.tweaks"));
+    } catch (_) {}
     return {
       app: "todoary-yejin",
       version: 1,
       storageKey: STORAGE_KEY,
       exportedAt: new Date().toISOString(),
       state: _state,
+      tweaks: tweaks,
     };
   },
 
@@ -1279,6 +1291,13 @@ const actions = {
 
     _state = migrateState(next);
     save(_state);
+
+    if (payload?.tweaks) {
+      try {
+        localStorage.setItem("todoary.tweaks", JSON.stringify(payload.tweaks));
+      } catch (_) {}
+    }
+
     emitState();
   },
 

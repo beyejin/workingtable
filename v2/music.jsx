@@ -110,7 +110,12 @@
       videoId: cur.videoId,
       playlist: playlistAfter(startIdx),
     }).then(() => {
-      setTimeout(applyVolume, 400);
+      setTimeout(applyVolume, 200);
+      setTimeout(applyVolume, 500);
+      setTimeout(applyVolume, 1000);
+      setTimeout(applyVolume, 2000);
+      setTimeout(() => { try { window.focus(); } catch(_) {} }, 600);
+      setTimeout(() => { try { window.focus(); } catch(_) {} }, 1500);
     }).catch(err => {
       fallbackToRaw(err && err.message ? err.message : err);
       state.nativeMode = false;
@@ -324,6 +329,7 @@
 
     if (useNativeMode) {
       nativePlay(index);
+      setTimeout(() => { try { window.focus(); } catch(_) {} }, 300);
       return;
     }
 
@@ -354,7 +360,11 @@
 
   window.musicPlayer = {
     setQueue(tracks) {
-      queue = (tracks || []).map(t => ({ videoId: t.videoId, title: t.title }));
+      const nextQueue = (tracks || []).map(t => ({ videoId: t.videoId, title: t.title }));
+      const queueEqual = queue.length === nextQueue.length &&
+        queue.every((q, idx) => q.videoId === nextQueue[idx].videoId);
+      
+      queue = nextQueue;
       state.hasQueue = queue.length > 0;
       if (!queue.length) {
         state.title = "";
@@ -362,12 +372,16 @@
         state.playing = false;
         rawRemoveIframe();
         if (useNativeMode) invokeNative("youtube_player_stop").catch(() => {});
+        emit();
+        return;
       }
       if (index >= queue.length) index = 0;
-      if (useNativeMode && state.playing && queue.length) {
-        nativePlay(index);
-      } else if (useRawMode && state.playing && queue.length) {
-        rawCreateIframe(index);
+      if (!queueEqual) {
+        if (useNativeMode && state.playing && queue.length) {
+          nativePlay(index);
+        } else if (useRawMode && state.playing && queue.length) {
+          rawCreateIframe(index);
+        }
       }
       emit();
       if (queue.length && !useNativeMode && !useRawMode) ensure();
@@ -443,8 +457,18 @@
       }
       else if (queue.length) play(index, true);
     },
-    next() { if (queue.length) play(index + 1, true); },
-    prev() { if (queue.length) play(index - 1, true); },
+    next() {
+      if (queue.length) {
+        play(index + 1, true);
+        setTimeout(() => { try { window.focus(); } catch(_) {} }, 200);
+      }
+    },
+    prev() {
+      if (queue.length) {
+        play(index - 1, true);
+        setTimeout(() => { try { window.focus(); } catch(_) {} }, 200);
+      }
+    },
     setNativeViewport(rect) {
       if (!useNativeMode) return;
       invokeNative("youtube_player_set_bounds", rect).catch(err => fallbackToRaw(err));
@@ -475,6 +499,7 @@
 
   window.addEventListener("keydown", (e) => {
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (e.repeat) return;
     const isSpace = e.code === "Space" || e.key === " " || e.key === "Spacebar";
     const isPrev = e.key === "ArrowLeft";
     const isNext = e.key === "ArrowRight";

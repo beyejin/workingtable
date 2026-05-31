@@ -220,7 +220,7 @@ function WeekPane({ onPickDay }) {
   const streak = computeRetroStreak(state.retros ?? []);
 
   return (
-    <>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
       {/* 타이틀바 */}
       <div style={{
         flexShrink: 0, padding: "6px 10px",
@@ -246,8 +246,8 @@ function WeekPane({ onPickDay }) {
       <div style={{
         flex: 1, minHeight: 0,
         display: "grid",
-        gridTemplateColumns: "1fr 1fr",
-        gridTemplateRows: "repeat(4, 1fr)",
+        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+        gridTemplateRows: "repeat(4, minmax(0, 1fr))",
       }}>
         {[0,1,2,3,4,5,6].map(i => (
           <DayCell key={i}
@@ -279,7 +279,7 @@ function WeekPane({ onPickDay }) {
 
       {/* 푸터 — 주간 통계 (작업 / 완료 / 연속) */}
       <WeekStatsFooter weekTotalMin={weekTotalMin} weekDoneCnt={weekDoneCnt} streak={streak} />
-    </>
+    </div>
   );
 }
 

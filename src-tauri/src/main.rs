@@ -159,21 +159,33 @@ mod native_youtube {
         let webview = get_or_create_webview(&app)?;
 
         let _ = webview.show();
-        load_with_referer(&webview, embed_url, REFERRER.to_string())
+        let res = load_with_referer(&webview, embed_url, REFERRER.to_string());
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.set_focus();
+        }
+        res
     }
 
     pub fn pause(app: tauri::AppHandle) -> Result<(), String> {
-        eval_player(
+        let res = eval_player(
             &app,
             r#"(function(){var v=document.querySelector("video");if(v){v.pause();}})()"#,
-        )
+        );
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.set_focus();
+        }
+        res
     }
 
     pub fn resume(app: tauri::AppHandle) -> Result<(), String> {
-        eval_player(
+        let res = eval_player(
             &app,
             r#"(function(){var v=document.querySelector("video");if(v){var p=v.play();if(p&&p.catch)p.catch(function(){});}})()"#,
-        )
+        );
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.set_focus();
+        }
+        res
     }
 
     pub fn set_volume(app: tauri::AppHandle, volume: f64) -> Result<(), String> {
@@ -182,7 +194,43 @@ mod native_youtube {
         eval_player(
             &app,
             &format!(
-                r#"(function(){{var v=document.querySelector("video");if(v){{v.muted={muted};v.volume={vol};}}}})()"#
+                r#"(function(){{
+                    var targetVol = {vol};
+                    var targetMuted = {muted};
+                    var apply = function() {{
+                        var v = document.querySelector("video");
+                        if (v) {{
+                            v._targetVol = targetVol;
+                            v._targetMuted = targetMuted;
+                            if (v.volume !== targetVol || v.muted !== targetMuted) {{
+                                v.muted = targetMuted;
+                                v.volume = targetVol;
+                            }}
+                            if (!v._volBound) {{
+                                v._volBound = true;
+                                v.addEventListener("volumechange", function() {{
+                                    var curTargetVol = v._targetVol !== undefined ? v._targetVol : targetVol;
+                                    var curTargetMuted = v._targetMuted !== undefined ? v._targetMuted : targetMuted;
+                                    if (v.volume !== curTargetVol || v.muted !== curTargetMuted) {{
+                                        v.muted = curTargetMuted;
+                                        v.volume = curTargetVol;
+                                    }}
+                                }});
+                            }}
+                            return true;
+                        }}
+                        return false;
+                    }};
+                    if (!apply()) {{
+                        var observer = new MutationObserver(function() {{
+                            if (apply()) {{
+                                observer.disconnect();
+                            }}
+                        }});
+                        observer.observe(document.body || document.documentElement, {{ childList: true, subtree: true }});
+                        setTimeout(apply, 2000);
+                    }}
+                }})()"#
             ),
         )
     }

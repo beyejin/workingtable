@@ -5,12 +5,32 @@
 const { useState, useRef, useEffect } = React;
 
 if (typeof window !== "undefined") {
-  const existingDialog = window.dialog || {};
+  const tauriDialog = window.__TAURI__?.dialog;
   window.dialog = {
-    ...existingDialog,
-    alert: existingDialog.alert || (async (message) => window.alert(message)),
-    confirm: existingDialog.confirm || (async (message) => window.confirm(message)),
-    prompt: existingDialog.prompt || (async (message, defaultValue = "") => window.prompt(message, defaultValue ?? "")),
+    alert: async (message) => {
+      if (tauriDialog && typeof tauriDialog.message === "function") {
+        try {
+          await tauriDialog.message(message);
+          return;
+        } catch (e) {
+          console.warn("Tauri dialog.message failed, falling back to alert:", e);
+        }
+      }
+      window.alert(message);
+    },
+    confirm: async (message) => {
+      if (tauriDialog && typeof tauriDialog.confirm === "function") {
+        try {
+          return await tauriDialog.confirm(message);
+        } catch (e) {
+          console.warn("Tauri dialog.confirm failed, falling back to confirm:", e);
+        }
+      }
+      return window.confirm(message);
+    },
+    prompt: async (message, defaultValue = "") => {
+      return window.prompt(message, defaultValue ?? "");
+    }
   };
 }
 
@@ -227,10 +247,13 @@ function Editable({ value, onChange, placeholder = "", multiline = false, style 
       className="editable"
       style={{
         outline: "none",
+        display: multiline ? "block" : "inline-flex",
+        alignItems: multiline ? "stretch" : "center",
         minHeight: multiline ? 40 : 22,
         padding: "1px 4px",
         borderRadius: 4,
         cursor: "text",
+        verticalAlign: "middle",
         ...style,
       }}
     />

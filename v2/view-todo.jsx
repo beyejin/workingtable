@@ -121,7 +121,7 @@ function calSnap(h) {
 }
 
 function TodoView({ tweaks } = {}) {
-  const showPomodoro = tweaks?.showPomodoro ?? false;
+  const showPomodoro = true; // 항상 켜둠
   const { state, actions } = diary.useDiary();
   const [selId, setSel] = useState(null);
   const undoStackRef = React.useRef([]);
@@ -829,8 +829,22 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
         )}
 
         {/* 마감 뱃지 */}
-        {t.dueDate && (
-          <span title={`${L("todo.due")} ${t.dueDate}`} style={dueBadge}>{fmtMD(t.dueDate)}</span>
+        {t.dueDate ? (
+          <button
+            onClick={(e) => { stop(e); setDueOpen(o => !o); }}
+            title={`${L("todo.due")} ${t.dueDate}`}
+            style={dueBadge}
+          >
+            {fmtMD(t.dueDate)}
+          </button>
+        ) : showActions && (
+          <button
+            onClick={(e) => { stop(e); setDueOpen(o => !o); }}
+            title={L("todo.dueDate")}
+            style={{ ...dueBadge, color: "var(--ink-3)" }}
+          >
+            {L("todo.due")}
+          </button>
         )}
         {/* 반복 표시 */}
         {recRule && <span title={`${L("todo.repeat")} — ${recLabel(recRule)}`} style={{ fontSize: 12, color: "var(--ink-2)" }}>↻</span>}
@@ -848,7 +862,6 @@ function TodoRow({ t, actions, recRule, i = 0, compact = false, selected = false
           <>
             <button onClick={(e) => { stop(e); actions.togglePin(t.id); }} title={t.pinned ? L("todo.unpin") : L("todo.pin")}
               style={{ ...iconBtn, color: t.pinned ? "#7a5a10" : "var(--ink-3)", fontWeight: t.pinned ? 800 : 400 }}>!</button>
-            <button onClick={(e) => { stop(e); setDueOpen(o => !o); }} title={L("todo.dueDate")} style={iconBtn}>📅</button>
             <button onClick={(e) => { stop(e); setRecOpen(o => !o); }} title={L("todo.repeat")} style={{ ...iconBtn, color: recRule ? "var(--ink)" : "var(--ink-3)" }}>↻</button>
             <DelBtn onClick={(e) => { if (e && e.stopPropagation) e.stopPropagation(); actions.removeTodo(t.id); }} />
           </>
