@@ -334,8 +334,9 @@ function HabitView() {
                         {habit.name}
                       </span>
                       <button
-                        onClick={() => {
-                          if (confirm(`명예의 전당에 등록된 "${habit.name}" 습관을 삭제할까요?`)) {
+                        onClick={async () => {
+                          const ok = await window.dialog.confirm(`명예의 전당에 등록된 "${habit.name}" 습관을 삭제할까요?`);
+                          if (ok) {
                             actions.removeHabit(habit.id);
                           }
                         }}
@@ -497,8 +498,9 @@ function HabitWeeklyStampCard({ habit, thisWeekDays, actions }) {
           )}
         </div>
         <button
-          onClick={() => {
-            if (confirm(`"${habit.name}" 습관을 삭제할까요?`)) {
+          onClick={async () => {
+            const ok = await window.dialog.confirm(`"${habit.name}" 습관을 삭제할까요?`);
+            if (ok) {
               actions.removeHabit(habit.id);
             }
           }}
