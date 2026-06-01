@@ -1305,16 +1305,22 @@ function HabitInsightsView({ habits }) {
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      <div style={{
-        display: "flex",
-        gap: 6,
-        overflowX: "auto",
-        padding: "10px 14px 8px",
-        background: "var(--paper-2)",
-        borderBottom: "1.1px solid var(--ink-soft)",
-        flexShrink: 0,
-        scrollbarWidth: "none",
-      }}>
+      <div
+        onWheel={(e) => {
+          if (e.deltaY !== 0) {
+            e.currentTarget.scrollLeft += e.deltaY;
+          }
+        }}
+        style={{
+          display: "flex",
+          gap: 6,
+          overflowX: "auto",
+          padding: "10px 14px 8px",
+          background: "var(--paper-2)",
+          borderBottom: "1.1px solid var(--ink-soft)",
+          flexShrink: 0,
+        }}
+      >
         <button onClick={() => setSelectedHabitId("all")} style={chipStyle("all")}>
           📊 전체 통계
         </button>
@@ -1323,6 +1329,7 @@ function HabitInsightsView({ habits }) {
             {h.emoji} {h.name}
           </button>
         ))}
+        <div style={{ width: 14, flexShrink: 0 }} />
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 14px 24px" }}>
