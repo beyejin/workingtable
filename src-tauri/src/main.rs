@@ -39,20 +39,26 @@ fn main() {
 
             #[cfg(target_os = "macos")]
             {
-                use tauri::menu::{Menu, MenuItem};
+                use tauri::menu::{Menu, MenuItem, SubmenuBuilder};
                 use tauri::Emitter;
 
                 let handle = app.handle();
-                if let Ok(toggle_dock) = MenuItem::with_id(
-                    handle,
-                    "toggle_dock",
-                    "Toggle Dock Minimization",
-                    true,
-                    Some("CmdOrCtrl+M"),
-                ) {
-                    if let Ok(menu) = Menu::with_items(handle, &[&toggle_dock]) {
-                        let _ = app.set_menu(menu);
+                if let Ok(menu) = Menu::default(handle) {
+                    if let Ok(toggle_dock) = MenuItem::with_id(
+                        handle,
+                        "toggle_dock",
+                        "Toggle Dock Minimization",
+                        true,
+                        Some("CmdOrCtrl+M"),
+                    ) {
+                        if let Ok(custom_submenu) = SubmenuBuilder::new(handle, "Todoary")
+                            .item(&toggle_dock)
+                            .build()
+                        {
+                            let _ = menu.append(&custom_submenu);
+                        }
                     }
+                    let _ = app.set_menu(menu);
                 }
 
                 app.on_menu_event(move |app_handle, event| {
