@@ -402,7 +402,11 @@ const HABIT_EMOJI_COLORS = {
   "🌸": "#ffeaf2", "🌱": "#e9f8d8", "🥛": "#e3f3ff", "💊": "#dcf4e3",
   "🧘": "#efe8f8", "🏃": "#ffe9da", "🥗": "#efe8f8", "📚": "#dfeaf9",
   "✍️": "#fbf0d8", "💻": "#e3f3ff", "⏰": "#fffbd1", "🛌": "#efe8f8",
-  "✨": "#fffbd1", "🎵": "#ffeaf2"
+  "✨": "#fffbd1", "🎵": "#ffeaf2",
+  "🇺🇸": "#dfeaf9", "🇬🇧": "#dfeaf9", "🗣️": "#efe8f8", "🔤": "#fbf0d8",
+  "📕": "#ffe9da", "📗": "#e9f8d8", "📘": "#dfeaf9", "📙": "#ffe9da",
+  "📔": "#fffbd1", "📒": "#fffbd1", "📖": "#fbf0d8", "🗒️": "#fbf0d8",
+  "✏️": "#fbf0d8"
 };
 
 function TodoHabitSection({ selectedDate, state, actions }) {
@@ -423,9 +427,9 @@ function TodoHabitSection({ selectedDate, state, actions }) {
     } catch (_) {}
   };
 
-  const [collapsedHabits, setCollapsedHabits] = useState(() => {
+  const [expandedHabits, setExpandedHabits] = useState(() => {
     try {
-      const stored = localStorage.getItem("todoary.collapsedHabits");
+      const stored = localStorage.getItem("todoary.expandedHabits");
       return stored ? JSON.parse(stored) : {};
     } catch (_) {
       return {};
@@ -434,11 +438,11 @@ function TodoHabitSection({ selectedDate, state, actions }) {
 
   const [hoveredHabitId, setHoveredHabitId] = useState(null);
 
-  const toggleHabitCollapse = (habitId) => {
-    setCollapsedHabits(prev => {
+  const toggleHabitExpand = (habitId) => {
+    setExpandedHabits(prev => {
       const next = { ...prev, [habitId]: !prev[habitId] };
       try {
-        localStorage.setItem("todoary.collapsedHabits", JSON.stringify(next));
+        localStorage.setItem("todoary.expandedHabits", JSON.stringify(next));
       } catch (_) {}
       return next;
     });
@@ -558,7 +562,7 @@ function TodoHabitSection({ selectedDate, state, actions }) {
                   </button>
 
                   <div
-                    onClick={() => toggleHabitCollapse(habit.id)}
+                    onClick={() => toggleHabitExpand(habit.id)}
                     style={{ flex: 1, minWidth: 0, cursor: "pointer", userSelect: "none" }}
                   >
                     <div style={{
@@ -578,7 +582,7 @@ function TodoHabitSection({ selectedDate, state, actions }) {
                         alignItems: "center",
                         width: 8,
                       }}>
-                        {!!collapsedHabits[habit.id] ? "▶" : "▼"}
+                        {!!expandedHabits[habit.id] ? "▼" : "▶"}
                       </span>
                       <span style={{
                         textDecoration: isCompleted ? "underline" : "none",
@@ -612,7 +616,7 @@ function TodoHabitSection({ selectedDate, state, actions }) {
                 </div>
 
                 {/* 하위 항목 리스트 */}
-                {hasSubItems && !collapsedHabits[habit.id] && (
+                {hasSubItems && !!expandedHabits[habit.id] && (
                   <div style={{
                     display: "flex",
                     flexDirection: "column",
