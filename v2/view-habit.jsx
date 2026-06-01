@@ -872,8 +872,6 @@ function HabitChallengeCard({ habit, actions }) {
     </div>
   );
 }
-  );
-}
 
 // 3. 미니 이모지 피커 컴포넌트
 function EmojiPicker({ current, onSelect, onClose }) {
