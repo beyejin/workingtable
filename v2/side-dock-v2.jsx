@@ -11,6 +11,7 @@ const { useState, useEffect } = React;
 const TABS = [
   { id: "todo",  labelKey: "tab.todo",     glyph: "✓", sprite: 4,  color: "#d4ecdb", view: (ctx) => <TodoView tweaks={ctx?.tweaks} /> },
   { id: "cal",   labelKey: "tab.week",     glyph: "⊞", sprite: 6,  color: "#d4e6fa", view: () => <CalendarView /> },
+  { id: "habit", labelKey: "tab.habit",    glyph: "🌸", sprite: 7,  color: "#ffd3b6", view: () => <HabitView /> },
   { id: "memo",  labelKey: "tab.memo",     glyph: "□", sprite: 22, color: "#fff0c0", view: () => <MemoView /> },
   { id: "mail",  labelKey: "tab.mail",     glyph: "@", sprite: 0,  color: "#ffe0d2", view: () => <MailView /> },
   { id: "room",  labelKey: "tab.room",     glyph: "◌", sprite: 14, color: "#ecdcf5", view: (ctx) => <RoomView tweaks={ctx?.tweaks} /> },
@@ -21,6 +22,7 @@ const TABS = [
 const TAB_ICONS = {
   business: {
     todo: "✓",
+    habit: "🌸",
     cal: "⊞",
     memo: "□",
     mail: "@",
@@ -30,6 +32,7 @@ const TAB_ICONS = {
   },
   kitsch: {
     todo: 4,
+    habit: 7,
     cal: 6,
     memo: 22,
     mail: 0,
@@ -231,6 +234,10 @@ function tabHeaderInfo(active, state) {
       const notDone = items.filter(t => !t.done).length;
       const hot = items.filter(t => t.hot && !t.done).length;
       return { ttl: "할 일", sub: `${notDone}개 남음 · ${hot}개 급함` };
+    }
+    case "habit": {
+      const cnt = (sel.habitsForCurrent ? sel.habitsForCurrent(state) : []).filter(h => h.status === "active").length;
+      return { ttl: "습관 관리", sub: `진행 중인 습관 ${cnt}개 · 66일의 여정` };
     }
     case "memo": {
       const cnt = (sel.memosForCurrent ? sel.memosForCurrent(state) : []).length;

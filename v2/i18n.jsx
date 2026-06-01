@@ -7,7 +7,7 @@
 (function () {
   const DICT = {
     ko: {
-      "tab.todo": "할 일", "tab.memo": "메모", "tab.cheat": "명령어", "tab.mail": "메일함", "tab.cal": "달력", "tab.week": "주간", "tab.room": "작업방", "tab.deco": "꾸미기", "tab.settings": "설정",
+      "tab.todo": "할 일", "tab.habit": "습관", "tab.memo": "메모", "tab.cheat": "명령어", "tab.mail": "메일함", "tab.cal": "달력", "tab.week": "주간", "tab.room": "작업방", "tab.deco": "꾸미기", "tab.settings": "설정", "habit.todayTitle": "오늘의 습관", "habit.insights": "습관 분석", "habit.tracker": "습관 트래커", "habit.collapsed": "접기", "habit.expanded": "펼치기", "habit.streakLabel": "연속일", "habit.bestStreak": "역대 최고", "habit.frequency30": "최근 30일 실천", "habit.weeklyStat": "요일별 성공률", "habit.coOccur": "당일 동시 성공률", "habit.chainSuccess": "연쇄 실천 효과",
       "todo.today": "오늘", "todo.backToday": "오늘", "todo.addPh": "할 일 추가…", "todo.addPhDate": "마감 할 일 추가…",
       "todo.emptyToday": "오늘 할 일을 입력칸에 적어주세요", "todo.emptyDate": "{d} 마감 할 일이 없어요 — 위에서 추가할 수 있어요",
       "memo.write": "메모 작성", "memo.saved": "저장된 메모", "memo.new": "새 메모",
@@ -148,7 +148,7 @@
       "room.savedMember": "이 방 멤버로 등록됐어요",
     },
     en: {
-      "tab.todo": "Tasks", "tab.memo": "Memos", "tab.cheat": "Commands", "tab.mail": "Mailbox", "tab.cal": "Calendar", "tab.week": "Week", "tab.room": "Work Room", "tab.deco": "Theme", "tab.settings": "Settings",
+      "tab.todo": "Tasks", "tab.habit": "Habits", "tab.memo": "Memos", "tab.cheat": "Commands", "tab.mail": "Mailbox", "tab.cal": "Calendar", "tab.week": "Week", "tab.room": "Work Room", "tab.deco": "Theme", "tab.settings": "Settings", "habit.todayTitle": "Today's Habits", "habit.insights": "Insights", "habit.tracker": "Tracker", "habit.collapsed": "Collapse", "habit.expanded": "Expand", "habit.streakLabel": "Streak", "habit.bestStreak": "Personal Best", "habit.frequency30": "Past 30 Days", "habit.weeklyStat": "Weekly Stats", "habit.coOccur": "Co-occurrence Rate", "habit.chainSuccess": "Chain Success Rate",
       "todo.today": "Today", "todo.backToday": "Today", "todo.addPh": "Add a task…", "todo.addPhDate": "due task…",
       "todo.emptyToday": "Type a task in the box above", "todo.emptyDate": "No tasks due on {d} — add one above",
       "memo.write": "Write a memo", "memo.saved": "Saved memos", "memo.new": "New memo",
@@ -289,7 +289,7 @@
       "room.savedMember": "You're in the room",
     },
     zh: {
-      "tab.todo": "待办", "tab.memo": "备忘", "tab.cheat": "命令", "tab.mail": "邮箱", "tab.cal": "日历", "tab.week": "周计划", "tab.room": "工作室", "tab.deco": "装扮", "tab.settings": "设置",
+      "tab.todo": "待办", "tab.habit": "习惯", "tab.memo": "备忘", "tab.cheat": "命令", "tab.mail": "邮箱", "tab.cal": "日历", "tab.week": "周计划", "tab.room": "工作室", "tab.deco": "装扮", "tab.settings": "设置",
       "todo.today": "今天", "todo.backToday": "今天", "todo.addPh": "添加任务…", "todo.addPhDate": "截止任务…",
       "todo.emptyToday": "在上方输入任务", "todo.emptyDate": "{d} 没有截止任务 — 可在上方添加",
       "memo.write": "撰写备忘", "memo.saved": "已保存备忘", "memo.new": "新建备忘",
@@ -415,7 +415,7 @@
       "room.savedMember": "已加入房间",
     },
     ja: {
-      "tab.todo": "タスク", "tab.memo": "メモ", "tab.cheat": "コマンド", "tab.mail": "メール", "tab.cal": "カレンダー", "tab.week": "週間", "tab.room": "作業ルーム", "tab.deco": "着せ替え", "tab.settings": "設定",
+      "tab.todo": "タスク", "tab.habit": "習慣", "tab.memo": "メモ", "tab.cheat": "コマンド", "tab.mail": "メール", "tab.cal": "カレンダー", "tab.week": "週間", "tab.room": "作業ルーム", "tab.deco": "着せ替え", "tab.settings": "設定",
       "todo.today": "今日", "todo.backToday": "今日", "todo.addPh": "タスクを追加…", "todo.addPhDate": "締切タスク…",
       "todo.emptyToday": "上の入力欄にタスクを書いてください", "todo.emptyDate": "{d} 締切のタスクはありません — 上から追加できます",
       "memo.write": "メモを書く", "memo.saved": "保存したメモ", "memo.new": "新規メモ",
@@ -544,7 +544,7 @@
 
   const EXTRA_DICT = {
     es: {
-      "tab.todo": "Tareas", "tab.memo": "Notas", "tab.cheat": "Comandos", "tab.mail": "Buzón", "tab.cal": "Calendario", "tab.week": "Semana", "tab.room": "Sala de trabajo", "tab.deco": "Tema", "tab.settings": "Ajustes",
+      "tab.todo": "Tareas", "tab.habit": "Hábitos", "tab.memo": "Notas", "tab.cheat": "Comandos", "tab.mail": "Buzón", "tab.cal": "Calendario", "tab.week": "Semana", "tab.room": "Sala de trabajo", "tab.deco": "Tema", "tab.settings": "Ajustes",
       "todo.today": "Hoy", "todo.backToday": "Hoy", "todo.addPh": "Añadir tarea…", "todo.addPhDate": "tarea con fecha…",
       "todo.emptyToday": "Escribe una tarea en el cuadro de arriba", "todo.emptyDate": "No hay tareas para {d}; puedes añadir una arriba",
       "memo.write": "Escribir nota", "memo.saved": "Notas guardadas", "memo.new": "Nueva nota",
@@ -664,7 +664,7 @@
       "room.savedMember": "Ya estás en la sala",
     },
     pt: {
-      "tab.todo": "Tarefas", "tab.memo": "Notas", "tab.cheat": "Comandos", "tab.mail": "Caixa", "tab.cal": "Calendário", "tab.week": "Semana", "tab.room": "Sala de foco", "tab.deco": "Tema", "tab.settings": "Ajustes",
+      "tab.todo": "Tarefas", "tab.habit": "Hábitos", "tab.memo": "Notas", "tab.cheat": "Comandos", "tab.mail": "Caixa", "tab.cal": "Calendário", "tab.week": "Semana", "tab.room": "Sala de foco", "tab.deco": "Tema", "tab.settings": "Ajustes",
       "todo.today": "Hoje", "todo.backToday": "Hoje", "todo.addPh": "Adicionar tarefa…", "todo.addPhDate": "tarefa com prazo…",
       "todo.emptyToday": "Digite uma tarefa na caixa acima", "todo.emptyDate": "Não há tarefas para {d}; adicione uma acima",
       "memo.write": "Escrever nota", "memo.saved": "Notas salvas", "memo.new": "Nova nota",
@@ -1015,7 +1015,7 @@
   Object.keys(UI_PATCH).forEach(k => { DICT[k] = { ...DICT[k], ...UI_PATCH[k] }; });
 
   const ZH_HANT = {
-    "tab.todo": "待辦", "tab.memo": "備忘", "tab.cheat": "命令", "tab.mail": "信箱", "tab.cal": "日曆", "tab.week": "週計畫", "tab.room": "工作室", "tab.deco": "佈置", "tab.settings": "設定",
+    "tab.todo": "待辦", "tab.habit": "習慣", "tab.memo": "備忘", "tab.cheat": "命令", "tab.mail": "信箱", "tab.cal": "日曆", "tab.week": "週計畫", "tab.room": "工作室", "tab.deco": "佈置", "tab.settings": "設定",
     "todo.today": "今天", "todo.backToday": "今天", "todo.addPh": "新增任務…", "todo.addPhDate": "截止任務…",
     "todo.emptyToday": "在上方輸入任務", "todo.emptyDate": "{d} 沒有截止任務 — 可在上方新增",
     "todo.recDaily": "每天", "todo.recWeekdays": "工作日", "todo.recWeekly": "指定星期", "todo.specificDays": "指定星期",
@@ -1075,7 +1075,7 @@
   };
 
   const DE_DICT = {
-    "tab.todo": "Aufgaben", "tab.memo": "Notizen", "tab.cheat": "Befehle", "tab.mail": "Postfach", "tab.cal": "Kalender", "tab.week": "Woche", "tab.room": "Arbeitsraum", "tab.deco": "Design", "tab.settings": "Einstellungen",
+    "tab.todo": "Aufgaben", "tab.habit": "Gewohnheiten", "tab.memo": "Notizen", "tab.cheat": "Befehle", "tab.mail": "Postfach", "tab.cal": "Kalender", "tab.week": "Woche", "tab.room": "Arbeitsraum", "tab.deco": "Design", "tab.settings": "Einstellungen",
     "todo.today": "Heute", "todo.backToday": "Heute", "todo.addPh": "Aufgabe hinzufügen…", "todo.addPhDate": "Aufgabe mit Fälligkeitsdatum…",
     "todo.emptyToday": "Schreibe oben eine Aufgabe hinein", "todo.emptyDate": "Keine Aufgaben für {d}; oben kannst du eine hinzufügen",
     "todo.recDaily": "Täglich", "todo.recWeekdays": "Werktage", "todo.recWeekly": "Bestimmte Tage", "todo.specificDays": "Bestimmte Tage",
@@ -1107,7 +1107,7 @@
   };
 
   const RU_DICT = {
-    "tab.todo": "Задачи", "tab.memo": "Заметки", "tab.cheat": "Команды", "tab.mail": "Почта", "tab.cal": "Календарь", "tab.week": "Неделя", "tab.room": "Комната", "tab.deco": "Тема", "tab.settings": "Настройки",
+    "tab.todo": "Задачи", "tab.habit": "Привычки", "tab.memo": "Заметки", "tab.cheat": "Команды", "tab.mail": "Почта", "tab.cal": "Календарь", "tab.week": "Неделя", "tab.room": "Комната", "tab.deco": "Тема", "tab.settings": "Настройки",
     "todo.today": "Сегодня", "todo.backToday": "Сегодня", "todo.addPh": "Добавить задачу…", "todo.addPhDate": "задача со сроком…",
     "todo.emptyToday": "Введите задачу в поле выше", "todo.emptyDate": "На {d} нет задач; можно добавить выше",
     "todo.recDaily": "Каждый день", "todo.recWeekdays": "Будни", "todo.recWeekly": "Выбранные дни", "todo.specificDays": "Выбранные дни",
