@@ -1402,6 +1402,18 @@ const actions = {
       }),
     }));
   },
+  updateSubItemInHabit(habitId, subItemId, patch) {
+    setState(s => ({
+      ...s,
+      habits: (s.habits ?? []).map(h => {
+        if (h.id !== habitId) return h;
+        const subItems = (h.subItems ?? []).map(si =>
+          si.id === subItemId ? { ...si, ...patch } : si
+        );
+        return { ...h, subItems };
+      }),
+    }));
+  },
   toggleHabitDate(id, date = today()) {
     setState(s => ({
       ...s,
