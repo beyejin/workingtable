@@ -374,6 +374,7 @@ function HabitWeeklyStampCard({ habit, thisWeekDays, actions }) {
   const [newSubName, setNewSubName] = useState("");
   const [newSubEmoji, setNewSubEmoji] = useState("🌱");
   const [subPickerOpen, setSubPickerOpen] = useState(false);
+  const [activeSubPickerId, setActiveSubPickerId] = useState(null);
 
   useEffect(() => {
     setEditName(habit.name);
@@ -593,9 +594,27 @@ function HabitWeeklyStampCard({ habit, thisWeekDays, actions }) {
                   fontSize: 10,
                   fontFamily: "var(--hand)",
                   color: "var(--ink)",
+                  position: "relative",
                 }}
               >
-                <span>{si.emoji} {si.name}</span>
+                <span
+                  onClick={() => setActiveSubPickerId(o => o === si.id ? null : si.id)}
+                  style={{ cursor: "pointer", userSelect: "none" }}
+                  title="클릭하여 이모지 바꾸기"
+                >
+                  {si.emoji}
+                </span>
+                {activeSubPickerId === si.id && (
+                  <EmojiPicker
+                    current={si.emoji}
+                    onSelect={(em) => {
+                      actions.updateSubItemInHabit(habit.id, si.id, { emoji: em });
+                      setActiveSubPickerId(null);
+                    }}
+                    onClose={() => setActiveSubPickerId(null)}
+                  />
+                )}
+                <span> {si.name}</span>
                 <button
                   type="button"
                   onClick={() => actions.removeSubItemFromHabit(habit.id, si.id)}
