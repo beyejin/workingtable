@@ -212,6 +212,7 @@ function seed() {
     },
     workSessions: [],
     songPlays: {},
+    habits: [],
   };
 }
 
@@ -315,6 +316,21 @@ function migrateState(data) {
     minutes: w.minutes ?? 0,
   }));
   data.songPlays   ??= {};
+  data.habits      ??= [];
+  data.habits = data.habits.map(h => ({
+    id: h.id,
+    projectId: h.projectId,
+    name: h.name || "",
+    emoji: h.emoji || "🌸",
+    frequency: h.frequency || "daily",
+    weeklyDays: Array.isArray(h.weeklyDays) ? h.weeklyDays : [],
+    history: h.history || {},
+    streak: h.streak ?? 0,
+    maxStreak: h.maxStreak ?? 0,
+    createdAt: h.createdAt || today(),
+    status: h.status || "active",
+    subItems: Array.isArray(h.subItems) ? h.subItems : [],
+  }));
   // 프로젝트에 버전/저장소 필드 보강 (기존 값 우선)
   data.projects = (data.projects ?? []).map(p => ({
     repoUrl: "", version: "0.1.0", nextVersion: "", ...p,
@@ -1308,6 +1324,228 @@ const actions = {
     if (!ok) return;
     setState(seed());
   },
+
+  // ----- 습관 (Habits) -----
+  addHabit(name, opts = {}) {
+    if (!name?.trim()) return null;
+    const id = uid();
+    setState(s => ({
+      ...s,
+      habits: [...(s.habits ?? []), {
+        id,
+        projectId: s.currentProjectId,
+        name: name.trim(),
+        emoji: opts.emoji || "🌸",
+        frequency: opts.frequency || "daily",
+        weeklyDays: opts.weeklyDays || [],
+        history: {},
+        streak: 0,
+        maxStreak: 0,
+        createdAt: today(),
+        status: "active",
+        subItems: [],
+      }],
+    }));
+    return id;
+  },
+  updateHabit(id, patch) {
+    setState(s => ({
+      ...s,
+      habits: (s.habits ?? []).map(h => h.id === id ? { ...h, ...patch } : h),
+    }));
+  },
+  removeHabit(id) {
+    setState(s => ({
+      ...s,
+      habits: (s.habits ?? []).filter(h => h.id !== id),
+    }));
+  },
+  renameHabit(id, name) {
+    if (!name?.trim()) return;
+    setState(s => ({
+      ...s,
+      habits: (s.habits ?? []).map(h => h.id === id ? { ...h, name: name.trim() } : h),
+    }));
+  },
+  addSubItemToHabit(habitId, name, emoji = "🌱") {
+    if (!name?.trim()) return;
+    setState(s => ({
+      ...s,
+      habits: (s.habits ?? []).map(h => {
+        if (h.id !== habitId) return h;
+        const subItems = [...(h.subItems ?? []), { id: uid(), name: name.trim(), emoji }];
+        return { ...h, subItems };
+      }),
+    }));
+  },
+  removeSubItemFromHabit(habitId, subItemId) {
+    setState(s => ({
+      ...s,
+      habits: (s.habits ?? []).map(h => {
+        if (h.id !== habitId) return h;
+        const subItems = (h.subItems ?? []).filter(si => si.id !== subItemId);
+        
+        const history = { ...h.history };
+        Object.keys(history).forEach(date => {
+          if (typeof history[date] === "object" && history[date] !== null) {
+            const dayRecord = { ...history[date] };
+            delete dayRecord[subItemId];
+            if (Object.keys(dayRecord).length === 0) {
+              delete history[date];
+            } else {
+              history[date] = dayRecord;
+            }
+          }
+        });
+
+        return { ...h, subItems, history };
+      }),
+    }));
+  },
+  toggleHabitDate(id, date = today()) {
+    setState(s => ({
+      ...s,
+      habits: (s.habits ?? []).map(h => {
+        if (h.id !== id) return h;
+        const history = { ...h.history };
+        
+        const isDateSuccess = (dStr) => {
+          const rec = history[dStr];
+          if (!rec) return false;
+          if (rec === true) return true;
+          if (typeof rec === "object") {
+            return Object.values(rec).some(v => !!v);
+          }
+          return false;
+        };
+
+        if (h.subItems && h.subItems.length > 0) {
+          const done = !isDateSuccess(date);
+          if (done) {
+            const dayRecord = {};
+            h.subItems.forEach(si => { dayRecord[si.id] = true; });
+            history[date] = dayRecord;
+          } else {
+            delete history[date];
+          }
+        } else {
+          const done = !isDateSuccess(date);
+          if (done) {
+            history[date] = true;
+          } else {
+            delete history[date];
+          }
+        }
+
+        const tDateStr = today();
+        let currentStreak = 0;
+        let bestStreak = h.maxStreak ?? 0;
+
+        let checkDate = new Date(tDateStr + "T00:00:00");
+        if (!isDateSuccess(tDateStr)) {
+          checkDate.setDate(checkDate.getDate() - 1);
+        }
+
+        while (true) {
+          const y = checkDate.getFullYear();
+          const m = String(checkDate.getMonth() + 1).padStart(2, "0");
+          const d = String(checkDate.getDate()).padStart(2, "0");
+          const dateStr = `${y}-${m}-${d}`;
+          if (isDateSuccess(dateStr)) {
+            currentStreak++;
+            checkDate.setDate(checkDate.getDate() - 1);
+          } else {
+            break;
+          }
+        }
+
+        bestStreak = Math.max(bestStreak, currentStreak);
+        const doneCount = Object.keys(history).length;
+        const status = doneCount >= 66 ? "completed" : "active";
+
+        return {
+          ...h,
+          history,
+          streak: currentStreak,
+          maxStreak: bestStreak,
+          status,
+        };
+      }),
+    }));
+  },
+  toggleHabitSubItemDate(id, subItemId, date = today()) {
+    setState(s => ({
+      ...s,
+      habits: (s.habits ?? []).map(h => {
+        if (h.id !== id) return h;
+        const history = { ...h.history };
+        
+        let dayRecord = typeof history[date] === "object" && history[date] !== null ? { ...history[date] } : {};
+        if (history[date] === true) {
+          dayRecord = {};
+          if (h.subItems && h.subItems.length > 0) {
+            dayRecord[h.subItems[0].id] = true;
+          }
+        }
+
+        if (dayRecord[subItemId]) {
+          delete dayRecord[subItemId];
+        } else {
+          dayRecord[subItemId] = true;
+        }
+
+        if (Object.keys(dayRecord).length === 0) {
+          delete history[date];
+        } else {
+          history[date] = dayRecord;
+        }
+
+        const isDateSuccess = (dStr) => {
+          const rec = history[dStr];
+          if (!rec) return false;
+          if (rec === true) return true;
+          if (typeof rec === "object") {
+            return Object.values(rec).some(v => !!v);
+          }
+          return false;
+        };
+
+        const tDateStr = today();
+        let currentStreak = 0;
+        let bestStreak = h.maxStreak ?? 0;
+
+        let checkDate = new Date(tDateStr + "T00:00:00");
+        if (!isDateSuccess(tDateStr)) {
+          checkDate.setDate(checkDate.getDate() - 1);
+        }
+
+        while (true) {
+          const y = checkDate.getFullYear();
+          const m = String(checkDate.getMonth() + 1).padStart(2, "0");
+          const d = String(checkDate.getDate()).padStart(2, "0");
+          const dateStr = `${y}-${m}-${d}`;
+          if (isDateSuccess(dateStr)) {
+            currentStreak++;
+            checkDate.setDate(checkDate.getDate() - 1);
+          } else {
+            break;
+          }
+        }
+
+        bestStreak = Math.max(bestStreak, currentStreak);
+        const doneCount = Object.keys(history).length;
+        const status = doneCount >= 66 ? "completed" : "active";
+
+        return {
+          ...h,
+          history,
+          streak: currentStreak,
+          maxStreak: bestStreak,
+          status,
+        };
+      }),
+    }));
+  },
 };
 
 // ---- React 훅 ----
@@ -1319,6 +1557,7 @@ function useDiary() {
 
 // ---- 파생 셀렉터 ----
 const select = {
+  habitsForCurrent: (s) => (s.habits ?? []).filter(h => h.projectId === s.currentProjectId),
   currentProject: (s) => s.projects.find(p => p.id === s.currentProjectId) ?? null,
   todosForCurrent: (s) => s.todos.filter(t => t.projectId === s.currentProjectId),
   bookmarksForCurrent: (s) => s.aiBookmarks.filter(b => b.projectId === s.currentProjectId),
