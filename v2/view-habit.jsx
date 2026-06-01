@@ -613,6 +613,7 @@ function HabitWeeklyStampCard({ habit, thisWeekDays, actions }) {
                 {activeSubPickerId === si.id && (
                   <EmojiPicker
                     current={si.emoji}
+                    align="right"
                     onSelect={(em) => {
                       actions.updateSubItemInHabit(habit.id, si.id, { emoji: em });
                       setActiveSubPickerId(null);
@@ -901,12 +902,13 @@ function HabitChallengeCard({ habit, actions }) {
 }
 
 // 3. 미니 이모지 피커 컴포넌트
-function EmojiPicker({ current, onSelect, onClose }) {
+function EmojiPicker({ current, onSelect, onClose, align = "left" }) {
   return (
     <div style={{
       position: "absolute",
       top: 26,
-      left: 0,
+      left: align === "left" ? 0 : "auto",
+      right: align === "right" ? 0 : "auto",
       zIndex: 100,
       background: "white",
       border: "1.1px solid var(--ink)",
