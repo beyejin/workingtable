@@ -39,27 +39,56 @@ fn main() {
 
             #[cfg(target_os = "macos")]
             {
-                use tauri::menu::{Menu, MenuItem, SubmenuBuilder};
+                use tauri::menu::{Menu, MenuItem, SubmenuBuilder, PredefinedMenuItem};
                 use tauri::Emitter;
 
                 let handle = app.handle();
-                if let Ok(menu) = Menu::default(handle) {
-                    if let Ok(toggle_dock) = MenuItem::with_id(
-                        handle,
-                        "toggle_dock",
-                        "Toggle Dock Minimization",
-                        true,
-                        Some("CmdOrCtrl+M"),
-                    ) {
-                        if let Ok(custom_submenu) = SubmenuBuilder::new(handle, "Todoary")
-                            .item(&toggle_dock)
-                            .build()
-                        {
-                            let _ = menu.append(&custom_submenu);
-                        }
-                    }
-                    let _ = app.set_menu(menu);
-                }
+                let menu = Menu::new(handle).unwrap();
+
+                // 1. App Submenu (todoary)
+                let app_menu = SubmenuBuilder::new(handle, "todoary")
+                    .item(&PredefinedMenuItem::about(handle, Some("todoary"), None).unwrap())
+                    .separator()
+                    .item(&PredefinedMenuItem::hide(handle, None).unwrap())
+                    .item(&PredefinedMenuItem::hide_others(handle, None).unwrap())
+                    .item(&PredefinedMenuItem::show_all(handle, None).unwrap())
+                    .separator()
+                    .item(&PredefinedMenuItem::quit(handle, None).unwrap())
+                    .build()
+                    .unwrap();
+
+                // 2. Edit Submenu (Copy & Paste 등 단축키 제공)
+                let edit_menu = SubmenuBuilder::new(handle, "Edit")
+                    .item(&PredefinedMenuItem::undo(handle, None).unwrap())
+                    .item(&PredefinedMenuItem::redo(handle, None).unwrap())
+                    .separator()
+                    .item(&PredefinedMenuItem::cut(handle, None).unwrap())
+                    .item(&PredefinedMenuItem::copy(handle, None).unwrap())
+                    .item(&PredefinedMenuItem::paste(handle, None).unwrap())
+                    .item(&PredefinedMenuItem::select_all(handle, None).unwrap())
+                    .build()
+                    .unwrap();
+
+                // 3. Todoary Custom Submenu (Cmd+M 단축키 매핑)
+                let toggle_dock = MenuItem::with_id(
+                    handle,
+                    "toggle_dock",
+                    "Toggle Dock Minimization",
+                    true,
+                    Some("CmdOrCtrl+M"),
+                ).unwrap();
+
+                let custom_submenu = SubmenuBuilder::new(handle, "Todoary")
+                    .item(&toggle_dock)
+                    .build()
+                    .unwrap();
+
+                // 메뉴바 조립
+                let _ = menu.append(&app_menu);
+                let _ = menu.append(&edit_menu);
+                let _ = menu.append(&custom_submenu);
+
+                let _ = app.set_menu(menu);
 
                 app.on_menu_event(move |app_handle, event| {
                     if event.id == "toggle_dock" {
