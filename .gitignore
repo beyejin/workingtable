@@ -18,3 +18,7 @@ release-v*/
 
 # 작업 인수인계 문서 (로컬 전용)
 HANDOFF.md
+
+# OS 임시 파일 무시
+.DS_Store
+**/.DS_Store
