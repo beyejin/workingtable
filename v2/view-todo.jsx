@@ -432,6 +432,8 @@ function TodoHabitSection({ selectedDate, state, actions }) {
     }
   });
 
+  const [hoveredHabitId, setHoveredHabitId] = useState(null);
+
   const toggleHabitCollapse = (habitId) => {
     setCollapsedHabits(prev => {
       const next = { ...prev, [habitId]: !prev[habitId] };
@@ -518,6 +520,8 @@ function TodoHabitSection({ selectedDate, state, actions }) {
             return (
               <div
                 key={habit.id}
+                onMouseEnter={() => setHoveredHabitId(habit.id)}
+                onMouseLeave={() => setHoveredHabitId(null)}
                 style={{
                   display: "flex",
                   flexDirection: "column",
@@ -564,9 +568,18 @@ function TodoHabitSection({ selectedDate, state, actions }) {
                       color: "var(--ink)",
                       display: "flex",
                       alignItems: "center",
-                      gap: 6,
                     }}>
-                      <span>{habit.emoji}</span>
+                      <span style={{
+                        fontSize: 9,
+                        opacity: hoveredHabitId === habit.id ? 0.6 : 0,
+                        transition: "opacity 0.15s",
+                        marginRight: 4,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        width: 8,
+                      }}>
+                        {!!collapsedHabits[habit.id] ? "▶" : "▼"}
+                      </span>
                       <span style={{
                         textDecoration: isCompleted ? "underline" : "none",
                         textOverflow: "ellipsis",
@@ -574,9 +587,6 @@ function TodoHabitSection({ selectedDate, state, actions }) {
                         whiteSpace: "nowrap",
                       }}>
                         {habit.name}
-                      </span>
-                      <span style={{ fontSize: 9, opacity: 0.5, marginLeft: 2 }}>
-                        {!!collapsedHabits[habit.id] ? "▶" : "▼"}
                       </span>
                     </div>
 
