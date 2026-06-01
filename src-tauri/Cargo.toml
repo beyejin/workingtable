@@ -1,6 +1,6 @@
 [package]
 name = "todoary"
-version = "0.7.11"
+version = "0.7.12"
 description = "todoary"
 edition = "2021"
 rust-version = "1.77"
