@@ -1287,6 +1287,28 @@ function HabitInsightsView({ habits }) {
     }
   }
 
+  // 하위 항목 실천 기여도 분석 데이터 계산
+  let subItemAnalysis = [];
+  if (selectedHabitId !== "all") {
+    const activeHabit = targetHabits[0];
+    if (activeHabit.subItems && activeHabit.subItems.length > 0) {
+      subItemAnalysis = activeHabit.subItems.map(si => {
+        const doneCount = dateList30.filter(date => {
+          const rec = activeHabit.history[date];
+          if (!rec) return false;
+          if (rec === true) return true;
+          return !!rec[si.id];
+        }).length;
+        const rate = Math.round((doneCount / 30) * 100);
+        return {
+          ...si,
+          doneCount,
+          rate
+        };
+      }).sort((a, b) => b.rate - a.rate);
+    }
+  }
+
   const chipStyle = (id) => ({
     all: "unset",
     cursor: "pointer",
@@ -1519,6 +1541,77 @@ function HabitInsightsView({ habits }) {
             })}
           </div>
         </div>
+
+        {selectedHabitId !== "all" && subItemAnalysis.length > 0 && (
+          <div style={{ ...cardStyle, marginBottom: 12 }}>
+            <div style={cardHeaderStyle}>📋 하위 항목 실천 기여도 (최근 30일)</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "4px 6px" }}>
+              {subItemAnalysis.map((item) => {
+                return (
+                  <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{
+                      fontFamily: "var(--hand)",
+                      fontSize: 12,
+                      fontWeight: "bold",
+                      color: "var(--ink)",
+                      width: 80,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis"
+                    }} title={`${item.emoji} ${item.name}`}>
+                      {item.emoji} {item.name}
+                    </span>
+                    <div style={{
+                      flex: 1,
+                      height: 10,
+                      background: "#f0f0f0",
+                      borderRadius: 99,
+                      border: "1px solid var(--ink-soft)",
+                      overflow: "hidden"
+                    }}>
+                      <div style={{
+                        width: `${item.rate}%`,
+                        height: "100%",
+                        background: "var(--hi-soft)",
+                        borderRight: item.rate > 0 ? "1px solid var(--ink)" : "none",
+                        transition: "width 0.3s ease"
+                      }} />
+                    </div>
+                    <span style={{
+                      fontFamily: "var(--mono)",
+                      fontSize: 10,
+                      fontWeight: "bold",
+                      color: "var(--ink-2)",
+                      width: 70,
+                      textAlign: "right"
+                    }}>
+                      {item.doneCount}회 ({item.rate}%)
+                    </span>
+                  </div>
+                );
+              })}
+              
+              {/* 기여도 피드백 요약 */}
+              {subItemAnalysis.length > 0 && (
+                <div style={{
+                  marginTop: 6,
+                  borderTop: "1px dashed var(--ink-soft)",
+                  paddingTop: 8,
+                  fontFamily: "var(--hand)",
+                  fontSize: 11,
+                  color: "var(--ink-2)"
+                }}>
+                  💡 <strong>실천 분석:</strong> 가장 잘 실천 중인 항목은 <strong>{subItemAnalysis[0].emoji} {subItemAnalysis[0].name}</strong>({subItemAnalysis[0].rate}%)이며, 
+                  {subItemAnalysis.length > 1 && (
+                    <>
+                      {" "}보완이 필요한 항목은 <strong>{subItemAnalysis[subItemAnalysis.length - 1].emoji} {subItemAnalysis[subItemAnalysis.length - 1].name}</strong>({subItemAnalysis[subItemAnalysis.length - 1].rate}%)입니다.
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {selectedHabitId !== "all" && (coOccurHabit || chainSuccessText) && (
           <div style={{ ...cardStyle, background: "#fbfcfe", borderColor: "var(--ink)" }}>
