@@ -362,6 +362,9 @@ function TodoView({ tweaks } = {}) {
           <div style={{ marginBottom: 8 }} onClick={(e) => e.stopPropagation()}>
             <InlineAdd placeholder={placeholder} onAdd={onAdd} />
           </div>
+          {filterMode === "date" && (
+            <TodoHabitSection selectedDate={selectedDate} state={state} actions={actions} />
+          )}
           {list.map((t, i) => (
             <TodoRow key={t.id} t={t} actions={actions} recRule={recById[t.recurrenceId]} i={i}
               selected={selId === t.id} onPick={onPick} />
@@ -391,6 +394,242 @@ function TodoView({ tweaks } = {}) {
         />
       }
     />
+  );
+}
+
+// ---- 오늘의 습관 섹션 ----
+const HABIT_EMOJI_COLORS = {
+  "🌸": "#ffeaf2", "🌱": "#e9f8d8", "🥛": "#e3f3ff", "💊": "#dcf4e3",
+  "🧘": "#efe8f8", "🏃": "#ffe9da", "🥗": "#efe8f8", "📚": "#dfeaf9",
+  "✍️": "#fbf0d8", "💻": "#e3f3ff", "⏰": "#fffbd1", "🛌": "#efe8f8",
+  "✨": "#fffbd1", "🎵": "#ffeaf2"
+};
+
+function TodoHabitSection({ selectedDate, state, actions }) {
+  const habits = diary.select.habitsForCurrent(state) || [];
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("todoary.habitsCollapsed") === "true";
+    } catch (_) {
+      return false;
+    }
+  });
+
+  const toggleCollapse = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem("todoary.habitsCollapsed", String(next));
+    } catch (_) {}
+  };
+
+  if (!habits.length) return null;
+
+  const totalCount = habits.length;
+  const doneCount = habits.filter(h => !!h.history[selectedDate]).length;
+
+  return (
+    <div style={{ marginBottom: 12 }} onClick={(e) => e.stopPropagation()}>
+      <div
+        onClick={toggleCollapse}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          cursor: "pointer",
+          userSelect: "none",
+          padding: "4px 6px",
+          borderRadius: 6,
+          background: "var(--paper-2)",
+          border: "1px solid var(--ink-soft)",
+          fontFamily: "var(--hand)",
+          fontSize: 12,
+          fontWeight: "bold",
+          color: "var(--ink)",
+          marginBottom: collapsed ? 0 : 8,
+          transition: "background 0.15s",
+        }}
+      >
+        <span style={{ fontSize: 9 }}>{collapsed ? "▶" : "▼"}</span>
+        <span>{L("habit.todayTitle")}</span>
+        <span style={{
+          fontFamily: "var(--mono)",
+          fontSize: 10,
+          background: "rgba(255, 255, 255, 0.7)",
+          padding: "0 5px",
+          borderRadius: 99,
+          border: "1px solid rgba(40, 51, 63, 0.18)",
+          marginLeft: "auto",
+        }}>
+          {doneCount}/{totalCount}
+        </span>
+      </div>
+
+      {!collapsed && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {habits.map((habit) => {
+            const isCompleted = habit.status === "completed";
+            const doneCountTotal = Object.keys(habit.history).length;
+            const bg = HABIT_EMOJI_COLORS[habit.emoji] || "#ffffff";
+            
+            const isDateSuccess = (dStr) => {
+              const rec = habit.history[dStr];
+              if (!rec) return false;
+              if (rec === true) return true;
+              if (typeof rec === "object") {
+                return Object.values(rec).some(v => !!v);
+              }
+              return false;
+            };
+
+            const isDone = isDateSuccess(selectedDate);
+            const hasSubItems = habit.subItems && habit.subItems.length > 0;
+
+            return (
+              <div
+                key={habit.id}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "stretch",
+                  background: `radial-gradient(rgba(255,255,255,.7) 1.2px, transparent 1.3px) 0 0 / 10px 10px, ${bg}`,
+                  border: "1.1px solid var(--ink)",
+                  borderRadius: 10,
+                  padding: "8px 12px",
+                  boxShadow: "0 2px 0 var(--paper-3)",
+                  position: "relative",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center" }}>
+                  <button
+                    onClick={() => actions.toggleHabitDate(habit.id, selectedDate)}
+                    style={{
+                      all: "unset",
+                      cursor: "pointer",
+                      width: 20,
+                      height: 20,
+                      borderRadius: "50%",
+                      border: "1.5px solid var(--ink)",
+                      background: isDone ? "#ffe6f0" : "white",
+                      display: "grid",
+                      placeItems: "center",
+                      fontSize: 9,
+                      marginRight: 10,
+                      flexShrink: 0,
+                      boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
+                    }}
+                    title={isDone ? L("todo.undoDone") : L("todo.markDone")}
+                  >
+                    {isDone ? habit.emoji : ""}
+                  </button>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontFamily: "var(--hand)",
+                      fontSize: 13,
+                      fontWeight: "bold",
+                      color: "var(--ink)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}>
+                      <span>{habit.emoji}</span>
+                      <span style={{
+                        textDecoration: isCompleted ? "underline" : "none",
+                        textOverflow: "ellipsis",
+                        overflow: "hidden",
+                        whiteSpace: "nowrap",
+                      }}>
+                        {habit.name}
+                      </span>
+                    </div>
+
+                    <div style={{
+                      fontFamily: "var(--hand)",
+                      fontSize: 10,
+                      color: "var(--ink-2)",
+                      marginTop: 2,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}>
+                      {habit.streak > 0 && (
+                        <span style={{ color: "#e06a7a", fontWeight: "bold" }}>
+                          🔥 {habit.streak}일 연속
+                        </span>
+                      )}
+                      <span style={{ color: "var(--ink-3)" }}>
+                        🌱 {doneCountTotal}/66일
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 하위 항목 리스트 */}
+                {hasSubItems && (
+                  <div style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 5,
+                    marginTop: 8,
+                    paddingTop: 6,
+                    paddingLeft: 8,
+                    borderTop: "1px dashed rgba(40, 51, 63, 0.15)",
+                  }}>
+                    {habit.subItems.map((subItem) => {
+                      const isSubDone = typeof habit.history[selectedDate] === "object" && habit.history[selectedDate] !== null
+                        ? !!habit.history[selectedDate][subItem.id]
+                        : (habit.history[selectedDate] === true);
+
+                      return (
+                        <div
+                          key={subItem.id}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
+                          <button
+                            onClick={() => actions.toggleHabitSubItemDate(habit.id, subItem.id, selectedDate)}
+                            style={{
+                              all: "unset",
+                              cursor: "pointer",
+                              width: 16,
+                              height: 16,
+                              borderRadius: "50%",
+                              border: "1.2px solid var(--ink)",
+                              background: isSubDone ? "#ffe6f0" : "white",
+                              display: "grid",
+                              placeItems: "center",
+                              fontSize: 8,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {isSubDone ? subItem.emoji : ""}
+                          </button>
+                          <span style={{
+                            fontFamily: "var(--hand)",
+                            fontSize: 11,
+                            color: isSubDone ? "var(--ink-3)" : "var(--ink)",
+                            textDecoration: isSubDone ? "line-through" : "none",
+                            textOverflow: "ellipsis",
+                            overflow: "hidden",
+                            whiteSpace: "nowrap",
+                          }}>
+                            {subItem.emoji} {subItem.name}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
