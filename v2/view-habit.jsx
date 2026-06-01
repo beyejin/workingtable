@@ -1338,11 +1338,21 @@ function HabitInsightsView({ habits }) {
           <div style={cardStyle}>
             <div style={cardHeaderStyle}>🔥 {L("habit.streakLabel")}</div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "10px 0" }}>
-              <div style={{ fontSize: 28, fontWeight: "bold", fontFamily: "var(--mono)", color: "#e06a7a" }}>
-                {currentStreak}<span style={{ fontSize: 13, fontFamily: "var(--hand)", fontWeight: "normal", color: "var(--ink-2)", marginLeft: 2 }}>일</span>
+              <div style={{ fontSize: 28, fontWeight: "bold", fontFamily: "var(--mono)", color: "#e06a7a", display: "flex", alignItems: "center", gap: 3 }}>
+                {currentStreak}
+                <span style={{ fontSize: 13, fontFamily: "var(--hand)", fontWeight: "normal", color: "var(--ink-2)" }}>일</span>
+                {currentStreak > 0 && currentStreak >= maxStreak && (
+                  <span style={{ fontSize: 16 }} title="최고 기록 달성 중! 🏆">🏆</span>
+                )}
               </div>
-              <div style={{ fontFamily: "var(--hand)", fontSize: 10, color: "var(--ink-3)", marginTop: 4 }}>
-                {L("habit.bestStreak")} {maxStreak}일
+              <div style={{
+                fontFamily: "var(--hand)",
+                fontSize: 10,
+                color: (currentStreak > 0 && currentStreak >= maxStreak) ? "#e06a7a" : "var(--ink-3)",
+                fontWeight: (currentStreak > 0 && currentStreak >= maxStreak) ? "bold" : "normal",
+                marginTop: 4
+              }}>
+                {(currentStreak > 0 && currentStreak >= maxStreak) ? "🎉 역대 최고 기록 갱신 중!" : `${L("habit.bestStreak")} ${maxStreak}일`}
               </div>
             </div>
           </div>
