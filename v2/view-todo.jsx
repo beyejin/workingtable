@@ -423,10 +423,40 @@ function TodoHabitSection({ selectedDate, state, actions }) {
     } catch (_) {}
   };
 
+  const [collapsedHabits, setCollapsedHabits] = useState(() => {
+    try {
+      const stored = localStorage.getItem("todoary.collapsedHabits");
+      return stored ? JSON.parse(stored) : {};
+    } catch (_) {
+      return {};
+    }
+  });
+
+  const toggleHabitCollapse = (habitId) => {
+    setCollapsedHabits(prev => {
+      const next = { ...prev, [habitId]: !prev[habitId] };
+      try {
+        localStorage.setItem("todoary.collapsedHabits", JSON.stringify(next));
+      } catch (_) {}
+      return next;
+    });
+  };
+
   if (!habits.length) return null;
 
   const totalCount = habits.length;
-  const doneCount = habits.filter(h => !!h.history[selectedDate]).length;
+  const doneCount = habits.filter(h => {
+    const isDateSuccess = (dStr) => {
+      const rec = h.history[dStr];
+      if (!rec) return false;
+      if (rec === true) return true;
+      if (typeof rec === "object") {
+        return Object.values(rec).some(v => !!v);
+      }
+      return false;
+    };
+    return isDateSuccess(selectedDate);
+  }).length;
 
   return (
     <div style={{ marginBottom: 12 }} onClick={(e) => e.stopPropagation()}>
@@ -523,7 +553,10 @@ function TodoHabitSection({ selectedDate, state, actions }) {
                     {isDone ? habit.emoji : ""}
                   </button>
 
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    onClick={() => toggleHabitCollapse(habit.id)}
+                    style={{ flex: 1, minWidth: 0, cursor: "pointer", userSelect: "none" }}
+                  >
                     <div style={{
                       fontFamily: "var(--hand)",
                       fontSize: 13,
@@ -541,6 +574,9 @@ function TodoHabitSection({ selectedDate, state, actions }) {
                         whiteSpace: "nowrap",
                       }}>
                         {habit.name}
+                      </span>
+                      <span style={{ fontSize: 9, opacity: 0.5, marginLeft: 2 }}>
+                        {!!collapsedHabits[habit.id] ? "▶" : "▼"}
                       </span>
                     </div>
 
@@ -566,7 +602,7 @@ function TodoHabitSection({ selectedDate, state, actions }) {
                 </div>
 
                 {/* 하위 항목 리스트 */}
-                {hasSubItems && (
+                {hasSubItems && !collapsedHabits[habit.id] && (
                   <div style={{
                     display: "flex",
                     flexDirection: "column",
