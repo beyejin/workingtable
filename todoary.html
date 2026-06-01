@@ -231,6 +231,35 @@
         } catch (_) {}
       }, [t.alwaysOnTop]);
 
+      // Cmd+M 단축키로 도크 미니화 토글
+      React.useEffect(() => {
+        const handleKeyDown = (e) => {
+          if (e.metaKey && e.key.toLowerCase() === 'm') {
+            e.preventDefault();
+            setTweak("dockHidden", !t.dockHidden);
+          }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+      }, [t.dockHidden]);
+
+      // Tauri 백엔드로부터 Cmd+M(도크 미니화 토글) 이벤트 수신
+      React.useEffect(() => {
+        const T = window.__TAURI__;
+        if (!T || !T.event || !T.event.listen) return;
+
+        let unsubscribe = null;
+        T.event.listen("toggle-dock-hidden", () => {
+          setTweak("dockHidden", !t.dockHidden);
+        }).then(fn => {
+          unsubscribe = fn;
+        });
+
+        return () => {
+          if (unsubscribe) unsubscribe();
+        };
+      }, [t.dockHidden]);
+
       // 창 높이 변화(드래그/프리셋)를 마지막 길이로 저장 (디바운스)
       React.useEffect(() => {
         let tid;
