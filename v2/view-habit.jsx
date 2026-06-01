@@ -586,7 +586,7 @@ function HabitWeeklyStampCard({ habit, thisWeekDays, actions }) {
       }}>
         {habit.subItems && habit.subItems.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
-            {habit.subItems.map(si => (
+            {habit.subItems.map((si, idx) => (
               <span
                 key={si.id}
                 style={{
@@ -613,7 +613,7 @@ function HabitWeeklyStampCard({ habit, thisWeekDays, actions }) {
                 {activeSubPickerId === si.id && (
                   <EmojiPicker
                     current={si.emoji}
-                    align="right"
+                    align={idx < 2 ? "left" : "right"}
                     onSelect={(em) => {
                       actions.updateSubItemInHabit(habit.id, si.id, { emoji: em });
                       setActiveSubPickerId(null);
