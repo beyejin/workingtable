@@ -46,7 +46,7 @@ function Timer() {
 // 앱 실행 = 기본 ON (초록 점, "WORKING"). 점 클릭하면 STOP (검은 점, "STOPPED").
 // 호버하면 우측에 작은 ⟳ 버튼 — 클릭 시 오늘 작업 시간을 0으로 초기화.
 function WorkTime() {
-  const { state } = diary.useDiary();
+  const { state, actions } = diary.useDiary();
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -113,6 +113,24 @@ function WorkTime() {
       <span style={{ fontSize: 10, opacity: .6, display: "inline-flex", alignItems: "center", height: 22, transform: "translateY(-0.5px)" }}>M</span>
       <span style={{ display: "inline-flex", alignItems: "center", height: 22 }}>{pad(sec)}</span>
       <span style={{ fontSize: 10, opacity: .6, display: "inline-flex", alignItems: "center", height: 22, transform: "translateY(-0.5px)" }}>S</span>
+      <button 
+        onClick={async () => {
+          if (await window.dialog.confirm(L("worktrack.resetConfirm"))) {
+            actions.resetWorkMinutes();
+            window.dispatchEvent(new CustomEvent("work-minutes-reset"));
+          }
+        }} 
+        title={L("worktrack.resetTip")}
+        style={{
+          all: "unset", cursor: "pointer", padding: "0 4px", marginLeft: 2,
+          display: "inline-flex", alignItems: "center", height: 22,
+          fontSize: 13, opacity: 0.4,
+        }}
+        onMouseEnter={(e) => e.target.style.opacity = 1}
+        onMouseLeave={(e) => e.target.style.opacity = 0.4}
+      >
+        ⟳
+      </button>
     </span>
   );
 }
