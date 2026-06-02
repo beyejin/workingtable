@@ -404,8 +404,9 @@ function syncReminder(kind, { title, body = null, dueDate = null }) {
   if (!s.reminders?.enabled) return;
   const listName = s.reminders.targets[kind];
   if (!listName || !window.__TAURI__?.core?.invoke) return;
-  window.__TAURI__.core.invoke("add_to_reminders", { listName, title, body, dueDate })
-    .catch(e => console.warn(`Failed to sync ${kind} with Reminders:`, e));
+  const syncOne = window.todoaryReminders?.syncOne;
+  if (!syncOne) return;
+  syncOne({ listName, title, body, dueDate }, { mode: "auto" });
 }
 
 function normalizedTodoPeriod(t) {
@@ -511,27 +512,35 @@ const actions = {
 
     const push = async (kind, payload) => {
       const listName = targets[kind];
-      if (!listName) return;
-      await invoke("add_to_reminders", { listName, ...payload }).catch(e => console.warn(e));
+      if (!listName) return true;
+      const syncOne = window.todoaryReminders?.syncOne;
+      const ok = syncOne
+        ? await syncOne({ listName, ...payload }, { mode: "manual" })
+        : await invoke("add_to_reminders", { listName, ...payload }).then(() => true).catch(e => {
+          console.warn(e);
+          return false;
+        });
+      if (!ok) return false;
       synced++;
+      return true;
     };
 
     if (targets.todo) {
       const pendingTodos = s.todos.filter(t => !t.done);
       for (const t of pendingTodos) {
-        await push("todo", { title: t.title.trim(), body: null, dueDate: t.dueDate ?? null });
+        if (!await push("todo", { title: t.title.trim(), body: null, dueDate: t.dueDate ?? null })) return synced;
       }
     }
     if (targets.habit) {
       for (const h of s.habits || []) {
-        await push("habit", { title: `[습관] ${h.name.trim()}`, body: null, dueDate: today() });
+        if (!await push("habit", { title: `[습관] ${h.name.trim()}`, body: null, dueDate: today() })) return synced;
       }
     }
     if (targets.memo) {
       for (const m of s.memos || []) {
         const parsedTitle = m.title || "새 메모";
         const parsedBody = String(m.html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-        await push("memo", { title: parsedTitle, body: parsedBody, dueDate: null });
+        if (!await push("memo", { title: parsedTitle, body: parsedBody, dueDate: null })) return synced;
       }
     }
     return synced;
