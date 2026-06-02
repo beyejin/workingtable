@@ -508,42 +508,42 @@ const actions = {
     if (!invoke) return 0;
 
     const { targets } = s.reminders;
-    let synced = 0;
+    const items = [];
 
-    const push = async (kind, payload) => {
+    const pushBatch = (kind, payload) => {
       const listName = targets[kind];
-      if (!listName) return true;
-      const syncOne = window.todoaryReminders?.syncOne;
-      const ok = syncOne
-        ? await syncOne({ listName, ...payload }, { mode: "manual" })
-        : await invoke("add_to_reminders", { listName, ...payload }).then(() => true).catch(e => {
-          console.warn(e);
-          return false;
-        });
-      if (!ok) return false;
-      synced++;
-      return true;
+      if (!listName) return;
+      items.push({ listName, ...payload });
     };
 
     if (targets.todo) {
       const pendingTodos = s.todos.filter(t => !t.done);
       for (const t of pendingTodos) {
-        if (!await push("todo", { title: t.title.trim(), body: null, dueDate: t.dueDate ?? null })) return synced;
+        pushBatch("todo", { title: t.title.trim(), body: null, due_date: t.dueDate ?? null });
       }
     }
     if (targets.habit) {
       for (const h of s.habits || []) {
-        if (!await push("habit", { title: `[습관] ${h.name.trim()}`, body: null, dueDate: today() })) return synced;
+        pushBatch("habit", { title: `[습관] ${h.name.trim()}`, body: null, due_date: today() });
       }
     }
     if (targets.memo) {
       for (const m of s.memos || []) {
         const parsedTitle = m.title || "새 메모";
         const parsedBody = String(m.html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-        if (!await push("memo", { title: parsedTitle, body: parsedBody, dueDate: null })) return synced;
+        pushBatch("memo", { title: parsedTitle, body: parsedBody, due_date: null });
       }
     }
-    return synced;
+
+    if (items.length === 0) return 0;
+
+    try {
+      await invoke("add_to_reminders_batch", { items });
+      return items.length;
+    } catch (e) {
+      console.warn("Batch sync failed:", e);
+      throw e;
+    }
   },
 
   // ----- 할 일 -----

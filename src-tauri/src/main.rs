@@ -23,7 +23,8 @@ fn main() {
             youtube_player_stop,
             youtube_player_set_volume,
             get_reminders_lists,
-            add_to_reminders
+            add_to_reminders,
+            add_to_reminders_batch
         ])
         .setup(|app| {
             #[cfg(all(target_os = "macos", not(debug_assertions)))]
@@ -199,6 +200,71 @@ fn add_to_reminders(
     }
 
     script.push_str("const rem = app.Reminder(props);\nlist.reminders.push(rem);\n");
+
+    let output = std::process::Command::new("osascript")
+        .arg("-l")
+        .arg("JavaScript")
+        .arg("-e")
+        .arg(&script)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("JXA error: {}", stderr))
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct ReminderItem {
+    list_name: String,
+    title: String,
+    body: Option<String>,
+    due_date: Option<String>,
+}
+
+#[tauri::command]
+fn add_to_reminders_batch(items: Vec<ReminderItem>) -> Result<(), String> {
+    if items.is_empty() {
+        return Ok(());
+    }
+
+    let mut script = String::from("const app = Application('Reminders');\n");
+    for (i, item) in items.iter().enumerate() {
+        let safe_list = serde_json::to_string(&item.list_name).unwrap_or_else(|_| "\"\"".to_string());
+        let safe_title = serde_json::to_string(&item.title).unwrap_or_else(|_| "\"\"".to_string());
+        
+        script.push_str(&format!(
+            "try {{\n\
+             let list{} = app.lists.byName({});\n\
+             let props{} = {{ name: {} }};\n",
+            i, safe_list, i, safe_title
+        ));
+
+        if let Some(ref b) = item.body {
+            let safe_body = serde_json::to_string(b).unwrap_or_else(|_| "\"\"".to_string());
+            script.push_str(&format!("props{}.body = {};\n", i, safe_body));
+        }
+
+        if let Some(ref d) = item.due_date {
+            let is_valid_date = d.len() == 10 
+                && d.as_bytes().get(4) == Some(&b'-') 
+                && d.as_bytes().get(7) == Some(&b'-')
+                && d.chars().filter(|c| c.is_ascii_digit()).count() == 8;
+
+            if is_valid_date {
+                let safe_d = serde_json::to_string(&format!("{}T09:00:00", d)).unwrap_or_else(|_| "\"\"".to_string());
+                script.push_str(&format!(
+                    "props{}.remindMeDate = new Date({});\n",
+                    i, safe_d
+                ));
+            }
+        }
+
+        script.push_str(&format!("const rem{} = app.Reminder(props{});\nlist{}.reminders.push(rem{});\n}} catch(e) {{}}\n", i, i, i, i));
+    }
 
     let output = std::process::Command::new("osascript")
         .arg("-l")
