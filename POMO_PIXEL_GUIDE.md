@@ -1,7 +1,7 @@
 # 뽀모도로 도트(Pixel) 에셋 가이드
 
 todoary 뽀모도로 UI에 넣을 **픽셀 아트 토마토** 제작·납품 가이드입니다.
-에셋이 준비되면 `v2/timer.jsx`의 `PomodoroBarButton` 등에 `<img>` 또는 CSS 스프라이트로 연결합니다.
+에셋이 준비되면 `v2/features/timer/timer.jsx`의 `PomodoroBarButton` 등에 `<img>` 또는 CSS 스프라이트로 연결합니다.
 
 ---
 

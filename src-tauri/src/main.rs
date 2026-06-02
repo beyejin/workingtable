@@ -21,7 +21,9 @@ fn main() {
             youtube_player_pause,
             youtube_player_resume,
             youtube_player_stop,
-            youtube_player_set_volume
+            youtube_player_set_volume,
+            get_reminders_lists,
+            add_to_reminders
         ])
         .setup(|app| {
             #[cfg(all(target_os = "macos", not(debug_assertions)))]
@@ -130,6 +132,88 @@ async fn export_backup_file(
 
     std::fs::write(path, contents).map_err(|e| e.to_string())?;
     Ok(true)
+}
+
+#[tauri::command]
+fn get_reminders_lists() -> Result<Vec<String>, String> {
+    let script = "const app = Application('Reminders'); app.lists.name().join('\\n');";
+    let output = std::process::Command::new("osascript")
+        .arg("-l")
+        .arg("JavaScript")
+        .arg("-e")
+        .arg(script)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let lists: Vec<String> = stdout
+            .split('\n')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        Ok(lists)
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("JXA error: {}", stderr))
+    }
+}
+
+#[tauri::command]
+fn add_to_reminders(
+    list_name: String,
+    title: String,
+    body: Option<String>,
+    due_date: Option<String>,
+) -> Result<(), String> {
+    let safe_list = serde_json::to_string(&list_name).unwrap_or_else(|_| "\"\"".to_string());
+    let safe_title = serde_json::to_string(&title).unwrap_or_else(|_| "\"\"".to_string());
+    
+    let mut script = format!(
+        "const app = Application('Reminders');\n\
+         const list = app.lists.byName({});\n\
+         let props = {{ name: {} }};\n",
+        safe_list, safe_title
+    );
+
+    if let Some(b) = body {
+        let safe_body = serde_json::to_string(&b).unwrap_or_else(|_| "\"\"".to_string());
+        script.push_str(&format!("props.body = {};\n", safe_body));
+    }
+
+    if let Some(d) = due_date {
+        // d must be "YYYY-MM-DD" length 10 and format check
+        let is_valid_date = d.len() == 10 
+            && d.as_bytes().get(4) == Some(&b'-') 
+            && d.as_bytes().get(7) == Some(&b'-')
+            && d.chars().filter(|c| c.is_ascii_digit()).count() == 8;
+
+        if is_valid_date {
+            let safe_d = serde_json::to_string(&format!("{}T09:00:00", d)).unwrap_or_else(|_| "\"\"".to_string());
+            script.push_str(&format!(
+                "let d = new Date({});\n\
+                 props.remindMeDate = d;\n",
+                safe_d
+            ));
+        }
+    }
+
+    script.push_str("const rem = app.Reminder(props);\nlist.reminders.push(rem);\n");
+
+    let output = std::process::Command::new("osascript")
+        .arg("-l")
+        .arg("JavaScript")
+        .arg("-e")
+        .arg(&script)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("JXA error: {}", stderr))
+    }
 }
 
 #[tauri::command]

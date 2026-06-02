@@ -335,6 +335,31 @@ function migrateState(data) {
   data.projects = (data.projects ?? []).map(p => ({
     repoUrl: "", version: "0.1.0", nextVersion: "", ...p,
   }));
+  data.reminders ??= { enabled: false, targets: { todo: "", habit: "", memo: "" } };
+  data.reminders.targets ??= { todo: "", habit: "", memo: "" };
+  if (data.remindersSyncEnabled !== undefined) {
+    data.reminders.enabled = data.remindersSyncEnabled;
+    delete data.remindersSyncEnabled;
+  }
+  if (data.remindersTargetTodo !== undefined) {
+    data.reminders.targets.todo = data.remindersTargetTodo;
+    delete data.remindersTargetTodo;
+  }
+  if (data.remindersTargetHabit !== undefined) {
+    data.reminders.targets.habit = data.remindersTargetHabit;
+    delete data.remindersTargetHabit;
+  }
+  if (data.remindersTargetMemo !== undefined) {
+    data.reminders.targets.memo = data.remindersTargetMemo;
+    delete data.remindersTargetMemo;
+  }
+  if (data.remindersTargetList !== undefined) {
+    if (!data.reminders.targets.todo) data.reminders.targets.todo = data.remindersTargetList;
+    if (!data.reminders.targets.habit) data.reminders.targets.habit = data.remindersTargetList;
+    if (!data.reminders.targets.memo) data.reminders.targets.memo = data.remindersTargetList;
+    delete data.remindersTargetList;
+  }
+  delete data.remindersSplitMode;
   return data;
 }
 
@@ -372,6 +397,17 @@ function emitState() {
 function getState() { return _state; }
 function subscribe(fn) { _subs.add(fn); return () => _subs.delete(fn); }
 
+function syncReminder(kind, { title, body = null, dueDate = null }) {
+  const isMacEnv = !!(window.__TAURI__ && typeof navigator !== "undefined" && navigator.platform.toUpperCase().indexOf("MAC") >= 0);
+  if (!isMacEnv) return;
+  const s = getState();
+  if (!s.reminders?.enabled) return;
+  const listName = s.reminders.targets[kind];
+  if (!listName || !window.__TAURI__?.core?.invoke) return;
+  window.__TAURI__.core.invoke("add_to_reminders", { listName, title, body, dueDate })
+    .catch(e => console.warn(`Failed to sync ${kind} with Reminders:`, e));
+}
+
 function normalizedTodoPeriod(t) {
   const a = t.startDate || null;
   const b = t.endDate || null;
@@ -407,6 +443,25 @@ function pomoIdleWorkMs(timer) {
 
 // ---- 액션들 ----
 const actions = {
+  // ----- 애플 연동 설정 -----
+  setRemindersSync(enabled, payload) {
+    setState(s => {
+      const isString = typeof payload === "string";
+      const targets = s.reminders?.targets || { todo: "", habit: "", memo: "" };
+      return {
+        ...s,
+        reminders: {
+          enabled: !!enabled,
+          targets: {
+            todo: isString ? payload : (payload?.todo ?? targets.todo),
+            habit: isString ? payload : (payload?.habit ?? targets.habit),
+            memo: isString ? payload : (payload?.memo ?? targets.memo),
+          }
+        }
+      };
+    });
+  },
+
   // ----- 프로젝트 -----
   switchProject(id) {
     setState(s => ({ ...s, currentProjectId: id }));
@@ -442,6 +497,46 @@ const actions = {
     });
   },
 
+  async syncAllToReminders() {
+    const s = getState();
+    if (!s.reminders?.enabled) return 0;
+    const isMacEnv = !!(window.__TAURI__ && typeof navigator !== "undefined" && navigator.platform.toUpperCase().indexOf("MAC") >= 0);
+    if (!isMacEnv) return 0;
+
+    const invoke = window.__TAURI__.core.invoke;
+    if (!invoke) return 0;
+
+    const { targets } = s.reminders;
+    let synced = 0;
+
+    const push = async (kind, payload) => {
+      const listName = targets[kind];
+      if (!listName) return;
+      await invoke("add_to_reminders", { listName, ...payload }).catch(e => console.warn(e));
+      synced++;
+    };
+
+    if (targets.todo) {
+      const pendingTodos = s.todos.filter(t => !t.done);
+      for (const t of pendingTodos) {
+        await push("todo", { title: t.title.trim(), body: null, dueDate: t.dueDate ?? null });
+      }
+    }
+    if (targets.habit) {
+      for (const h of s.habits || []) {
+        await push("habit", { title: `[습관] ${h.name.trim()}`, body: null, dueDate: today() });
+      }
+    }
+    if (targets.memo) {
+      for (const m of s.memos || []) {
+        const parsedTitle = m.title || "새 메모";
+        const parsedBody = String(m.html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        await push("memo", { title: parsedTitle, body: parsedBody, dueDate: null });
+      }
+    }
+    return synced;
+  },
+
   // ----- 할 일 -----
   addTodo(title, opts = {}) {
     if (!title?.trim()) return null;
@@ -469,6 +564,9 @@ const actions = {
         }],
       };
     });
+
+    syncReminder("todo", { title: title.trim(), dueDate: opts.dueDate ?? null });
+
     return id;
   },
   toggleTodo(id) {
@@ -955,6 +1053,11 @@ const actions = {
         ...(s.memos ?? []),
       ],
     }));
+
+    const parsedTitle = title || memoTitleFromHtml(html) || "새 메모";
+    const parsedBody = String(html).replace(/<[^>]+>/g, " ").trim();
+    syncReminder("memo", { title: parsedTitle, body: parsedBody });
+
     return id;
   },
   ensureTodoMemo(todoId) {
@@ -1346,6 +1449,9 @@ const actions = {
         subItems: [],
       }],
     }));
+
+    syncReminder("habit", { title: `[습관] ${name.trim()}`, dueDate: today() });
+
     return id;
   },
   updateHabit(id, patch) {

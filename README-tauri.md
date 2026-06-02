@@ -113,7 +113,7 @@ use tauri::{Manager, PhysicalPosition};
 
 - **빌드 실패: 아이콘 누락** → `npx tauri icon src-tauri/icons/icon.png` 한 번 실행하면 플랫폼별 아이콘 자동 생성
 - **창이 안 떠짐 / 흰 화면** → Devtools 열기: macOS는 우클릭→Inspect, 또는 `Cargo.toml`에서 `tauri = { features = ["devtools"] }` 추가
-- **AI 기능이 안 됨** → `window.claude.complete`는 Claude 환경에서만 동작. 데스크탑 앱에선 자체 API 키로 직접 fetch 호출하도록 `v2/ai.jsx` 수정 필요
+- **AI 기능이 안 됨** → `window.claude.complete`는 Claude 환경에서만 동작. 데스크탑 앱에선 자체 API 키로 직접 fetch 호출하도록 `v2/features/ai/ai.jsx` 수정 필요
 - **글꼴이 안 보임** → Tauri는 기본적으로 외부 폰트 fetch 가능. 인터넷 연결 없을 땐 폰트 파일을 로컬에 번들하기
 
 ## 다음 단계 아이디어

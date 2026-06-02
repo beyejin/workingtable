@@ -60,29 +60,29 @@
   <!-- 작업방 (Firebase) — config 없으면 자동 로컬 모드 -->
   <script src="vendor/firebase-config.js"></script>
   <!-- 익명 활성 사용자 집계 (작업방과 분리) -->
-  <script type="text/babel" src="v2/analytics.jsx"></script>
+  <script type="text/babel" src="v2/features/analytics/analytics.jsx"></script>
 
   <script type="text/babel" src="tweaks-panel.jsx"></script>
-  <script type="text/babel" src="v2/i18n.jsx"></script>
-  <script type="text/babel" src="v2/store.jsx"></script>
-  <script type="text/babel" src="v2/ai.jsx"></script>
-  <script type="text/babel" src="v2/views-shared.jsx"></script>
-  <script type="text/babel" src="v2/music.jsx"></script>
-  <script type="text/babel" src="v2/view-today.jsx"></script>
-  <script type="text/babel" src="v2/view-todo.jsx"></script>
-  <script type="text/babel" src="v2/view-habit.jsx"></script>
-  <script type="text/babel" src="v2/view-memo.jsx"></script>
-  <script type="text/babel" src="v2/view-mail.jsx"></script>
-  <script type="text/babel" src="v2/view-prompt.jsx"></script>
-  <script type="text/babel" src="v2/view-ai.jsx"></script>
-  <script type="text/babel" src="v2/view-retro.jsx"></script>
-  <script type="text/babel" src="v2/firebase-bridge.jsx"></script>
-  <script type="text/babel" src="v2/room-store.jsx"></script>
-  <script type="text/babel" src="v2/view-room.jsx"></script>
-  <script type="text/babel" src="v2/timer.jsx"></script>
-  <script type="text/babel" src="v2/tracker.jsx"></script>
-  <script type="text/babel" src="v2/photocard.jsx"></script>
-  <script type="text/babel" src="v2/side-dock-v2.jsx"></script>
+  <script type="text/babel" src="v2/i18n/i18n.jsx"></script>
+  <script type="text/babel" src="v2/store/store.jsx"></script>
+  <script type="text/babel" src="v2/features/ai/ai.jsx"></script>
+  <script type="text/babel" src="v2/shared/views-shared.jsx"></script>
+  <script type="text/babel" src="v2/features/music/music.jsx"></script>
+  <script type="text/babel" src="v2/features/today/view-today.jsx"></script>
+  <script type="text/babel" src="v2/features/todo/view-todo.jsx"></script>
+  <script type="text/babel" src="v2/features/habit/view-habit.jsx"></script>
+  <script type="text/babel" src="v2/features/memo/view-memo.jsx"></script>
+  <script type="text/babel" src="v2/features/mail/view-mail.jsx"></script>
+  <script type="text/babel" src="v2/features/prompt/view-prompt.jsx"></script>
+  <script type="text/babel" src="v2/features/ai/view-ai.jsx"></script>
+  <script type="text/babel" src="v2/features/retro/view-retro.jsx"></script>
+  <script type="text/babel" src="v2/features/room/firebase-bridge.jsx"></script>
+  <script type="text/babel" src="v2/features/room/room-store.jsx"></script>
+  <script type="text/babel" src="v2/features/room/view-room.jsx"></script>
+  <script type="text/babel" src="v2/features/timer/timer.jsx"></script>
+  <script type="text/babel" src="v2/features/timer/tracker.jsx"></script>
+  <script type="text/babel" src="v2/features/memo/photocard.jsx"></script>
+  <script type="text/babel" src="v2/app/side-dock-v2.jsx"></script>
 
   <!-- Dev cache-buster: when served from localhost, append ?_=<ts> to every
        JSX src so the browser never serves a stale transpilation. No-op in

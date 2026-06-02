@@ -709,15 +709,164 @@ function HeaderDesktop() {
 // ===========================================================
 // 설정 — 커스터마이징 (포인트 컬러 / 도크 위치 / 탭 방향 / 투명모드 / 초기화)
 // ===========================================================
+function useRemindersLists(enabled) {
+  const [lists, setLists] = useState([]);
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState("");
+  const isMacEnv = !!(window.__TAURI__ && typeof navigator !== "undefined" && navigator.platform.toUpperCase().indexOf("MAC") >= 0);
+
+  useEffect(() => {
+    if (enabled && lists.length === 0 && isMacEnv) {
+      setStatus("loading");
+      window.__TAURI__.core.invoke("get_reminders_lists")
+        .then(res => {
+          setLists(res);
+          setStatus(res.length > 0 ? "ready" : "empty");
+        })
+        .catch(e => {
+          console.warn("Failed to load reminders lists", e);
+          setStatus("error");
+          setError(String(e));
+        });
+    }
+  }, [enabled, isMacEnv]);
+
+  return { lists, status, error, isMacEnv, setLists, setStatus, setError };
+}
+
+function RemindersSettings({ state, actions }) {
+  const isEnabled = state.reminders?.enabled;
+  const { lists, status, error, isMacEnv, setLists, setStatus, setError } = useRemindersLists(isEnabled);
+
+  if (!isMacEnv) return null;
+
+  const onToggle = async (v) => {
+    const enabled = v === "on";
+    if (!enabled) {
+      actions.setRemindersSync(false);
+      setStatus("idle");
+      return;
+    }
+    
+    setStatus("loading");
+    try {
+      const fetched = await window.__TAURI__.core.invoke("get_reminders_lists");
+      setLists(fetched);
+      if (fetched.length > 0) {
+        setStatus("ready");
+        const payload = {};
+        const targets = state.reminders?.targets || {};
+        if (!targets.todo) payload.todo = fetched[0];
+        if (!targets.habit) payload.habit = fetched[0];
+        if (!targets.memo) payload.memo = fetched[0];
+        actions.setRemindersSync(true, payload);
+      } else {
+        setStatus("empty");
+        actions.setRemindersSync(false);
+      }
+    } catch (e) {
+      setStatus("error");
+      setError(String(e));
+      actions.setRemindersSync(false);
+    }
+  };
+
+  const SELECT_BLOCKS = [
+    { key: "todo", labelKey: "set.reminders.todo", icon: "📌" },
+    { key: "habit", labelKey: "set.reminders.habit", icon: "🌱" },
+    { key: "memo", labelKey: "set.reminders.memo", icon: "📝" },
+  ];
+
+  return (
+    <SetSection label={L("set.reminders")}>
+      <SetSeg value={isEnabled ? "on" : "off"} onChange={onToggle}
+        options={[["on", L("set.on")], ["off", L("set.off")]]} />
+      
+      {status === "loading" && (
+        <div style={{ marginTop: 12, fontSize: 12, color: "var(--ink-soft)" }}>
+          {L("set.reminders.loading")}
+        </div>
+      )}
+      
+      {status === "error" && (
+        <div style={{ marginTop: 12, fontSize: 12, color: "var(--red)", wordBreak: "break-all" }}>
+          {L("set.reminders.error")}: {error}
+        </div>
+      )}
+      
+      {status === "empty" && (
+        <div style={{ marginTop: 12, fontSize: 12, color: "var(--ink-soft)" }}>
+          {L("set.reminders.empty")}
+        </div>
+      )}
+      
+      {isEnabled && status === "ready" && (
+        <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+          {SELECT_BLOCKS.map(({ key, labelKey, icon }) => (
+            <div key={key}>
+              <label htmlFor={`reminders${key}Select`} style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 4, color: "var(--ink)", cursor: "pointer" }}>
+                {icon} {L(labelKey)}
+              </label>
+              <select
+                id={`reminders${key}Select`}
+                value={state.reminders?.targets?.[key] || ""}
+                onChange={(e) => actions.setRemindersSync(true, { [key]: e.target.value })}
+                style={{ width: "100%", boxSizing: "border-box", padding: "7px 9px", borderRadius: 10, border: "1.1px solid var(--ink-soft)", background: "rgba(255,255,255,0.62)", fontFamily: "var(--hand)", fontSize: 13, outline: "none", color: "var(--ink)", cursor: "pointer" }}
+              >
+                {lists.map(list => <option key={list} value={list}>{list}</option>)}
+              </select>
+            </div>
+          ))}
+          
+          <button
+            onClick={async () => {
+              if (status === "syncing") return;
+              setStatus("syncing");
+              try {
+                const count = await actions.syncAllToReminders();
+                setStatus("ready");
+                if (window.dialog?.alert) await window.dialog.alert(L("set.reminders.syncDone", { count }));
+                else alert(L("set.reminders.syncDone", { count }));
+              } catch (e) {
+                setStatus("error");
+                setError(String(e));
+              }
+            }}
+            style={{...setSecondaryBtn, opacity: status === "syncing" ? 0.5 : 1}}
+            disabled={status === "syncing"}
+          >
+            {status === "syncing" ? L("set.reminders.syncing") : L("set.reminders.syncNow")}
+          </button>
+        </div>
+      )}
+    </SetSection>
+  );
+}
+
+const SETTINGS_SCHEMA = [
+  { key: "appSize", label: "set.size", default: "normal", options: [["normal", "set.sizeNormal"], ["medium", "set.sizeMedium"], ["compact", "set.sizeCompact"]] },
+  { key: "dockSide", label: "set.dock", default: "left", options: [["left", "set.left"], ["right", "set.right"]] },
+  { key: "alwaysOnTop", label: "set.alwaysOnTop", type: "bool", options: [["on", "set.on"], ["off", "set.off"]] },
+  { key: "showRoomTab", label: "set.roomTab", type: "bool", options: [["on", "set.on"], ["off", "set.off"]] },
+  { key: "dockHidden", label: "set.dockHide", type: "bool", options: [["on", "set.on"], ["off", "set.off"]] },
+  { key: "tabsHidden", label: "set.tabsAutoHide", type: "bool", options: [["on", "set.on"], ["off", "set.off"]] },
+  { 
+    key: "tabIconStyle", label: "set.indexIcon", 
+    getValue: t => t.tabIconStyle === "none" ? "textOnly" : (t.tabIconStyle ?? "business"),
+    setValue: (v, set) => set("tabIconStyle", v),
+    options: [["business", "set.iconBusiness"], ["kitsch", "set.iconKitsch"], ["iconOnly", "set.iconOnly"], ["textOnly", "set.textOnly"]]
+  },
+];
+
 function SettingsView({ tweaks, setTweak }) {
   const t = tweaks || {};
   const set = setTweak || (() => {});
   const i18 = useI18n();
+  const { state, actions } = diary.useDiary();
   const [langOpen, setLangOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState("");
   const [backupStatus, setBackupStatus] = useState("");
   const currentLang = i18.list().find(([code]) => code === i18.get()) || i18.list()[0];
-  const tabIconValue = t.tabIconStyle === "none" ? "textOnly" : (t.tabIconStyle ?? "business");
   const notify = async (message, setMessage) => {
     setMessage(message);
     if (window.dialog?.alert) await window.dialog.alert(message);
@@ -772,44 +921,26 @@ function SettingsView({ tweaks, setTweak }) {
         )}
       </SetSection>
 
-      <SetSection label={L("set.size")}>
-        <SetSeg value={t.appSize ?? "normal"} onChange={v => set("appSize", v)}
-          options={[["normal", L("set.sizeNormal")], ["medium", L("set.sizeMedium")], ["compact", L("set.sizeCompact")]]} />
-      </SetSection>
+      {SETTINGS_SCHEMA.map(conf => {
+        let val, onChange;
+        if (conf.getValue) {
+          val = conf.getValue(t);
+          onChange = v => conf.setValue(v, set);
+        } else if (conf.type === "bool") {
+          val = t[conf.key] ? "on" : "off";
+          onChange = v => set(conf.key, v === "on");
+        } else {
+          val = t[conf.key] ?? conf.default;
+          onChange = v => set(conf.key, v);
+        }
+        return (
+          <SetSection key={conf.key} label={L(conf.label)}>
+            <SetSeg value={val} onChange={onChange} options={conf.options.map(([k, l]) => [k, L(l)])} />
+          </SetSection>
+        );
+      })}
 
-      <SetSection label={L("set.dock")}>
-        <SetSeg value={t.dockSide ?? "left"} onChange={v => set("dockSide", v)}
-          options={[["left", L("set.left")], ["right", L("set.right")]]} />
-      </SetSection>
-
-      <SetSection label={L("set.alwaysOnTop")}>
-        <SetSeg value={t.alwaysOnTop ? "on" : "off"} onChange={v => set("alwaysOnTop", v === "on")}
-          options={[["on", L("set.on")], ["off", L("set.off")]]} />
-        <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.alwaysOnTopHint")}</div>
-      </SetSection>
-
-      <SetSection label={L("set.roomTab")}>
-        <SetSeg value={(t.showRoomTab ?? false) ? "on" : "off"} onChange={v => set("showRoomTab", v === "on")}
-          options={[["on", L("set.on")], ["off", L("set.off")]]} />
-        <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.roomTabHint")}</div>
-      </SetSection>
-
-      <SetSection label={L("set.dockHide")}>
-        <SetSeg value={t.dockHidden ? "on" : "off"} onChange={v => set("dockHidden", v === "on")}
-          options={[["on", L("set.on")], ["off", L("set.off")]]} />
-        <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.dockHideHint")}</div>
-      </SetSection>
-
-      <SetSection label={L("set.tabsAutoHide")}>
-        <SetSeg value={t.tabsHidden ? "on" : "off"} onChange={v => set("tabsHidden", v === "on")}
-          options={[["on", L("set.on")], ["off", L("set.off")]]} />
-        <div className="sk-cap" style={{ marginTop: 6, fontSize: 11 }}>{L("set.tabsAutoHideHint")}</div>
-      </SetSection>
-
-      <SetSection label={L("set.indexIcon")}>
-        <SetSeg value={tabIconValue} onChange={v => set("tabIconStyle", v)}
-          options={[["business", L("set.iconBusiness")], ["kitsch", L("set.iconKitsch")], ["iconOnly", L("set.iconOnly")], ["textOnly", L("set.textOnly")]]} />
-      </SetSection>
+      <RemindersSettings state={state} actions={actions} />
 
       <SetSection label={L("set.update")}>
         <button

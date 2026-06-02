@@ -4,24 +4,24 @@
 
 ## 핵심 파일
 
-- `v2/i18n.jsx`
+- `v2/i18n/i18n.jsx`
   - 모든 번역 사전과 언어 목록이 있습니다.
   - 기본 사전은 `DICT` 안에 있고, 추가 언어/보강 번역은 `EXTRA_DICT`, `UI_PATCH`로 합쳐집니다.
   - `LANGS`가 설정 탭에 표시되는 언어 버튼 목록입니다.
   - `WEEK`, `MONTHS`, `fmtDate()`가 요일/날짜 표시를 담당합니다.
 
 - UI 파일
-  - `v2/side-dock-v2.jsx`: 설정 탭의 언어 선택 UI, 사이드 탭
-  - `v2/timer.jsx`: 상단 디데이
-  - `v2/view-today.jsx`: 주간/하루 상세
-  - `v2/view-todo.jsx`: 할 일, 반복, 마감 패널
-  - `v2/view-memo.jsx`: 메모 에디터/툴바
-  - `v2/view-mail.jsx`: 메일/프리셋
-  - `v2/view-room.jsx`: 작업방
+  - `v2/app/side-dock-v2.jsx`: 설정 탭의 언어 선택 UI, 사이드 탭
+  - `v2/features/timer/timer.jsx`: 상단 디데이
+  - `v2/features/today/view-today.jsx`: 주간/하루 상세
+  - `v2/features/todo/view-todo.jsx`: 할 일, 반복, 마감 패널
+  - `v2/features/memo/view-memo.jsx`: 메모 에디터/툴바
+  - `v2/features/mail/view-mail.jsx`: 메일/프리셋
+  - `v2/features/room/view-room.jsx`: 작업방
 
 ## 새 언어 추가 순서
 
-1. `v2/i18n.jsx`의 `EXTRA_DICT`에 새 언어 코드를 추가합니다.
+1. `v2/i18n/i18n.jsx`의 `EXTRA_DICT`에 새 언어 코드를 추가합니다.
    - 예: `fr: { ... }`
    - 새 언어 사전은 `DICT.en` 위에 덮어쓰기 때문에, 빠진 키는 영어로 fallback됩니다.
 

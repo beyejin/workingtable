@@ -224,13 +224,14 @@ function TodoView({ tweaks } = {}) {
     setSel(snapshot.selId || null);
   }, [actions]);
 
+  const getTodoAddOptions = React.useCallback(() => ({
+    dueDate: filterMode === "date" ? selectedDate : todayStr,
+  }), [filterMode, selectedDate, todayStr]);
+
   const onAdd = (text) => {
     if (!text?.trim()) return;
     pushUndo();
-    // '전체' 모드에서 추가 — 오늘에 붙임 (마감 없음)
-    const id = (filterMode === "all" || isToday)
-      ? actions.addTodo(text)
-      : actions.addTodo(text, { dueDate: selectedDate });
+    const id = actions.addTodo(text, getTodoAddOptions());
     if (id) setSel(id);
   };
 
@@ -275,9 +276,6 @@ function TodoView({ tweaks } = {}) {
       const s = diary.getState();
       return (s.todos || []).find(t => t.id === selId) || null;
     };
-    const addOpts = () => (filterMode === "all" || selectedDate === diary.today())
-      ? {}
-      : { dueDate: selectedDate };
     const copyTodo = async (todo) => {
       copiedTodoRef.current = clonePlain(todo);
       await writeClipboardText(todoClipboardText(todo));
@@ -330,7 +328,8 @@ function TodoView({ tweaks } = {}) {
         const copiedText = copied ? todoClipboardText(copied).trim() : "";
         if (copied && (!text.trim() || text.trim() === copiedText)) {
           pushUndo();
-          const id = actions.addTodoFromSnapshot(copied);
+          const snapshotWithDue = { ...copied, dueDate: getTodoAddOptions().dueDate };
+          const id = actions.addTodoFromSnapshot(snapshotWithDue);
           if (id) setSel(id);
           return;
         }
@@ -338,13 +337,13 @@ function TodoView({ tweaks } = {}) {
         if (!lines.length) return;
         pushUndo();
         let lastId = null;
-        lines.forEach(line => { lastId = actions.addTodo(line, addOpts()) || lastId; });
+        lines.forEach(line => { lastId = actions.addTodo(line, getTodoAddOptions()) || lastId; });
         if (lastId) setSel(lastId);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [actions, filterMode, makeHistorySnapshot, pushRedo, pushUndo, restoreHistorySnapshot, selectedDate, selId]);
+  }, [actions, getTodoAddOptions, makeHistorySnapshot, pushRedo, pushUndo, restoreHistorySnapshot, selId]);
 
   return (
     <SplitPane
