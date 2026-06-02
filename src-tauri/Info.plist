@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>todoary 앱에서 미리 알림에 접근하고 연동하기 위해 권한이 필요합니다.</string>
+  <key>NSRemindersUsageDescription</key>
+  <string>todoary 앱에서 미리 알림 목록을 표시하고 할 일을 추가하기 위해 권한이 필요합니다.</string>
+</dict>
+</plist>

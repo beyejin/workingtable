@@ -2,6 +2,12 @@
 
 This project adheres to Semantic Versioning.
 
+## [0.7.20] - 2026-06-02
+
+### Fixed
+- Apple 미리알림 목록 조회를 앱 실행 중 한 번만 요청하도록 캐시해 설정 화면 재진입이나 토글 중복 처리로 권한 허용 창이 반복 표시되는 문제를 줄였습니다.
+- macOS 번들 Info.plist에 Reminders/Apple Events 권한 설명을 포함해 권한 허용이 앱 단위로 정상 기록되도록 보강했습니다.
+
 ## [0.7.10] - 2026-06-01
 
 ### Added

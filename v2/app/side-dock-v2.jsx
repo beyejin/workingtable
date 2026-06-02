@@ -714,11 +714,13 @@ function useRemindersLists(enabled) {
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
   const isMacEnv = !!(window.__TAURI__ && typeof navigator !== "undefined" && navigator.platform.toUpperCase().indexOf("MAC") >= 0);
+  const loadRemindersLists = () => window.todoaryReminders?.loadLists?.()
+    ?? window.__TAURI__.core.invoke("get_reminders_lists");
 
   useEffect(() => {
     if (enabled && lists.length === 0 && isMacEnv) {
       setStatus("loading");
-      window.__TAURI__.core.invoke("get_reminders_lists")
+      loadRemindersLists()
         .then(res => {
           setLists(res);
           setStatus(res.length > 0 ? "ready" : "empty");
@@ -737,6 +739,8 @@ function useRemindersLists(enabled) {
 function RemindersSettings({ state, actions }) {
   const isEnabled = state.reminders?.enabled;
   const { lists, status, error, isMacEnv, setLists, setStatus, setError } = useRemindersLists(isEnabled);
+  const loadRemindersLists = () => window.todoaryReminders?.loadLists?.()
+    ?? window.__TAURI__.core.invoke("get_reminders_lists");
 
   if (!isMacEnv) return null;
 
@@ -750,7 +754,7 @@ function RemindersSettings({ state, actions }) {
     
     setStatus("loading");
     try {
-      const fetched = await window.__TAURI__.core.invoke("get_reminders_lists");
+      const fetched = await loadRemindersLists();
       setLists(fetched);
       if (fetched.length > 0) {
         setStatus("ready");
