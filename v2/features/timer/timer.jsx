@@ -558,8 +558,45 @@ function ToggleButton({ on, onClick, children }) {
 }
 const NOTIFY_ICON = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='28' fill='%23ffc7d4' stroke='%238a6a5e' stroke-width='2'/><text x='32' y='42' text-anchor='middle' font-size='32' fill='%238a6a5e'>♡</text></svg>";
 
+let _notifyPermCallCount = 0;
+let _cachedNotifyApi = null;
+
 function tauriNotifyApi() {
-  return window.__TAURI__ && window.__TAURI__.notification;
+  if (!window.__TAURI__ || !window.__TAURI__.notification) return null;
+  if (_cachedNotifyApi) return _cachedNotifyApi;
+  const raw = window.__TAURI__.notification;
+  _cachedNotifyApi = {
+    ...raw,
+    isPermissionGranted: async () => {
+      // In Tauri v2, isPermissionGranted might prompt if unknown. Limit to 1 call per session if it might prompt.
+      // But actually, we only want to limit requestPermission to 1 per session.
+      const cachedStatus = sessionStorage.getItem("todoary_notify_granted");
+      if (cachedStatus === "true") return true;
+      if (cachedStatus === "false") return false;
+      
+      _notifyPermCallCount++;
+      console.log(`[Todoary Permission] isPermissionGranted called ${_notifyPermCallCount} times`);
+      if (_notifyPermCallCount > 2) {
+        console.warn("[Todoary Permission] Blocked repeated isPermissionGranted call");
+        return false;
+      }
+      const ok = await raw.isPermissionGranted();
+      sessionStorage.setItem("todoary_notify_granted", ok ? "true" : "false");
+      return ok;
+    },
+    requestPermission: async () => {
+      _notifyPermCallCount++;
+      console.log(`[Todoary Permission] requestPermission called ${_notifyPermCallCount} times`);
+      if (_notifyPermCallCount > 2) {
+        console.warn("[Todoary Permission] Blocked repeated requestPermission call");
+        return "denied";
+      }
+      const p = await raw.requestPermission();
+      sessionStorage.setItem("todoary_notify_granted", p === "granted" ? "true" : "false");
+      return p;
+    }
+  };
+  return _cachedNotifyApi;
 }
 
 function showInAppNotify(title, body) {
@@ -846,19 +883,21 @@ function PomodoroBarButton({ inline = false } = {}) {
 
   useEffect(() => {
     (async () => {
-      const api = window.__TAURI__ && window.__TAURI__.notification;
+      const api = tauriNotifyApi();
       if (api && api.isPermissionGranted) {
-        try {
-          const ok = await api.isPermissionGranted();
-          if (ok && !timer.notificationsGranted) actions.setNotificationsGranted(true);
-        } catch (_) {}
+        // do not call isPermissionGranted automatically on mount
+        // just check if we already know it's granted
+        const cached = sessionStorage.getItem("todoary_notify_granted");
+        if (cached === "true" && !timer.notificationsGranted) {
+          actions.setNotificationsGranted(true);
+        }
         return;
       }
       if ("Notification" in window && Notification.permission === "granted" && !timer.notificationsGranted) {
         actions.setNotificationsGranted(true);
       }
     })();
-  }, []);
+  }, [timer.notificationsGranted, actions]);
 
   useEffect(() => {
     const id = setInterval(() => {

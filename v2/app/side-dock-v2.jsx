@@ -129,6 +129,7 @@ function SideDockV2({ tweaks, setTweak }) {
         zIndex: 2,
       }}>
         <AppNotifyToast />
+        <DialogHost />
         {/* 글로시 스카이블루 헤더 — 드래그 영역 */}
         <div data-tauri-drag-region style={{
           height: 28,
@@ -722,14 +723,8 @@ function useRemindersLists(enabled, targets) {
 
   useEffect(() => {
     if (!enabled || !isMacEnv) return;
-    const loadRemindersLists = () => window.todoaryReminders?.loadLists?.()
-      ?? window.__TAURI__.core.invoke("get_reminders_lists");
-
-    loadRemindersLists().then(fetched => {
-      setLists(fetched);
-    }).catch(err => {
-      console.warn("Failed to fetch reminders lists on mount:", err);
-    });
+    // Do not load reminders lists automatically on mount to prevent permission prompts
+    // The user must click the "Sync" or "Load Lists" button
   }, [enabled, isMacEnv]);
 
   return { lists, status, error, isMacEnv, setLists, setStatus, setError };
@@ -800,6 +795,28 @@ function RemindersSettings({ state, actions }) {
       {status === "empty" && (
         <div style={{ marginTop: 12, fontSize: 12, color: "var(--ink-soft)" }}>
           {L("set.reminders.empty")}
+        </div>
+      )}
+      
+      {isEnabled && status === "idle" && (
+        <div style={{ marginTop: 12 }}>
+          <button
+            onClick={async () => {
+              setStatus("loading");
+              try {
+                const fetched = await loadRemindersLists();
+                setLists(fetched);
+                if (fetched.length > 0) setStatus("ready");
+                else setStatus("empty");
+              } catch (e) {
+                setStatus("error");
+                setError(String(e));
+              }
+            }}
+            style={{...setSecondaryBtn, width: "100%"}}
+          >
+            {L("set.reminders.loadLists", "목록 다시 불러오기")}
+          </button>
         </div>
       )}
       

@@ -10,7 +10,16 @@
       if (pending) return pending;
 
       pending = Promise.resolve()
-        .then(() => invoke("get_reminders_lists"))
+        .then(() => {
+          let count = Number(sessionStorage.getItem("todoary_reminders_prompt_count") || "0");
+          console.log(`[Todoary Permission] get_reminders_lists called ${count + 1} times`);
+          if (count > 2) {
+            console.warn("[Todoary Permission] Blocked repeated get_reminders_lists call");
+            throw new Error("Permission prompt blocked due to repeated failures");
+          }
+          sessionStorage.setItem("todoary_reminders_prompt_count", String(count + 1));
+          return invoke("get_reminders_lists");
+        })
         .then((lists) => {
           cachedLists = Array.isArray(lists) ? lists.slice() : [];
           return cachedLists.slice();
