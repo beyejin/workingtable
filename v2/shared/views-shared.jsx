@@ -4,168 +4,33 @@
 // ===========================================================
 const { useState, useRef, useEffect } = React;
 
-// macOS Tauri WKWebView 에서 window.alert/confirm/prompt 가 동작하지 않음 → 인앱 모달로 대체
-let _dialogPush = null;
-const _dialogPending = [];
-
-function _enqueueDialog(entry) {
-  return new Promise((resolve) => {
-    const item = { id: Date.now() + Math.random(), ...entry, resolve };
-    if (_dialogPush) _dialogPush(item);
-    else _dialogPending.push(item);
-  });
-}
-
-function DialogHost() {
-  const [stack, setStack] = useState([]);
-  const [input, setInput] = useState("");
-  const inputRef = useRef(null);
-
-  useEffect(() => {
-    _dialogPush = (item) => setStack((s) => [...s, item]);
-    if (_dialogPending.length) {
-      setStack((s) => [...s, ..._dialogPending.splice(0)]);
-    }
-    return () => { _dialogPush = null; };
-  }, []);
-
-  const top = stack[0];
-
-  useEffect(() => {
-    if (!top || top.kind !== "prompt") return;
-    setInput(top.defaultValue ?? "");
-    requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    });
-  }, [top?.id, top?.kind, top?.defaultValue]);
-
-  if (!top) return null;
-
-  const close = (value) => {
-    top.resolve(value);
-    setStack((s) => s.slice(1));
-  };
-
-  const isPrompt = top.kind === "prompt";
-  const isConfirm = top.kind === "confirm";
-
-  let okLabel = "확인";
-  let cancelLabel = "취소";
-  if (typeof window.L === "function") {
-    const lOk = window.L("common.ok") || window.L("todo.yes");
-    if (lOk && !lOk.includes(".")) okLabel = lOk;
-    const lCancel = window.L("common.cancel") || window.L("todo.no");
-    if (lCancel && !lCancel.includes(".")) cancelLabel = lCancel;
-  }
-
-  return (
-    <div
-      onClick={() => close(isPrompt ? null : isConfirm ? false : undefined)}
-      style={{
-        position: "fixed", inset: 0, zIndex: 10000,
-        background: "rgba(0, 0, 0, 0.25)",
-        backdropFilter: "blur(3px)",
-        WebkitBackdropFilter: "blur(3px)",
-        display: "grid", placeItems: "center",
-        padding: 20,
-        animation: "fadeIn 0.15s ease-out"
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ 
-          width: "min(300px, 90vw)", 
-          background: "rgba(255, 255, 255, 0.9)", 
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          borderRadius: 18,
-          border: "1px solid rgba(255, 255, 255, 0.5)",
-          boxShadow: "0 10px 40px rgba(0,0,0,0.12), 0 2px 10px rgba(0,0,0,0.08)",
-          overflow: "hidden",
-          display: "flex", flexDirection: "column",
-          transform: "scale(1)",
-          animation: "popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") close(isPrompt ? null : isConfirm ? false : undefined);
-          if (e.key === "Enter" && isPrompt) { e.preventDefault(); close(input); }
-        }}
-      >
-        <div style={{ padding: "24px 20px 20px", textAlign: "center" }}>
-          <div style={{ fontFamily: "var(--hand)", fontSize: 15, color: "var(--ink)", whiteSpace: "pre-wrap", fontWeight: 600, lineHeight: 1.4 }}>
-            {top.message}
-          </div>
-        </div>
-        
-        {isPrompt && (
-          <div style={{ padding: "0 20px 20px" }}>
-            <input
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              style={{
-                width: "100%", boxSizing: "border-box",
-                border: "1.5px solid rgba(0,0,0,0.08)", borderRadius: 10,
-                padding: "10px 12px",
-                fontFamily: "var(--hand)", fontSize: 14, background: "rgba(255,255,255,0.7)",
-                outline: "none", transition: "border 0.2s"
-              }}
-              onFocus={(e) => e.target.style.borderColor = "var(--point)"}
-              onBlur={(e) => e.target.style.borderColor = "rgba(0,0,0,0.08)"}
-            />
-          </div>
-        )}
-        
-        <div style={{ display: "flex", borderTop: "1px solid rgba(0,0,0,0.08)", background: "rgba(255,255,255,0.3)" }}>
-          {(isConfirm || isPrompt) && (
-            <button
-              type="button"
-              onClick={() => close(isPrompt ? null : false)}
-              style={{
-                flex: 1, all: "unset", cursor: "pointer",
-                padding: "14px", textAlign: "center",
-                borderRight: "1px solid rgba(0,0,0,0.08)",
-                fontFamily: "var(--hand)", fontSize: 15, color: "var(--ink-soft)",
-                transition: "background 0.2s"
-              }}
-              onMouseEnter={(e) => e.target.style.background = "rgba(0,0,0,0.03)"}
-              onMouseLeave={(e) => e.target.style.background = "transparent"}
-            >{cancelLabel}</button>
-          )}
-          <button
-            type="button"
-            onClick={() => close(isPrompt ? input : isConfirm ? true : undefined)}
-            style={{
-              flex: 1, all: "unset", cursor: "pointer",
-              padding: "14px", textAlign: "center",
-              fontFamily: "var(--hand)", fontSize: 15, fontWeight: 700, color: "var(--ink)",
-              transition: "background 0.2s"
-            }}
-            onMouseEnter={(e) => e.target.style.background = "rgba(0,0,0,0.03)"}
-            onMouseLeave={(e) => e.target.style.background = "transparent"}
-          >{okLabel}</button>
-        </div>
-      </div>
-      <style>{`
-        @keyframes popIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-      `}</style>
-    </div>
-  );
-}
-
 if (typeof window !== "undefined") {
-  const existingDialog = window.dialog || {};
+  const tauriDialog = window.__TAURI__?.dialog;
   window.dialog = {
-    ...existingDialog,
-    alert: existingDialog.alert || ((message) => _enqueueDialog({ kind: "alert", message: String(message ?? "") })),
-    confirm: existingDialog.confirm || ((message) => _enqueueDialog({ kind: "confirm", message: String(message ?? "") })),
-    prompt: existingDialog.prompt || ((message, defaultValue = "") => _enqueueDialog({
-      kind: "prompt",
-      message: String(message ?? ""),
-      defaultValue: defaultValue ?? "",
-    })),
+    alert: async (message) => {
+      if (tauriDialog && typeof tauriDialog.message === "function") {
+        try {
+          await tauriDialog.message(message);
+          return;
+        } catch (e) {
+          console.warn("Tauri dialog.message failed, falling back to alert:", e);
+        }
+      }
+      window.alert(message);
+    },
+    confirm: async (message) => {
+      if (tauriDialog && typeof tauriDialog.confirm === "function") {
+        try {
+          return await tauriDialog.confirm(message);
+        } catch (e) {
+          console.warn("Tauri dialog.confirm failed, falling back to confirm:", e);
+        }
+      }
+      return window.confirm(message);
+    },
+    prompt: async (message, defaultValue = "") => {
+      return window.prompt(message, defaultValue ?? "");
+    }
   };
 }
 
@@ -759,4 +624,3 @@ window.DelBtn = DelBtn;
 window.ToggleBadge = ToggleBadge;
 window.ProjectSwitcher = ProjectSwitcher;
 window.RepoButtons = RepoButtons;
-window.DialogHost = DialogHost;

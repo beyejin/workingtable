@@ -129,7 +129,6 @@ function SideDockV2({ tweaks, setTweak }) {
         zIndex: 2,
       }}>
         <AppNotifyToast />
-        <DialogHost />
         {/* 글로시 스카이블루 헤더 — 드래그 영역 */}
         <div data-tauri-drag-region style={{
           height: 28,
