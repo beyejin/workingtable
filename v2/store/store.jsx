@@ -524,11 +524,10 @@ const actions = {
     }
     if (targets.habit) {
       for (const h of s.habits || []) {
-        let body = null;
-        if (h.subItems && h.subItems.length > 0) {
-          body = h.subItems.map(si => `- ${si.name.trim()}`).join('\n');
+        pushBatch("habit", { title: `[습관] ${h.name.trim()}`, body: null, due_date: today() });
+        for (const si of h.subItems || []) {
+          pushBatch("habit", { title: `[습관] ${h.name.trim()} - ${si.name.trim()}`, body: null, due_date: today() });
         }
-        pushBatch("habit", { title: `[습관] ${h.name.trim()}`, body, due_date: today() });
       }
     }
     if (targets.memo) {
@@ -1498,8 +1497,7 @@ const actions = {
     }));
     const habit = getState().habits.find(h => h.id === habitId);
     if (habit) {
-      // Habit sub-items are synced as body notes during batch sync.
-      // Individual sync is disabled since Apple Reminders doesn't support subtasks via JXA.
+      syncReminder("habit", { title: `[습관] ${habit.name.trim()} - ${name.trim()}`, dueDate: today() });
     }
   },
   removeSubItemFromHabit(habitId, subItemId) {

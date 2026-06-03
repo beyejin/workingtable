@@ -10,16 +10,7 @@
       if (pending) return pending;
 
       pending = Promise.resolve()
-        .then(() => {
-          let count = Number(sessionStorage.getItem("todoary_reminders_prompt_count") || "0");
-          console.log(`[Todoary Permission] get_reminders_lists called ${count + 1} times`);
-          if (count > 2) {
-            console.warn("[Todoary Permission] Blocked repeated get_reminders_lists call");
-            throw new Error("Permission prompt blocked due to repeated failures");
-          }
-          sessionStorage.setItem("todoary_reminders_prompt_count", String(count + 1));
-          return invoke("get_reminders_lists");
-        })
+        .then(() => invoke("get_reminders_lists"))
         .then((lists) => {
           cachedLists = Array.isArray(lists) ? lists.slice() : [];
           return cachedLists.slice();
@@ -46,23 +37,31 @@
 
   function createReminderSyncController({ invoke, logger = null, autoSync = false }) {
     let blocked = false;
+    let pending = null;
 
     async function syncOne(payload, { mode = "manual" } = {}) {
       if (blocked) return false;
       if (mode === "auto" && !autoSync) return false;
+      if (pending) return pending;
 
-      try {
-        await invoke("add_to_reminders", payload);
-        return true;
-      } catch (e) {
-        blocked = true;
-        if (logger?.warn) logger.warn("Failed to sync with Reminders:", e);
-        return false;
-      }
+      pending = Promise.resolve()
+        .then(() => invoke("add_to_reminders", payload))
+        .then(() => true)
+        .catch((e) => {
+          blocked = true;
+          if (logger?.warn) logger.warn("Failed to sync with Reminders:", e);
+          return false;
+        })
+        .finally(() => {
+          pending = null;
+        });
+
+      return pending;
     }
 
     function clearBlock() {
       blocked = false;
+      pending = null;
     }
 
     function isBlocked() {

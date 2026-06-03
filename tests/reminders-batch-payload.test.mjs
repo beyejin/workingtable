@@ -13,7 +13,7 @@ test("Reminders batch includes habit sub-items", () => {
   const store = readFileSync(new URL("../v2/store/store.jsx", import.meta.url), "utf8");
 
   assert.match(store, /h\.subItems/);
-  assert.match(store, /body = h\.subItems\.map\(si => `- \$\{si\.name\.trim\(\)\}`\)\.join\('\\n'\)/);
+  assert.match(store, /\[습관\]\s*\$\{h\.name\.trim\(\)\}\s*-\s*\$\{si\.name\.trim\(\)\}/);
 });
 
 test("Reminders backend scans lists across accounts", () => {

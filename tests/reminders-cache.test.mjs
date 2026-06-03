@@ -122,3 +122,24 @@ test("blocks the rest of the session after one Reminders sync failure", async ()
   assert.equal(await syncer.syncOne({ listName: "Inbox", title: "Second" }, { mode: "manual" }), false);
   assert.equal(calls, 1);
 });
+
+test("deduplicates concurrent Reminders sync failures to one permission request", async () => {
+  let calls = 0;
+  const syncer = createReminderSyncController({
+    invoke: async () => {
+      calls += 1;
+      await new Promise(resolve => setTimeout(resolve, 5));
+      throw new Error("permission denied");
+    },
+    autoSync: true,
+  });
+
+  const results = await Promise.all([
+    syncer.syncOne({ listName: "Inbox", title: "First" }, { mode: "auto" }),
+    syncer.syncOne({ listName: "Inbox", title: "Second" }, { mode: "auto" }),
+    syncer.syncOne({ listName: "Inbox", title: "Third" }, { mode: "auto" }),
+  ]);
+
+  assert.deepEqual(results, [false, false, false]);
+  assert.equal(calls, 1);
+});

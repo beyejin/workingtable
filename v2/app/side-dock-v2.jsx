@@ -720,12 +720,6 @@ function useRemindersLists(enabled, targets) {
   const [error, setError] = useState("");
   const isMacEnv = !!(window.__TAURI__ && typeof navigator !== "undefined" && navigator.platform.toUpperCase().indexOf("MAC") >= 0);
 
-  useEffect(() => {
-    if (!enabled || !isMacEnv) return;
-    // Do not load reminders lists automatically on mount to prevent permission prompts
-    // The user must click the "Sync" or "Load Lists" button
-  }, [enabled, isMacEnv]);
-
   return { lists, status, error, isMacEnv, setLists, setStatus, setError };
 }
 

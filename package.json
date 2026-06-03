@@ -1,9 +1,10 @@
 {
   "name": "todoary",
-  "version": "0.7.27",
+  "version": "0.7.28",
   "private": true,
   "description": "todoary — 데스크탑 투명 사이드바",
   "scripts": {
+    "test": "node --test tests/*.test.mjs",
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
