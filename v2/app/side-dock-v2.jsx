@@ -709,28 +709,27 @@ function HeaderDesktop() {
 // ===========================================================
 // 설정 — 커스터마이징 (포인트 컬러 / 도크 위치 / 탭 방향 / 투명모드 / 초기화)
 // ===========================================================
-function useRemindersLists(enabled) {
-  const [lists, setLists] = useState([]);
-  const [status, setStatus] = useState("idle");
+function uniqueReminderTargets(targets) {
+  return [...new Set(Object.values(targets || {}).filter(Boolean))];
+}
+
+function useRemindersLists(enabled, targets) {
+  const initialLists = uniqueReminderTargets(targets);
+  const [lists, setLists] = useState(initialLists);
+  const [status, setStatus] = useState(enabled && initialLists.length > 0 ? "ready" : "idle");
   const [error, setError] = useState("");
   const isMacEnv = !!(window.__TAURI__ && typeof navigator !== "undefined" && navigator.platform.toUpperCase().indexOf("MAC") >= 0);
-  const loadRemindersLists = () => window.todoaryReminders?.loadLists?.()
-    ?? window.__TAURI__.core.invoke("get_reminders_lists");
 
   useEffect(() => {
-    if (enabled && lists.length === 0 && isMacEnv) {
-      setStatus("loading");
-      loadRemindersLists()
-        .then(res => {
-          setLists(res);
-          setStatus(res.length > 0 ? "ready" : "empty");
-        })
-        .catch(e => {
-          console.warn("Failed to load reminders lists", e);
-          setStatus("error");
-          setError(String(e));
-        });
-    }
+    if (!enabled || !isMacEnv) return;
+    const loadRemindersLists = () => window.todoaryReminders?.loadLists?.()
+      ?? window.__TAURI__.core.invoke("get_reminders_lists");
+
+    loadRemindersLists().then(fetched => {
+      setLists(fetched);
+    }).catch(err => {
+      console.warn("Failed to fetch reminders lists on mount:", err);
+    });
   }, [enabled, isMacEnv]);
 
   return { lists, status, error, isMacEnv, setLists, setStatus, setError };
@@ -738,7 +737,7 @@ function useRemindersLists(enabled) {
 
 function RemindersSettings({ state, actions }) {
   const isEnabled = state.reminders?.enabled;
-  const { lists, status, error, isMacEnv, setLists, setStatus, setError } = useRemindersLists(isEnabled);
+  const { lists, status, error, isMacEnv, setLists, setStatus, setError } = useRemindersLists(isEnabled, state.reminders?.targets);
   const loadRemindersLists = () => window.todoaryReminders?.loadLists?.()
     ?? window.__TAURI__.core.invoke("get_reminders_lists");
 
