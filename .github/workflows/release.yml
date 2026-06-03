@@ -56,7 +56,7 @@ jobs:
           releaseName: "todoary ${{ github.ref_name }}"
           # draft: true 면 GitHub 에 자산은 업로드되지만 latest 로 노출 안 됨.
           # Mac 빌드 검증 후 GitHub UI 에서 수동 publish.
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
           releaseBody: |
