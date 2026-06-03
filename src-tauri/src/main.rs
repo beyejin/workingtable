@@ -6,6 +6,9 @@ mod legacy_macos;
 
 #[cfg(not(debug_assertions))]
 use tauri_plugin_updater::UpdaterExt;
+use std::sync::{Mutex, OnceLock};
+
+static REMINDERS_SCRIPT_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 fn main() {
     tauri::Builder::default()
@@ -146,13 +149,7 @@ fn get_reminders_lists() -> Result<Vec<String>, String> {
          addAccountLists(app, function(collection) { addReminderListNames(collection, out, seen); });\n\
          out.join('\\n');",
     );
-    let output = std::process::Command::new("osascript")
-        .arg("-l")
-        .arg("JavaScript")
-        .arg("-e")
-        .arg(script)
-        .output()
-        .map_err(|e| e.to_string())?;
+    let output = run_reminders_script(&script)?;
 
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -234,6 +231,21 @@ function findReminderList(app, listName) {
 }
 "#;
 
+fn run_reminders_script(script: &str) -> Result<std::process::Output, String> {
+    let lock = REMINDERS_SCRIPT_LOCK.get_or_init(|| Mutex::new(()));
+    let _guard = lock
+        .lock()
+        .map_err(|_| "Reminders script lock poisoned".to_string())?;
+
+    std::process::Command::new("osascript")
+        .arg("-l")
+        .arg("JavaScript")
+        .arg("-e")
+        .arg(script)
+        .output()
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn add_to_reminders(
     list_name: String,
@@ -275,13 +287,7 @@ fn add_to_reminders(
 
     script.push_str("const rem = app.Reminder(props);\nlist.reminders.push(rem);\n");
 
-    let output = std::process::Command::new("osascript")
-        .arg("-l")
-        .arg("JavaScript")
-        .arg("-e")
-        .arg(&script)
-        .output()
-        .map_err(|e| e.to_string())?;
+    let output = run_reminders_script(&script)?;
 
     if output.status.success() {
         Ok(())
@@ -341,13 +347,7 @@ fn add_to_reminders_batch(items: Vec<ReminderItem>) -> Result<(), String> {
         script.push_str(&format!("const rem{} = app.Reminder(props{});\nlist{}.reminders.push(rem{});\n}} catch(e) {{}}\n", i, i, i, i));
     }
 
-    let output = std::process::Command::new("osascript")
-        .arg("-l")
-        .arg("JavaScript")
-        .arg("-e")
-        .arg(&script)
-        .output()
-        .map_err(|e| e.to_string())?;
+    let output = run_reminders_script(&script)?;
 
     if output.status.success() {
         Ok(())

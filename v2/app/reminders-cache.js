@@ -1,4 +1,20 @@
 (function (root) {
+  function createRemindersCommandQueue({ invoke }) {
+    let tail = Promise.resolve();
+
+    function enqueue(command, payload) {
+      const run = tail.then(() => invoke(command, payload));
+      tail = run.catch(() => {});
+      return run;
+    }
+
+    function syncBatch(items) {
+      return enqueue("add_to_reminders_batch", { items });
+    }
+
+    return { invoke: enqueue, syncBatch };
+  }
+
   function createRemindersListLoader({ invoke }) {
     let cachedLists = null;
     let failedError = null;
@@ -72,39 +88,42 @@
   }
 
   function createBrowserInvoke() {
-    return {
+    return createRemindersCommandQueue({
       invoke(command, payload) {
         const invoke = root.__TAURI__?.core?.invoke;
         if (!invoke) throw new Error("Tauri invoke API is unavailable");
         return invoke(command, payload);
       },
-    };
+    });
   }
 
   function createBrowserLoader() {
-    return createRemindersListLoader(createBrowserInvoke());
+    return createRemindersListLoader(browserQueue);
   }
 
   function createBrowserSyncController() {
-    return createReminderSyncController({ ...createBrowserInvoke(), logger: root.console, autoSync: true });
+    return createReminderSyncController({ ...browserQueue, logger: root.console, autoSync: true });
   }
 
-  const api = { createBrowserSyncController, createReminderSyncController, createRemindersListLoader };
+  const api = { createBrowserSyncController, createRemindersCommandQueue, createReminderSyncController, createRemindersListLoader };
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
 
   if (root && typeof root === "object") {
+    var browserQueue = createBrowserInvoke();
     const loader = createBrowserLoader();
     const syncer = createBrowserSyncController();
     root.todoaryReminders = {
       loadLists: loader.load,
       clearListsCache: loader.clear,
       syncOne: syncer.syncOne,
+      syncBatch: browserQueue.syncBatch,
       clearSyncBlock: syncer.clearBlock,
       isSyncBlocked: syncer.isBlocked,
       createReminderSyncController,
+      createRemindersCommandQueue,
       createRemindersListLoader,
     };
   }

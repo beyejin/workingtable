@@ -23,3 +23,12 @@ test("Reminders backend scans lists across accounts", () => {
   assert.match(main, /app\.accounts\(\)/);
   assert.match(main, /findReminderList/);
 });
+
+test("Reminders backend serializes osascript permission requests", () => {
+  const main = readFileSync(new URL("../src-tauri/src/main.rs", import.meta.url), "utf8");
+
+  assert.match(main, /REMINDERS_SCRIPT_LOCK/);
+  assert.match(main, /run_reminders_script/);
+  assert.equal((main.match(/Command::new\("osascript"\)/g) || []).length, 1);
+  assert.equal((main.match(/run_reminders_script\(&script\)\?/g) || []).length, 3);
+});

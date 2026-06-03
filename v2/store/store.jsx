@@ -504,8 +504,8 @@ const actions = {
     const isMacEnv = !!(window.__TAURI__ && typeof navigator !== "undefined" && navigator.platform.toUpperCase().indexOf("MAC") >= 0);
     if (!isMacEnv) return 0;
 
-    const invoke = window.__TAURI__.core.invoke;
-    if (!invoke) return 0;
+    const syncBatch = window.todoaryReminders?.syncBatch;
+    if (!syncBatch) return 0;
 
     const { targets } = s.reminders;
     const items = [];
@@ -541,7 +541,7 @@ const actions = {
     if (items.length === 0) return 0;
 
     try {
-      await invoke("add_to_reminders_batch", { items });
+      await syncBatch(items);
       return items.length;
     } catch (e) {
       console.warn("Batch sync failed:", e);

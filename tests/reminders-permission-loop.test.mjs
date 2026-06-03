@@ -55,3 +55,14 @@ test("create flows keep automatic Reminders sync wired after setup", () => {
   assert.match(store, /addHabit\([\s\S]*?syncReminder\("habit"/);
   assert.match(store, /addSubItemToHabit\([\s\S]*?syncReminder\("habit"/);
 });
+
+test("manual batch sync uses shared Reminders queue instead of direct invoke", () => {
+  const store = readFileSync(new URL("../v2/store/store.jsx", import.meta.url), "utf8");
+  const syncAllStart = store.indexOf("async syncAllToReminders()");
+  const nextSection = store.indexOf("// ----- 할 일 -----", syncAllStart);
+  assert.ok(syncAllStart >= 0 && nextSection > syncAllStart, "syncAllToReminders should exist");
+
+  const syncAll = store.slice(syncAllStart, nextSection);
+  assert.doesNotMatch(syncAll, /invoke\("add_to_reminders_batch"/);
+  assert.match(syncAll, /window\.todoaryReminders\?\.syncBatch/);
+});

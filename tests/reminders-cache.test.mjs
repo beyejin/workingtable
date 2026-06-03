@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const {
   createBrowserSyncController,
+  createRemindersCommandQueue,
   createReminderSyncController,
   createRemindersListLoader,
 } = require("../v2/app/reminders-cache.js");
@@ -53,6 +54,33 @@ test("blocks repeated Reminders list requests after one failure", async () => {
   await assert.rejects(() => loader.load(), /permission cancelled/);
   await assert.rejects(() => loader.load(), /permission cancelled/);
   assert.equal(calls, 1);
+});
+
+test("serializes every Reminders command through one queue", async () => {
+  let active = 0;
+  let maxActive = 0;
+  const calls = [];
+  const queue = createRemindersCommandQueue({
+    invoke: async (command) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      calls.push(command);
+      await new Promise(resolve => setTimeout(resolve, 5));
+      active -= 1;
+      return command === "get_reminders_lists" ? ["Daily"] : true;
+    },
+  });
+  const loader = createRemindersListLoader(queue);
+  const syncer = createReminderSyncController({ ...queue, autoSync: true });
+
+  await Promise.all([
+    loader.load(),
+    syncer.syncOne({ listName: "Daily", title: "A" }, { mode: "auto" }),
+    queue.syncBatch([{ list_name: "Daily", title: "B", body: null, due_date: null }]),
+  ]);
+
+  assert.equal(maxActive, 1);
+  assert.deepEqual([...calls].sort(), ["add_to_reminders", "add_to_reminders_batch", "get_reminders_lists"]);
 });
 
 test("does not invoke Reminders when automatic sync is requested", async () => {
