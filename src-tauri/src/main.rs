@@ -137,7 +137,15 @@ async fn export_backup_file(
 
 #[tauri::command]
 fn get_reminders_lists() -> Result<Vec<String>, String> {
-    let script = "const app = Application('Reminders'); app.lists.name().join('\\n');";
+    let mut script = String::from(REMINDERS_JS_HELPERS);
+    script.push_str(
+        "const app = Application('Reminders');\n\
+         const out = [];\n\
+         const seen = {};\n\
+         addReminderListNames(app.lists, out, seen);\n\
+         addAccountLists(app, function(collection) { addReminderListNames(collection, out, seen); });\n\
+         out.join('\\n');",
+    );
     let output = std::process::Command::new("osascript")
         .arg("-l")
         .arg("JavaScript")
@@ -160,6 +168,72 @@ fn get_reminders_lists() -> Result<Vec<String>, String> {
     }
 }
 
+const REMINDERS_JS_HELPERS: &str = r#"
+function addReminderListNames(collection, out, seen) {
+  function remember(name) {
+    if (typeof name !== 'string') return;
+    name = name.trim();
+    if (!name || seen[name]) return;
+    seen[name] = true;
+    out.push(name);
+  }
+
+  try {
+    const names = collection.name();
+    if (Array.isArray(names)) names.forEach(remember);
+    else remember(names);
+  } catch (e) {}
+
+  try {
+    const lists = collection();
+    for (let i = 0; i < lists.length; i++) {
+      try { remember(lists[i].name()); } catch (e) {}
+    }
+  } catch (e) {}
+}
+
+function addAccountLists(app, visit) {
+  try {
+    const accounts = app.accounts();
+    for (let i = 0; i < accounts.length; i++) {
+      try { visit(accounts[i].lists); } catch (e) {}
+    }
+  } catch (e) {}
+}
+
+function findReminderListIn(collection, listName) {
+  try {
+    const list = collection.byName(listName);
+    list.name();
+    return list;
+  } catch (e) {}
+
+  try {
+    const lists = collection();
+    for (let i = 0; i < lists.length; i++) {
+      try {
+        if (lists[i].name() === listName) return lists[i];
+      } catch (e) {}
+    }
+  } catch (e) {}
+
+  return null;
+}
+
+function findReminderList(app, listName) {
+  let found = findReminderListIn(app.lists, listName);
+  if (found) return found;
+
+  addAccountLists(app, function(collection) {
+    if (found) return;
+    found = findReminderListIn(collection, listName);
+  });
+
+  if (!found) throw new Error('Reminder list not found: ' + listName);
+  return found;
+}
+"#;
+
 #[tauri::command]
 fn add_to_reminders(
     list_name: String,
@@ -171,10 +245,10 @@ fn add_to_reminders(
     let safe_title = serde_json::to_string(&title).unwrap_or_else(|_| "\"\"".to_string());
     
     let mut script = format!(
-        "const app = Application('Reminders');\n\
-         const list = app.lists.byName({});\n\
+        "{}const app = Application('Reminders');\n\
+         const list = findReminderList(app, {});\n\
          let props = {{ name: {} }};\n",
-        safe_list, safe_title
+        REMINDERS_JS_HELPERS, safe_list, safe_title
     );
 
     if let Some(b) = body {
@@ -231,14 +305,15 @@ fn add_to_reminders_batch(items: Vec<ReminderItem>) -> Result<(), String> {
         return Ok(());
     }
 
-    let mut script = String::from("const app = Application('Reminders');\n");
+    let mut script = String::from(REMINDERS_JS_HELPERS);
+    script.push_str("const app = Application('Reminders');\n");
     for (i, item) in items.iter().enumerate() {
         let safe_list = serde_json::to_string(&item.list_name).unwrap_or_else(|_| "\"\"".to_string());
         let safe_title = serde_json::to_string(&item.title).unwrap_or_else(|_| "\"\"".to_string());
         
         script.push_str(&format!(
             "try {{\n\
-             let list{} = app.lists.byName({});\n\
+             let list{} = findReminderList(app, {});\n\
              let props{} = {{ name: {} }};\n",
             i, safe_list, i, safe_title
         ));

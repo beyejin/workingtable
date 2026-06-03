@@ -1,10 +1,12 @@
 (function (root) {
   function createRemindersListLoader({ invoke }) {
     let cachedLists = null;
+    let failedError = null;
     let pending = null;
 
     async function load() {
       if (cachedLists) return cachedLists.slice();
+      if (failedError) throw failedError;
       if (pending) return pending;
 
       pending = Promise.resolve()
@@ -12,6 +14,10 @@
         .then((lists) => {
           cachedLists = Array.isArray(lists) ? lists.slice() : [];
           return cachedLists.slice();
+        })
+        .catch((e) => {
+          failedError = e;
+          throw e;
         })
         .finally(() => {
           pending = null;
@@ -22,6 +28,7 @@
 
     function clear() {
       cachedLists = null;
+      failedError = null;
       pending = null;
     }
 
@@ -58,10 +65,10 @@
 
   function createBrowserInvoke() {
     return {
-      invoke(command) {
+      invoke(command, payload) {
         const invoke = root.__TAURI__?.core?.invoke;
         if (!invoke) throw new Error("Tauri invoke API is unavailable");
-        return invoke(command);
+        return invoke(command, payload);
       },
     };
   }
@@ -71,10 +78,10 @@
   }
 
   function createBrowserSyncController() {
-    return createReminderSyncController({ ...createBrowserInvoke(), logger: root.console });
+    return createReminderSyncController({ ...createBrowserInvoke(), logger: root.console, autoSync: true });
   }
 
-  const api = { createReminderSyncController, createRemindersListLoader };
+  const api = { createBrowserSyncController, createReminderSyncController, createRemindersListLoader };
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;

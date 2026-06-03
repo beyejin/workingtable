@@ -513,7 +513,7 @@ const actions = {
     const pushBatch = (kind, payload) => {
       const listName = targets[kind];
       if (!listName) return;
-      items.push({ listName, ...payload });
+      items.push({ list_name: listName, ...payload });
     };
 
     if (targets.todo) {
@@ -524,7 +524,11 @@ const actions = {
     }
     if (targets.habit) {
       for (const h of s.habits || []) {
-        pushBatch("habit", { title: `[습관] ${h.name.trim()}`, body: null, due_date: today() });
+        let body = null;
+        if (h.subItems && h.subItems.length > 0) {
+          body = h.subItems.map(si => `- ${si.name.trim()}`).join('\n');
+        }
+        pushBatch("habit", { title: `[습관] ${h.name.trim()}`, body, due_date: today() });
       }
     }
     if (targets.memo) {
@@ -1492,6 +1496,11 @@ const actions = {
         return { ...h, subItems };
       }),
     }));
+    const habit = getState().habits.find(h => h.id === habitId);
+    if (habit) {
+      // Habit sub-items are synced as body notes during batch sync.
+      // Individual sync is disabled since Apple Reminders doesn't support subtasks via JXA.
+    }
   },
   removeSubItemFromHabit(habitId, subItemId) {
     setState(s => ({
