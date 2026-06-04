@@ -275,12 +275,15 @@ function HabitView() {
               🌸 주간 스탬프
             </div>
             {habits.length > 0 ? (
-              habits.map((habit) => (
+              habits.map((habit, idx) => (
                 <HabitWeeklyStampCard
                   key={habit.id}
                   habit={habit}
+                  habitIndex={idx}
+                  habitCount={habits.length}
                   thisWeekDays={thisWeekDays}
                   actions={actions}
+                  habits={habits}
                 />
               ))
             ) : (
@@ -375,7 +378,7 @@ function HabitView() {
 }
 
 // 1. 주간 스탬프 카드 컴포넌트
-function HabitWeeklyStampCard({ habit, thisWeekDays, actions }) {
+function HabitWeeklyStampCard({ habit, habitIndex = 0, habitCount = 1, thisWeekDays, actions, habits = [] }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(habit.name);
@@ -384,6 +387,7 @@ function HabitWeeklyStampCard({ habit, thisWeekDays, actions }) {
   const [subPickerOpen, setSubPickerOpen] = useState(false);
   const [activeSubPickerId, setActiveSubPickerId] = useState(null);
   const [subPickerAlign, setSubPickerAlign] = useState("left");
+  const [draggingSubItemId, setDraggingSubItemId] = useState(null);
 
   useEffect(() => {
     setEditName(habit.name);
@@ -404,6 +408,29 @@ function HabitWeeklyStampCard({ habit, thisWeekDays, actions }) {
     actions.addSubItemToHabit(habit.id, trimmed, newSubEmoji);
     setNewSubName("");
     setNewSubEmoji("🌱");
+  };
+  const orderedSubItems = React.useMemo(
+    () => (habit.subItems ?? []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [habit.subItems]
+  );
+  const moveHabitUp = () => {
+    if (habitIndex <= 0) return;
+    actions.reorderHabitBefore(habit.id, habits[habitIndex - 1]?.id);
+  };
+  const moveHabitDown = () => {
+    if (habitIndex >= habitCount - 1) return;
+    actions.reorderHabitBefore(habit.id, habits[habitIndex + 2]?.id ?? null);
+  };
+  const dropSubItem = (idx) => {
+    if (!draggingSubItemId) return;
+    const fromIdx = orderedSubItems.findIndex(si => si.id === draggingSubItemId);
+    if (fromIdx < 0 || fromIdx === idx) {
+      setDraggingSubItemId(null);
+      return;
+    }
+    const beforeIdx = fromIdx < idx ? idx + 1 : idx;
+    actions.reorderHabitSubItemBefore(habit.id, draggingSubItemId, orderedSubItems[beforeIdx]?.id ?? null);
+    setDraggingSubItemId(null);
   };
 
   return (
@@ -507,24 +534,60 @@ function HabitWeeklyStampCard({ habit, thisWeekDays, actions }) {
             </span>
           )}
         </div>
-        <button
-          onClick={async () => {
-            const ok = await window.dialog.confirm(`"${habit.name}" 습관을 삭제할까요?`);
-            if (ok) {
-              actions.removeHabit(habit.id);
-            }
-          }}
-          style={{
-            all: "unset",
-            cursor: "pointer",
-            fontSize: 12,
-            color: "var(--ink-3)",
-            fontFamily: "var(--mono)",
-            padding: "0px 4px",
-          }}
-        >
-          ✕
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+          <button
+            type="button"
+            onClick={moveHabitUp}
+            disabled={habitIndex <= 0}
+            style={{
+              all: "unset",
+              cursor: habitIndex <= 0 ? "default" : "pointer",
+              opacity: habitIndex <= 0 ? 0.25 : 1,
+              fontSize: 10,
+              color: "var(--ink-3)",
+              fontFamily: "var(--mono)",
+              padding: "0px 3px",
+            }}
+            title="습관 위로 이동"
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            onClick={moveHabitDown}
+            disabled={habitIndex >= habitCount - 1}
+            style={{
+              all: "unset",
+              cursor: habitIndex >= habitCount - 1 ? "default" : "pointer",
+              opacity: habitIndex >= habitCount - 1 ? 0.25 : 1,
+              fontSize: 10,
+              color: "var(--ink-3)",
+              fontFamily: "var(--mono)",
+              padding: "0px 3px",
+            }}
+            title="습관 아래로 이동"
+          >
+            ↓
+          </button>
+          <button
+            onClick={async () => {
+              const ok = await window.dialog.confirm(`"${habit.name}" 습관을 삭제할까요?`);
+              if (ok) {
+                actions.removeHabit(habit.id);
+              }
+            }}
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              fontSize: 12,
+              color: "var(--ink-3)",
+              fontFamily: "var(--mono)",
+              padding: "0px 4px",
+            }}
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       {/* 요일 스탬프 체크 */}
@@ -587,24 +650,32 @@ function HabitWeeklyStampCard({ habit, thisWeekDays, actions }) {
         borderTop: "1px dashed var(--ink-soft)",
         paddingTop: 6,
       }}>
-        {habit.subItems && habit.subItems.length > 0 && (
+        {orderedSubItems.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
-            {habit.subItems.map((si, idx) => (
+            {orderedSubItems.map((si, idx) => (
               <span
                 key={si.id}
+                draggable={true}
+                onDragStart={() => setDraggingSubItemId(si.id)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => dropSubItem(idx)}
+                onDragEnd={() => setDraggingSubItemId(null)}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 3,
                   background: "var(--paper-2)",
-                  border: "1px solid var(--ink-soft)",
+                  border: draggingSubItemId === si.id ? "1px solid var(--ink)" : "1px solid var(--ink-soft)",
                   borderRadius: 6,
                   padding: "2px 6px",
                   fontSize: 10,
                   fontFamily: "var(--hand)",
                   color: "var(--ink)",
                   position: "relative",
+                  cursor: "grab",
+                  opacity: draggingSubItemId === si.id ? 0.55 : 1,
                 }}
+                title="드래그해서 하위 항목 순서 바꾸기"
               >
                 <span
                   onClick={(e) => {

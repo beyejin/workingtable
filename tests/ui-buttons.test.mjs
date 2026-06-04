@@ -69,3 +69,57 @@ test("HTML loads every app module needed by sidebar features", () => {
   const missing = requiredModules.filter((src) => !html.includes(`src="${src}"`));
   assert.deepEqual(missing, []);
 });
+
+test("hard reset falls back when Tauri dialog exists without confirm", () => {
+  const store = readFileSync(new URL("../v2/store/store.jsx", import.meta.url), "utf8");
+  const hardResetStart = store.indexOf("async hardReset()");
+  const nextSection = store.indexOf("// ----- 습관", hardResetStart);
+  assert.ok(hardResetStart >= 0 && nextSection > hardResetStart, "hardReset should exist");
+
+  const hardReset = store.slice(hardResetStart, nextSection);
+  assert.match(hardReset, /window\.dialog\?\.confirm/);
+  assert.doesNotMatch(hardReset, /window\.dialog\s*\?\s*window\.dialog\.confirm/);
+});
+
+test("in-app dialog host is mounted so confirm prompts are visible", () => {
+  const html = readFileSync(new URL("../todoary.html", import.meta.url), "utf8");
+  const appStart = html.indexOf("function App()");
+  const renderStart = html.indexOf("return (", appStart);
+  const renderEnd = html.indexOf("</TweaksPanel>", renderStart);
+  assert.ok(appStart >= 0 && renderStart > appStart && renderEnd > renderStart, "App render tree should exist");
+
+  const appRender = html.slice(renderStart, renderEnd);
+  assert.match(appRender, /<DialogHost\s*\/>/);
+});
+
+test("in-app dialog matches existing sketch modal styling", () => {
+  const shared = readFileSync(new URL("../v2/shared/views-shared.jsx", import.meta.url), "utf8");
+  const start = shared.indexOf("function DialogHost()");
+  const end = shared.indexOf("if (typeof window !== \"undefined\")", start);
+  assert.ok(start >= 0 && end > start, "DialogHost should exist");
+
+  const dialogHost = shared.slice(start, end);
+  assert.match(dialogHost, /className="sk-box"/);
+  assert.match(dialogHost, /className="xp-btn close"/);
+  assert.match(dialogHost, /background:\s*"var\(--paper\)"/);
+  assert.doesNotMatch(dialogHost, /glassmorphism|backdropFilter:\s*"blur\(16px\)"|rgba\(255,\s*255,\s*255,\s*0\.9\)/);
+});
+
+test("habit ordering is persisted through store actions and rendered controls", () => {
+  const store = readFileSync(new URL("../v2/store/store.jsx", import.meta.url), "utf8");
+  const habitView = readFileSync(new URL("../v2/features/habit/view-habit.jsx", import.meta.url), "utf8");
+
+  assert.match(store, /order:\s*h\.order\s*\?\?\s*i/);
+  assert.match(store, /order:\s*nextOrder/);
+  assert.match(store, /reorderHabitBefore\(fromId,\s*beforeId\)/);
+  assert.match(store, /reorderHabitSubItemBefore\(habitId,\s*fromSubId,\s*beforeSubId\)/);
+  assert.match(store, /habitsForCurrent:[\s\S]*?sort\(\(a,\s*b\)\s*=>\s*\(a\.order\s*\?\?\s*0\)\s*-\s*\(b\.order\s*\?\?\s*0\)\)/);
+
+  assert.match(habitView, /actions\.reorderHabitBefore/);
+  assert.match(habitView, /actions\.reorderHabitSubItemBefore/);
+  assert.match(habitView, /draggable=\{true\}/);
+  assert.match(habitView, /onDragStart=\{\(\)\s*=>\s*setDraggingSubItemId\(si\.id\)\}/);
+  assert.match(habitView, /onDrop=\{\(\)\s*=>\s*dropSubItem\(idx\)\}/);
+  assert.doesNotMatch(habitView, /onClick=\{\(\)\s*=>\s*moveSubUp\(idx\)\}/);
+  assert.doesNotMatch(habitView, /onClick=\{\(\)\s*=>\s*moveSubDown\(idx\)\}/);
+});

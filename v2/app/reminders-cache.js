@@ -54,15 +54,29 @@
   function createReminderSyncController({ invoke, logger = null, autoSync = false }) {
     let blocked = false;
     let pending = null;
+    const successfulAutoKeys = new Set();
+
+    function payloadKey(payload) {
+      const sorted = {};
+      Object.keys(payload || {}).sort().forEach((key) => {
+        sorted[key] = payload[key];
+      });
+      return JSON.stringify(sorted);
+    }
 
     async function syncOne(payload, { mode = "manual" } = {}) {
       if (blocked) return false;
       if (mode === "auto" && !autoSync) return false;
+      const key = mode === "auto" ? payloadKey(payload) : null;
+      if (key && successfulAutoKeys.has(key)) return true;
       if (pending) return pending;
 
       pending = Promise.resolve()
         .then(() => invoke("add_to_reminders", payload))
-        .then(() => true)
+        .then(() => {
+          if (key) successfulAutoKeys.add(key);
+          return true;
+        })
         .catch((e) => {
           blocked = true;
           if (logger?.warn) logger.warn("Failed to sync with Reminders:", e);

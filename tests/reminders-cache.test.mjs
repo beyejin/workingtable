@@ -137,6 +137,38 @@ test("allows manual Reminders sync", async () => {
   assert.equal(calls, 1);
 });
 
+test("deduplicates successful automatic Reminders sync payloads for the session", async () => {
+  const payload = { listName: "Inbox", title: "Task", dueDate: "2026-06-04" };
+  let calls = 0;
+  const syncer = createReminderSyncController({
+    invoke: async (command, actualPayload) => {
+      calls += 1;
+      assert.equal(command, "add_to_reminders");
+      assert.deepEqual(actualPayload, payload);
+    },
+    autoSync: true,
+  });
+
+  assert.equal(await syncer.syncOne(payload, { mode: "auto" }), true);
+  assert.equal(await syncer.syncOne({ ...payload }, { mode: "auto" }), true);
+  assert.equal(calls, 1);
+});
+
+test("manual Reminders sync can resend a payload even after automatic dedupe", async () => {
+  const payload = { listName: "Inbox", title: "Task" };
+  let calls = 0;
+  const syncer = createReminderSyncController({
+    invoke: async () => {
+      calls += 1;
+    },
+    autoSync: true,
+  });
+
+  assert.equal(await syncer.syncOne(payload, { mode: "auto" }), true);
+  assert.equal(await syncer.syncOne(payload, { mode: "manual" }), true);
+  assert.equal(calls, 2);
+});
+
 test("blocks the rest of the session after one Reminders sync failure", async () => {
   let calls = 0;
   const syncer = createReminderSyncController({

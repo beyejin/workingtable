@@ -317,11 +317,12 @@ function migrateState(data) {
   }));
   data.songPlays   ??= {};
   data.habits      ??= [];
-  data.habits = data.habits.map(h => ({
+  data.habits = data.habits.map((h, i) => ({
     id: h.id,
     projectId: h.projectId,
     name: h.name || "",
     emoji: h.emoji || "🌸",
+    order: h.order ?? i,
     frequency: h.frequency || "daily",
     weeklyDays: Array.isArray(h.weeklyDays) ? h.weeklyDays : [],
     history: h.history || {},
@@ -329,7 +330,7 @@ function migrateState(data) {
     maxStreak: h.maxStreak ?? 0,
     createdAt: h.createdAt || today(),
     status: h.status || "active",
-    subItems: Array.isArray(h.subItems) ? h.subItems : [],
+    subItems: Array.isArray(h.subItems) ? h.subItems.map((si, j) => ({ ...si, order: si.order ?? j })) : [],
   }));
   // 프로젝트에 버전/저장소 필드 보강 (기존 값 우선)
   data.projects = (data.projects ?? []).map(p => ({
@@ -1435,7 +1436,14 @@ const actions = {
   // ----- 위험: 리셋 -----
   async hardReset() {
     const msg = (window.i18n && window.i18n.t) ? window.i18n.t("set.resetConfirm") : "정말 모든 데이터를 지우고 초기 상태로 되돌릴까요?";
-    const ok = await (window.dialog ? window.dialog.confirm(msg) : Promise.resolve(confirm(msg)));
+    let ok = false;
+    try {
+      ok = window.dialog?.confirm
+        ? await window.dialog.confirm(msg)
+        : confirm(msg);
+    } catch (_) {
+      ok = confirm(msg);
+    }
     if (!ok) return;
     setState(seed());
   },
@@ -1451,6 +1459,9 @@ const actions = {
         projectId: s.currentProjectId,
         name: name.trim(),
         emoji: opts.emoji || "🌸",
+        order: (s.habits ?? [])
+          .filter(h => h.projectId === s.currentProjectId)
+          .reduce((m, h) => Math.max(m, h.order ?? 0), -1) + 1,
         frequency: opts.frequency || "daily",
         weeklyDays: opts.weeklyDays || [],
         history: {},
@@ -1485,13 +1496,37 @@ const actions = {
       habits: (s.habits ?? []).map(h => h.id === id ? { ...h, name: name.trim() } : h),
     }));
   },
+  reorderHabitBefore(fromId, beforeId) {
+    if (fromId === beforeId) return;
+    setState(s => {
+      const my = (s.habits ?? [])
+        .filter(h => h.projectId === s.currentProjectId)
+        .slice()
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const fromIdx = my.findIndex(h => h.id === fromId);
+      if (fromIdx < 0) return s;
+      const [moved] = my.splice(fromIdx, 1);
+      let beforeIdx = beforeId ? my.findIndex(h => h.id === beforeId) : my.length;
+      if (beforeIdx < 0) beforeIdx = my.length;
+      my.splice(beforeIdx, 0, moved);
+      const newOrder = {};
+      my.forEach((h, i) => { newOrder[h.id] = i; });
+      return {
+        ...s,
+        habits: (s.habits ?? []).map(h => h.projectId === s.currentProjectId
+          ? { ...h, order: newOrder[h.id] ?? h.order }
+          : h),
+      };
+    });
+  },
   addSubItemToHabit(habitId, name, emoji = "🌱") {
     if (!name?.trim()) return;
     setState(s => ({
       ...s,
       habits: (s.habits ?? []).map(h => {
         if (h.id !== habitId) return h;
-        const subItems = [...(h.subItems ?? []), { id: uid(), name: name.trim(), emoji }];
+        const nextOrder = (h.subItems ?? []).reduce((m, si) => Math.max(m, si.order ?? 0), -1) + 1;
+        const subItems = [...(h.subItems ?? []), { id: uid(), name: name.trim(), emoji, order: nextOrder }];
         return { ...h, subItems };
       }),
     }));
@@ -1533,6 +1568,25 @@ const actions = {
           si.id === subItemId ? { ...si, ...patch } : si
         );
         return { ...h, subItems };
+      }),
+    }));
+  },
+  reorderHabitSubItemBefore(habitId, fromSubId, beforeSubId) {
+    if (fromSubId === beforeSubId) return;
+    setState(s => ({
+      ...s,
+      habits: (s.habits ?? []).map(h => {
+        if (h.id !== habitId) return h;
+        const subItems = (h.subItems ?? [])
+          .slice()
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        const fromIdx = subItems.findIndex(si => si.id === fromSubId);
+        if (fromIdx < 0) return h;
+        const [moved] = subItems.splice(fromIdx, 1);
+        let beforeIdx = beforeSubId ? subItems.findIndex(si => si.id === beforeSubId) : subItems.length;
+        if (beforeIdx < 0) beforeIdx = subItems.length;
+        subItems.splice(beforeIdx, 0, moved);
+        return { ...h, subItems: subItems.map((si, i) => ({ ...si, order: i })) };
       }),
     }));
   },
@@ -1691,7 +1745,10 @@ function useDiary() {
 
 // ---- 파생 셀렉터 ----
 const select = {
-  habitsForCurrent: (s) => (s.habits ?? []).filter(h => h.projectId === s.currentProjectId),
+  habitsForCurrent: (s) => (s.habits ?? [])
+    .filter(h => h.projectId === s.currentProjectId)
+    .slice()
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
   currentProject: (s) => s.projects.find(p => p.id === s.currentProjectId) ?? null,
   todosForCurrent: (s) => s.todos.filter(t => t.projectId === s.currentProjectId),
   bookmarksForCurrent: (s) => s.aiBookmarks.filter(b => b.projectId === s.currentProjectId),

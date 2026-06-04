@@ -64,93 +64,102 @@ function DialogHost() {
       onClick={() => close(isPrompt ? null : isConfirm ? false : undefined)}
       style={{
         position: "fixed", inset: 0, zIndex: 10000,
-        background: "rgba(0, 0, 0, 0.25)",
-        backdropFilter: "blur(3px)",
-        WebkitBackdropFilter: "blur(3px)",
+        background: "rgba(138, 106, 94, 0.35)",
+        backdropFilter: "blur(2px)",
+        WebkitBackdropFilter: "blur(2px)",
         display: "grid", placeItems: "center",
         padding: 20,
-        animation: "fadeIn 0.15s ease-out"
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ 
-          width: "min(300px, 90vw)", 
-          background: "rgba(255, 255, 255, 0.9)", 
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          borderRadius: 18,
-          border: "1px solid rgba(255, 255, 255, 0.5)",
-          boxShadow: "0 10px 40px rgba(0,0,0,0.12), 0 2px 10px rgba(0,0,0,0.08)",
+        className="sk-box"
+        style={{
+          width: "min(340px, 92vw)",
+          background: "var(--paper)",
+          padding: 0,
+          boxShadow: "0 8px 0 var(--paper-3), 0 12px 30px rgba(138,106,94,0.3)",
           overflow: "hidden",
-          display: "flex", flexDirection: "column",
-          transform: "scale(1)",
-          animation: "popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
         }}
         onKeyDown={(e) => {
           if (e.key === "Escape") close(isPrompt ? null : isConfirm ? false : undefined);
           if (e.key === "Enter" && isPrompt) { e.preventDefault(); close(input); }
         }}
       >
-        <div style={{ padding: "24px 20px 20px", textAlign: "center" }}>
-          <div style={{ fontFamily: "var(--hand)", fontSize: 15, color: "var(--ink)", whiteSpace: "pre-wrap", fontWeight: 600, lineHeight: 1.4 }}>
+        <div style={{
+          background: "var(--pink-soft)",
+          padding: "10px 14px",
+          borderBottom: "1.1px solid var(--ink)",
+          display: "flex", alignItems: "center", gap: 6,
+        }}>
+          <span style={{ fontSize: 9, color: "var(--pink)", letterSpacing: 1 }}>♡ ♡ ♡</span>
+          <span style={{ fontFamily: "var(--hand)", fontSize: 15, fontWeight: 700, color: "var(--ink)", flex: 1 }}>
+            todoary
+          </span>
+          <button
+            type="button"
+            onClick={() => close(isPrompt ? null : isConfirm ? false : undefined)}
+            className="xp-btn close"
+          >×</button>
+        </div>
+
+        <div style={{ padding: "18px 16px 14px" }}>
+          <div style={{ fontFamily: "var(--hand)", fontSize: 15, color: "var(--ink)", whiteSpace: "pre-wrap", fontWeight: 700, lineHeight: 1.45 }}>
             {top.message}
           </div>
         </div>
         
         {isPrompt && (
-          <div style={{ padding: "0 20px 20px" }}>
+          <div style={{ padding: "0 16px 14px" }}>
             <input
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               style={{
                 width: "100%", boxSizing: "border-box",
-                border: "1.5px solid rgba(0,0,0,0.08)", borderRadius: 10,
+                border: "1.1px solid var(--ink-soft)", borderRadius: 8,
                 padding: "10px 12px",
-                fontFamily: "var(--hand)", fontSize: 14, background: "rgba(255,255,255,0.7)",
-                outline: "none", transition: "border 0.2s"
+                fontFamily: "var(--hand)", fontSize: 14, color: "var(--ink)", background: "var(--paper)",
+                outline: "none",
               }}
-              onFocus={(e) => e.target.style.borderColor = "var(--point)"}
-              onBlur={(e) => e.target.style.borderColor = "rgba(0,0,0,0.08)"}
             />
           </div>
         )}
         
-        <div style={{ display: "flex", borderTop: "1px solid rgba(0,0,0,0.08)", background: "rgba(255,255,255,0.3)" }}>
+        <div style={{
+          display: "flex",
+          gap: 8,
+          justifyContent: "flex-end",
+          padding: "0 16px 16px",
+        }}>
           {(isConfirm || isPrompt) && (
             <button
               type="button"
               onClick={() => close(isPrompt ? null : false)}
               style={{
-                flex: 1, all: "unset", cursor: "pointer",
-                padding: "14px", textAlign: "center",
-                borderRight: "1px solid rgba(0,0,0,0.08)",
-                fontFamily: "var(--hand)", fontSize: 15, color: "var(--ink-soft)",
-                transition: "background 0.2s"
+                cursor: "pointer",
+                padding: "7px 12px",
+                borderRadius: 8,
+                border: "1.1px solid var(--ink)",
+                background: "var(--paper)",
+                fontFamily: "var(--hand)", fontSize: 14, color: "var(--ink)",
               }}
-              onMouseEnter={(e) => e.target.style.background = "rgba(0,0,0,0.03)"}
-              onMouseLeave={(e) => e.target.style.background = "transparent"}
             >{cancelLabel}</button>
           )}
           <button
             type="button"
             onClick={() => close(isPrompt ? input : isConfirm ? true : undefined)}
             style={{
-              flex: 1, all: "unset", cursor: "pointer",
-              padding: "14px", textAlign: "center",
-              fontFamily: "var(--hand)", fontSize: 15, fontWeight: 700, color: "var(--ink)",
-              transition: "background 0.2s"
+              cursor: "pointer",
+              padding: "7px 12px",
+              borderRadius: 8,
+              border: "1.1px solid var(--ink)",
+              background: "var(--mint)",
+              fontFamily: "var(--hand)", fontSize: 14, fontWeight: 700, color: "var(--ink)",
             }}
-            onMouseEnter={(e) => e.target.style.background = "rgba(0,0,0,0.03)"}
-            onMouseLeave={(e) => e.target.style.background = "transparent"}
           >{okLabel}</button>
         </div>
       </div>
-      <style>{`
-        @keyframes popIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-      `}</style>
     </div>
   );
 }
