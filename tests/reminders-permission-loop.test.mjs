@@ -44,7 +44,7 @@ test("Reminders setup and sync entry points are explicit user actions", () => {
   const component = settings.slice(componentStart, componentEnd);
   assert.match(component, /const onToggle = async/);
   assert.match(component, /const fetched = await loadRemindersLists\(\)/);
-  assert.match(component, /await actions\.syncAllToReminders\(\)/);
+  assert.match(component, /await actions\.syncAllToReminders\(/);
 });
 
 test("create flows keep automatic Reminders sync wired after setup", () => {
@@ -58,11 +58,46 @@ test("create flows keep automatic Reminders sync wired after setup", () => {
 
 test("manual batch sync uses shared Reminders queue instead of direct invoke", () => {
   const store = readFileSync(new URL("../v2/store/store.jsx", import.meta.url), "utf8");
-  const syncAllStart = store.indexOf("async syncAllToReminders()");
+  const syncAllStart = store.indexOf("async syncAllToReminders");
   const nextSection = store.indexOf("// ----- 할 일 -----", syncAllStart);
   assert.ok(syncAllStart >= 0 && nextSection > syncAllStart, "syncAllToReminders should exist");
 
   const syncAll = store.slice(syncAllStart, nextSection);
   assert.doesNotMatch(syncAll, /invoke\("add_to_reminders_batch"/);
   assert.match(syncAll, /window\.todoaryReminders\?\.syncBatch/);
+});
+
+test("Reminders settings lets each type opt out of syncing", () => {
+  const settings = readFileSync(new URL("../v2/app/side-dock-v2.jsx", import.meta.url), "utf8");
+  const componentStart = settings.indexOf("function RemindersSettings");
+  const componentEnd = settings.indexOf("const SETTINGS_SCHEMA", componentStart);
+  assert.ok(componentStart >= 0 && componentEnd > componentStart, "RemindersSettings component should exist");
+
+  const component = settings.slice(componentStart, componentEnd);
+  assert.match(component, /value=""[\s\S]*?set\.reminders\.none/);
+});
+
+test("Reminders list loading waits for the real permission result instead of timing out", () => {
+  const settings = readFileSync(new URL("../v2/app/side-dock-v2.jsx", import.meta.url), "utf8");
+  const componentStart = settings.indexOf("function RemindersSettings");
+  const componentEnd = settings.indexOf("const SELECT_BLOCKS", componentStart);
+  assert.ok(componentStart >= 0 && componentEnd > componentStart, "RemindersSettings component should include list loading");
+
+  const setup = settings.slice(componentStart, componentEnd);
+  assert.doesNotMatch(setup, /Promise\.race/);
+  assert.doesNotMatch(setup, /setTimeout/);
+  assert.doesNotMatch(setup, /응답 지연/);
+});
+
+test("Reminders settings shows manual sync progress", () => {
+  const settings = readFileSync(new URL("../v2/app/side-dock-v2.jsx", import.meta.url), "utf8");
+  const componentStart = settings.indexOf("function RemindersSettings");
+  const componentEnd = settings.indexOf("const SETTINGS_SCHEMA", componentStart);
+  assert.ok(componentStart >= 0 && componentEnd > componentStart, "RemindersSettings component should exist");
+
+  const component = settings.slice(componentStart, componentEnd);
+  assert.match(component, /syncProgress/);
+  assert.match(component, /setSyncProgress/);
+  assert.match(component, /syncAllToReminders\(\{\s*onProgress:/);
+  assert.match(component, /set\.reminders\.syncProgress/);
 });

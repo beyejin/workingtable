@@ -116,7 +116,7 @@
   }
 
   function createBrowserSyncController() {
-    return createReminderSyncController({ ...browserQueue, logger: root.console, autoSync: true });
+    return createReminderSyncController({ ...browserQueue, logger: root.console, autoSync: false });
   }
 
   const api = { createBrowserSyncController, createRemindersCommandQueue, createReminderSyncController, createRemindersListLoader };

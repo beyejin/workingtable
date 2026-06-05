@@ -97,15 +97,13 @@ test("does not invoke Reminders when automatic sync is requested", async () => {
   assert.equal(calls, 0);
 });
 
-test("browser Reminders controller syncs automatically after setup", async () => {
+test("browser Reminders controller does not invoke Reminders for automatic sync", async () => {
   let calls = 0;
   const previousTauri = globalThis.__TAURI__;
   globalThis.__TAURI__ = {
     core: {
-      invoke: async (command, payload) => {
+      invoke: async () => {
         calls += 1;
-        assert.equal(command, "add_to_reminders");
-        assert.deepEqual(payload, { listName: "Inbox", title: "Task" });
       },
     },
   };
@@ -114,8 +112,8 @@ test("browser Reminders controller syncs automatically after setup", async () =>
     const syncer = createBrowserSyncController();
     const synced = await syncer.syncOne({ listName: "Inbox", title: "Task" }, { mode: "auto" });
 
-    assert.equal(synced, true);
-    assert.equal(calls, 1);
+    assert.equal(synced, false);
+    assert.equal(calls, 0);
   } finally {
     globalThis.__TAURI__ = previousTauri;
   }

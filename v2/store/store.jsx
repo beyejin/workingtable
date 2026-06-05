@@ -7,6 +7,7 @@
 // ===========================================================
 
 const STORAGE_KEY = "todoary.v1";
+const REMINDERS_BATCH_SIZE = 10;
 
 // ---- 마이그레이션 진단 스냅샷 (첫 실행 1회만) ----
 // 데이터 손실 신고 시 F12 콘솔에서 localStorage.getItem("todoary.migration.diag")
@@ -213,6 +214,7 @@ function seed() {
     workSessions: [],
     songPlays: {},
     habits: [],
+    reminders: { enabled: false, targets: { todo: "", habit: "", memo: "" }, synced: {} },
   };
 }
 
@@ -336,8 +338,9 @@ function migrateState(data) {
   data.projects = (data.projects ?? []).map(p => ({
     repoUrl: "", version: "0.1.0", nextVersion: "", ...p,
   }));
-  data.reminders ??= { enabled: false, targets: { todo: "", habit: "", memo: "" } };
+  data.reminders ??= { enabled: false, targets: { todo: "", habit: "", memo: "" }, synced: {} };
   data.reminders.targets ??= { todo: "", habit: "", memo: "" };
+  data.reminders.synced ??= {};
   if (data.remindersSyncEnabled !== undefined) {
     data.reminders.enabled = data.remindersSyncEnabled;
     delete data.remindersSyncEnabled;
@@ -434,6 +437,36 @@ function matchesTodoDay(t, day, today) {
   if (day === today && t.dueDate && t.dueDate < today) return true;
   return false;
 }
+function isDateSuccessForHabit(habit, dStr) {
+  const rec = habit?.history?.[dStr];
+  if (!rec) return false;
+  if (rec === true) return true;
+  if (typeof rec === "object") return Object.values(rec).some(v => !!v);
+  return false;
+}
+function reminderSyncKey(kind, id, payload) {
+  return JSON.stringify({
+    kind,
+    id,
+    list: payload.list_name,
+    title: payload.title,
+    body: payload.body || "",
+    due: payload.due_date || "",
+  });
+}
+function markRemindersSynced(keys) {
+  if (!keys.length) return;
+  setState(s => ({
+    ...s,
+    reminders: {
+      ...(s.reminders || {}),
+      synced: {
+        ...(s.reminders?.synced || {}),
+        ...Object.fromEntries(keys.map(k => [k, Date.now()])),
+      },
+    },
+  }));
+}
 
 function pomoCycleMs(timer) {
   return (timer?.lengthMin ?? 25) * 60 * 1000;
@@ -499,7 +532,7 @@ const actions = {
     });
   },
 
-  async syncAllToReminders() {
+  async syncAllToReminders({ onProgress } = {}) {
     const s = getState();
     if (!s.reminders?.enabled) return 0;
     const isMacEnv = !!(window.__TAURI__ && typeof navigator !== "undefined" && navigator.platform.toUpperCase().indexOf("MAC") >= 0);
@@ -509,40 +542,62 @@ const actions = {
     if (!syncBatch) return 0;
 
     const { targets } = s.reminders;
+    const synced = s.reminders.synced || {};
     const items = [];
+    const pendingKeys = [];
 
-    const pushBatch = (kind, payload) => {
+    const pushBatch = (kind, id, payload) => {
       const listName = targets[kind];
       if (!listName) return;
-      items.push({ list_name: listName, ...payload });
+      const item = { list_name: listName, ...payload };
+      const syncKey = reminderSyncKey(kind, id, item);
+      if (synced[syncKey]) return;
+      items.push(item);
+      pendingKeys.push(syncKey);
     };
 
     if (targets.todo) {
       const pendingTodos = s.todos.filter(t => !t.done);
       for (const t of pendingTodos) {
-        pushBatch("todo", { title: t.title.trim(), body: null, due_date: t.dueDate ?? null });
+        pushBatch("todo", t.id, { title: t.title.trim(), body: null, due_date: t.dueDate ?? null });
       }
     }
     if (targets.habit) {
       for (const h of s.habits || []) {
-        pushBatch("habit", { title: `[습관] ${h.name.trim()}`, body: null, due_date: today() });
-        for (const si of h.subItems || []) {
-          pushBatch("habit", { title: `[습관] ${h.name.trim()} - ${si.name.trim()}`, body: null, due_date: today() });
-        }
+        if (h.status === "completed" || isDateSuccessForHabit(h, today())) continue;
+        const subItems = (h.subItems || [])
+          .slice()
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+          .map(si => `${si.emoji || "•"} ${si.name.trim()}`)
+          .filter(Boolean);
+        const habitBody = subItems.length ? subItems.join("\n") : null;
+        pushBatch("habit", h.id, { title: `[습관] ${h.name.trim()}`, body: habitBody, due_date: today() });
       }
     }
     if (targets.memo) {
       for (const m of s.memos || []) {
         const parsedTitle = m.title || "새 메모";
         const parsedBody = String(m.html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-        pushBatch("memo", { title: parsedTitle, body: parsedBody, due_date: null });
+        pushBatch("memo", m.id, { title: parsedTitle, body: parsedBody, due_date: null });
       }
     }
 
-    if (items.length === 0) return 0;
+    if (items.length === 0) {
+      onProgress?.({ sent: 0, total: 0 });
+      return 0;
+    }
 
     try {
-      await syncBatch(items);
+      let sent = 0;
+      onProgress?.({ sent, total: items.length });
+      while (sent < items.length) {
+        const chunk = items.slice(sent, sent + REMINDERS_BATCH_SIZE);
+        await syncBatch(chunk);
+        const sentKeys = pendingKeys.slice(sent, sent + chunk.length);
+        markRemindersSynced(sentKeys);
+        sent += chunk.length;
+        onProgress?.({ sent, total: items.length });
+      }
       return items.length;
     } catch (e) {
       console.warn("Batch sync failed:", e);

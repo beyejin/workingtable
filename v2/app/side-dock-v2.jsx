@@ -360,6 +360,7 @@ function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSt
           boxShadow: stickRight ? "1.5px 1.5px 0 var(--paper-3)" : "-1.5px 1.5px 0 var(--paper-3)",
           display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center", gap: 3,
+          boxSizing: "border-box",
           fontFamily: "var(--hand)", overflow: "hidden",
           transition: "width 0.18s, margin 0.18s, background 0.15s",
           filter: isActive ? "none" : "saturate(0.85)",
@@ -367,8 +368,14 @@ function DiaryTabs({ tabs, active, onSelect, dockSide, tabSide, dockWidth, tabSt
         title={L(t.labelKey)}
       >
         {showIcon && (isSpriteIcon
-          ? <SpriteIcon idx={icon} size={compact ? 20 : 16} title={L(t.labelKey)} style={{ flexShrink: 0 }} />
-          : <span style={{ fontSize: compact ? 18 : 15, color: "var(--ink)", flexShrink: 0 }}>{icon}</span>)}
+          ? <span style={{
+              width: compact ? 20 : 16, height: compact ? 20 : 16,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              lineHeight: 1, flexShrink: 0,
+            }}><SpriteIcon idx={icon} size={compact ? 20 : 16} title={L(t.labelKey)} /></span>
+          : <span style={{
+              fontSize: compact ? 18 : 15, color: "var(--ink)", flexShrink: 0,
+            }}>{icon}</span>)}
         {showLabel && (
           <span style={{
             writingMode: "vertical-rl", textOrientation: "mixed",
@@ -726,6 +733,7 @@ function useRemindersLists(enabled, targets) {
 function RemindersSettings({ state, actions }) {
   const isEnabled = state.reminders?.enabled;
   const { lists, status, error, isMacEnv, setLists, setStatus, setError } = useRemindersLists(isEnabled, state.reminders?.targets);
+  const [syncProgress, setSyncProgress] = useState({ sent: 0, total: 0 });
   const loadRemindersLists = () => window.todoaryReminders?.loadLists?.()
     ?? window.__TAURI__.core.invoke("get_reminders_lists");
 
@@ -735,6 +743,7 @@ function RemindersSettings({ state, actions }) {
     const enabled = v === "on";
     if (!enabled) {
       actions.setRemindersSync(false);
+      setSyncProgress({ sent: 0, total: 0 });
       setStatus("idle");
       return;
     }
@@ -826,6 +835,7 @@ function RemindersSettings({ state, actions }) {
                 onChange={(e) => actions.setRemindersSync(true, { [key]: e.target.value })}
                 style={{ width: "100%", boxSizing: "border-box", padding: "7px 9px", borderRadius: 10, border: "1.1px solid var(--ink-soft)", background: "rgba(255,255,255,0.62)", fontFamily: "var(--hand)", fontSize: 13, outline: "none", color: "var(--ink)", cursor: "pointer" }}
               >
+                <option value="">{L("set.reminders.none")}</option>
                 {lists.map(list => <option key={list} value={list}>{list}</option>)}
               </select>
             </div>
@@ -834,9 +844,12 @@ function RemindersSettings({ state, actions }) {
           <button
             onClick={async () => {
               if (status === "syncing") return;
+              setSyncProgress({ sent: 0, total: 0 });
               setStatus("syncing");
               try {
-                const count = await actions.syncAllToReminders();
+                const count = await actions.syncAllToReminders({
+                  onProgress: ({ sent, total }) => setSyncProgress({ sent, total }),
+                });
                 setStatus("ready");
                 if (window.dialog?.alert) await window.dialog.alert(L("set.reminders.syncDone", { count }));
                 else alert(L("set.reminders.syncDone", { count }));
@@ -850,6 +863,26 @@ function RemindersSettings({ state, actions }) {
           >
             {status === "syncing" ? L("set.reminders.syncing") : L("set.reminders.syncNow")}
           </button>
+          {status === "syncing" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              <div style={{ fontSize: 12, color: "var(--ink-soft)" }}>
+                {L("set.reminders.syncProgress", syncProgress)}
+              </div>
+              <div style={{
+                height: 6,
+                border: "1.1px solid var(--ink-soft)",
+                background: "rgba(255,255,255,0.55)",
+                overflow: "hidden",
+              }}>
+                <div style={{
+                  width: `${syncProgress.total > 0 ? Math.min(100, Math.round((syncProgress.sent / syncProgress.total) * 100)) : 0}%`,
+                  height: "100%",
+                  background: "var(--hi)",
+                  transition: "width 0.18s ease",
+                }} />
+              </div>
+            </div>
+          )}
         </div>
       )}
     </SetSection>
